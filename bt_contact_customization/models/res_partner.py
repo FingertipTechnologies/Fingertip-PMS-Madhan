@@ -113,3 +113,29 @@ class InheritResPartner(models.Model):
     # department = fields.Many2one('res.partner.industry',string="Department")
     department = fields.Char(string="Department")
 
+    # ------------------------------------------------------------------
+    # Salesperson sync: company's salesperson flows down to child contacts
+    # ------------------------------------------------------------------
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('user_id') and vals.get('parent_id'):
+                parent = self.browse(vals['parent_id'])
+                if parent.user_id:
+                    vals['user_id'] = parent.user_id.id
+        return super().create(vals_list)
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'user_id' in vals:
+            companies = self.filtered('is_company')
+            if companies:
+                children = companies.mapped('child_ids').filtered(
+                    lambda c: not c.is_company
+                )
+                # Option B (default): always overwrite child's salesperson with company's.
+                # For Option A (preserve manual overrides), add: .filtered(lambda c: not c.user_id)
+                if children:
+                    children.write({'user_id': vals['user_id']})
+        return res
+

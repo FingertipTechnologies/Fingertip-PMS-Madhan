@@ -15,49 +15,49 @@
                     </div>
 
                     <!-- Ticket Table Card -->
-                    <t t-if="tickets">
-                        <div class="card border-0 shadow-sm">
-                            <!-- Toolbar -->
-                            <div class="card-header bg-white border-bottom py-3">
-                                <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <!-- Filter Dropdown -->
-                                        <div class="dropdown">
-                                            <button class="btn btn-outline-secondary dropdown-toggle px-3 py-2" type="button" data-bs-toggle="dropdown" style="font-size: 0.9rem;">
-                                                Filter: <strong><t t-out="filters[filterby]['label']"/></strong>
-                                            </button>
-                                            <ul class="dropdown-menu">
-                                                <t t-foreach="filters" t-as="f">
-                                                    <li>
-                                                        <a t-attf-href="/my/support/tickets?filterby=#{f}&amp;sortby=#{sortby}&amp;search=#{search}&amp;search_in=#{search_in}"
-                                                           t-attf-class="dropdown-item #{filterby == f and 'active' or ''}">
-                                                            <t t-out="filters[f]['label']"/>
-                                                        </a>
-                                                    </li>
-                                                </t>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <!-- Search -->
-                                        <form method="GET" action="/my/support/tickets" class="input-group" style="max-width: 320px;">
-                                            <input type="hidden" name="filterby" t-att-value="filterby"/>
-                                            <input type="hidden" name="sortby" t-att-value="sortby"/>
-                                            <input type="hidden" name="search_in" t-att-value="search_in"/>
-                                            <input type="text" name="search" class="form-control py-2"
-                                                   t-att-value="search"
-                                                   placeholder="Search tickets..." style="font-size: 0.9rem;"/>
-                                            <button class="btn btn-outline-secondary px-3" type="submit">
-                                                <i class="fa fa-search"/>
-                                            </button>
-                                        </form>
-                                        <!-- New Ticket -->
-                                        <a href="/my/support/ticket/new" class="btn ft-btn-purple text-nowrap px-4 py-2" style="font-size: 0.95rem;">
-                                            <i class="fa fa-plus me-1"/> New Ticket
-                                        </a>
+                    <div class="card border-0 shadow-sm">
+                        <!-- Toolbar (always shown, regardless of result count) -->
+                        <div class="card-header bg-white border-bottom py-3">
+                            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                                <div class="d-flex gap-2 align-items-center">
+                                    <!-- Filter Dropdown -->
+                                    <div class="dropdown">
+                                        <button class="btn btn-outline-secondary dropdown-toggle px-3 py-2" type="button" data-bs-toggle="dropdown" style="font-size: 0.9rem;">
+                                            Filter: <strong><t t-out="filters[filterby]['label']"/></strong>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <t t-foreach="filters" t-as="f">
+                                                <li>
+                                                    <a t-attf-href="/my/support/tickets?filterby=#{f}&amp;sortby=#{sortby}&amp;search=#{search}&amp;search_in=#{search_in}"
+                                                       t-attf-class="dropdown-item #{filterby == f and 'active' or ''}">
+                                                        <t t-out="filters[f]['label']"/>
+                                                    </a>
+                                                </li>
+                                            </t>
+                                        </ul>
                                     </div>
                                 </div>
+                                <div class="d-flex gap-2">
+                                    <!-- Search -->
+                                    <form method="GET" action="/my/support/tickets" class="input-group" style="max-width: 320px;">
+                                        <input type="hidden" name="filterby" t-att-value="filterby"/>
+                                        <input type="hidden" name="sortby" t-att-value="sortby"/>
+                                        <input type="hidden" name="search_in" t-att-value="search_in"/>
+                                        <input type="text" name="search" class="form-control py-2"
+                                               t-att-value="search"
+                                               placeholder="Search tickets..." style="font-size: 0.9rem;"/>
+                                        <button class="btn btn-outline-secondary px-3" type="submit">
+                                            <i class="fa fa-search"/>
+                                        </button>
+                                    </form>
+                                    <!-- New Ticket -->
+                                    <a href="/my/support/ticket/new" class="btn ft-btn-purple text-nowrap px-4 py-2" style="font-size: 0.95rem;">
+                                        <i class="fa fa-plus me-1"/> New Ticket
+                                    </a>
+                                </div>
                             </div>
+                        </div>
+                        <t t-if="tickets">
                             <!-- Table -->
                             <div class="table-responsive">
                                 <t t-set="qs_tail" t-value="'filterby=%s&amp;search=%s&amp;search_in=%s' % (filterby, search, search_in)"/>
@@ -157,20 +157,13 @@
                                                 </td>
                                             </tr>
                                         </t>
-                                    </tbody>
-                                </table>
-                            </div>
+                                </tbody>
+                            </table>
                         </div>
+                        </t>
 
-                        <!-- Pager -->
-                        <div class="d-flex justify-content-center mt-4">
-                            <t t-call="portal.pager"/>
-                        </div>
-                    </t>
-
-                    <!-- Empty State -->
-                    <t t-if="not tickets">
-                        <div class="card border-0 shadow-sm">
+                        <!-- Empty State inside the same card so toolbar remains visible -->
+                        <t t-if="not tickets">
                             <div class="card-body text-center py-5">
                                 <div class="ft-icon-circle bg-light mx-auto mb-3">
                                     <i class="fa fa-ticket fa-2x text-muted"/>
@@ -178,16 +171,30 @@
                                 <h5 class="text-muted">No tickets found</h5>
                                 <p class="text-muted mb-3">
                                     <t t-if="search or filterby != 'all'">
-                                        Try adjusting your filters or search query.
+                                        No tickets match this filter. Try adjusting your filters or search query.
                                     </t>
                                     <t t-else="">
                                         You haven't submitted any support tickets yet.
                                     </t>
                                 </p>
-                                <a href="/my/support/ticket/new" class="btn ft-btn-purple">
-                                    <i class="fa fa-plus me-1"/> Create Your First Ticket
-                                </a>
+                                <t t-if="search or filterby != 'all'">
+                                    <a href="/my/support/tickets?filterby=all" class="btn btn-outline-secondary">
+                                        <i class="fa fa-times me-1"/> Clear Filters
+                                    </a>
+                                </t>
+                                <t t-else="">
+                                    <a href="/my/support/ticket/new" class="btn ft-btn-purple">
+                                        <i class="fa fa-plus me-1"/> Create Your First Ticket
+                                    </a>
+                                </t>
                             </div>
+                        </t>
+                    </div>
+
+                    <t t-if="tickets">
+                        <!-- Pager -->
+                        <div class="d-flex justify-content-center mt-4">
+                            <t t-call="portal.pager"/>
                         </div>
                     </t>
         </t>

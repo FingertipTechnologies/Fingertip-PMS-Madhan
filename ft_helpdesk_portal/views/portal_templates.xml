@@ -400,7 +400,15 @@
             <t t-else="">
                 <div class="text-center py-5">
                     <i class="fa fa-flag-checkered fa-3x text-muted mb-3" style="opacity: 0.3;"/>
-                    <p class="text-muted">No milestones found for your projects.</p>
+                    <t t-if="search or filterby != 'all'">
+                        <p class="text-muted">No milestones match this filter. Try adjusting your filters or search.</p>
+                        <a href="/my/support/milestones?filterby=all" class="btn btn-outline-secondary">
+                            <i class="fa fa-times me-1"/> Clear Filters
+                        </a>
+                    </t>
+                    <t t-else="">
+                        <p class="text-muted">No milestones found for your projects.</p>
+                    </t>
                 </div>
             </t>
         </t>
@@ -528,7 +536,15 @@
             <t t-else="">
                 <div class="text-center py-5">
                     <i class="fa fa-rocket fa-3x text-muted mb-3" style="opacity: 0.3;"/>
-                    <p class="text-muted">No releases found for your projects.</p>
+                    <t t-if="search or filterby != 'all'">
+                        <p class="text-muted">No releases match this filter. Try adjusting your filters or search.</p>
+                        <a href="/my/support/releases?filterby=all" class="btn btn-outline-secondary">
+                            <i class="fa fa-times me-1"/> Clear Filters
+                        </a>
+                    </t>
+                    <t t-else="">
+                        <p class="text-muted">No releases found for your projects.</p>
+                    </t>
                 </div>
             </t>
         </t>
@@ -540,7 +556,7 @@
     <template id="ticket_state_badge" name="Ticket State Badge">
         <span t-if="state == 'new'" class="badge rounded-pill text-bg-secondary">New</span>
         <span t-if="state == 'open'" class="badge rounded-pill text-bg-primary">In Progress</span>
-        <span t-if="state == 'pending_customer'" class="badge rounded-pill text-bg-warning">Pending Your Reply</span>
+        <span t-if="state == 'pending_customer'" class="badge rounded-pill text-bg-warning">Pending My Reply</span>
         <span t-if="state == 'pending_internal'" class="badge rounded-pill text-bg-info">Under Review</span>
         <span t-if="state == 'resolved'" class="badge rounded-pill text-bg-success">Resolved</span>
         <span t-if="state == 'closed'" class="badge rounded-pill ft-badge-closed">Closed</span>

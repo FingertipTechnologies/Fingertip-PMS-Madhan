@@ -206,11 +206,13 @@
                                                           required="required"
                                                           style="border-radius: 0.5rem; border-color: #dee2e6;"/>
                                             </div>
+                                            <div id="ft_reply_attachments_preview" class="ft-reply-attachments-preview d-flex flex-wrap gap-2 mb-3"/>
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <div>
                                                     <label class="btn btn-sm btn-outline-secondary rounded-pill mb-0" style="cursor: pointer;">
                                                         <i class="fa fa-paperclip me-1"/> Attach Files
                                                         <input type="file" name="attachments" multiple="multiple"
+                                                               id="ft_reply_attachments_input"
                                                                class="d-none"
                                                                accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.mp4,.mov,.avi,.webm"/>
                                                     </label>

@@ -60,7 +60,9 @@
                         </group>
                         <group string="Project and Reporter">
                             <field name="project_id"/>
-                            <field name="module"/>
+                            <field name="module_id"
+                                   options="{'no_create': True}"
+                                   domain="[('project_ids', '=', project_id)]"/>
                             <field name="reporter_id"/>
                             <field name="assignee_id"/>
                             <field name="reported_date"/>

@@ -58,8 +58,10 @@
                             </group>
                         </page>
                         <page string="Execution">
-                            <field name="executed_date"/>
-                            <field name="executed_by"/>
+                            <group>
+                                <field name="executed_date"/>
+                                <field name="executed_by"/>
+                            </group>
                         </page>
                     </notebook>
                 </sheet>

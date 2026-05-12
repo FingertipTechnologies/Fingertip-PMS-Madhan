@@ -17,7 +17,7 @@ class QATestCase(models.Model):
     available_module_ids = fields.Many2many(
         'cus.module', compute='_compute_available_modules',
     )
-    test_objective = fields.Text(string='Test Objective')
+    test_objective = fields.Text(string='Test Details')
     pre_conditions = fields.Text(string='Pre Conditions')
     test_data = fields.Text(string='Test Data')
     test_steps = fields.Text(string='Test Steps')

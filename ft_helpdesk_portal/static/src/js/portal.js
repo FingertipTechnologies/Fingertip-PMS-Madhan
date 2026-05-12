@@ -215,9 +215,89 @@ function _initPortal() {
     }
 
     // =============================
+    // Reply Attachment Preview
+    // =============================
+    _initReplyAttachmentPreview();
+
+    // =============================
     // AJAX Tab Switching
     // =============================
     _initTabSwitching();
+}
+
+function _initReplyAttachmentPreview() {
+    const input = document.getElementById('ft_reply_attachments_input');
+    const preview = document.getElementById('ft_reply_attachments_preview');
+    if (!input || !preview) return;
+
+    let files = [];
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function render() {
+        preview.innerHTML = '';
+        files.forEach(function (file, idx) {
+            const chip = document.createElement('div');
+            chip.className = 'ft-attachment-chip d-inline-flex align-items-center border rounded px-2 py-1 bg-light';
+            chip.style.maxWidth = '260px';
+
+            const icon = document.createElement('i');
+            icon.className = 'fa me-2 text-muted';
+            if (file.type.startsWith('image/')) {
+                icon.classList.add('fa-image');
+            } else if (file.type.startsWith('video/')) {
+                icon.classList.add('fa-film');
+            } else if (file.type === 'application/pdf') {
+                icon.classList.add('fa-file-pdf-o');
+            } else {
+                icon.classList.add('fa-file-o');
+            }
+
+            const label = document.createElement('span');
+            label.className = 'text-truncate small';
+            label.style.maxWidth = '180px';
+            label.textContent = file.name;
+            label.title = file.name + ' (' + formatSize(file.size) + ')';
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'btn btn-sm btn-link text-danger p-0 ms-2';
+            remove.innerHTML = '<i class="fa fa-times"/>';
+            remove.setAttribute('aria-label', 'Remove');
+            remove.addEventListener('click', function () {
+                files.splice(idx, 1);
+                syncInput();
+                render();
+            });
+
+            chip.appendChild(icon);
+            chip.appendChild(label);
+            chip.appendChild(remove);
+            preview.appendChild(chip);
+        });
+    }
+
+    function syncInput() {
+        const dt = new DataTransfer();
+        files.forEach(function (f) { dt.items.add(f); });
+        input.files = dt.files;
+    }
+
+    input.addEventListener('change', function () {
+        const incoming = Array.from(input.files || []);
+        incoming.forEach(function (f) {
+            const exists = files.some(function (x) {
+                return x.name === f.name && x.size === f.size && x.lastModified === f.lastModified;
+            });
+            if (!exists) files.push(f);
+        });
+        syncInput();
+        render();
+    });
 }
 
 // Ensure init runs whether DOMContentLoaded already fired or not

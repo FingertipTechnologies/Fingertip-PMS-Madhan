@@ -40,6 +40,9 @@
                 <field name="use_case" invisible="type != 'opportunity'"/>
                 <field name="cus_type" invisible="type != 'opportunity'"/>
 
+                <field name="next_action" invisible="type != 'opportunity'"/>
+                <field name="description_text" invisible="type != 'opportunity'"/>
+
             </xpath>
 
 <!--            <xpath expr="//sheet/notebook/page[1]" position="before">-->

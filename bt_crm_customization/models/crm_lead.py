@@ -47,3 +47,7 @@ class InheritCrmLead(models.Model):
     decision_maker = fields.Text(string="Decision Maker")
 
     number_of_users = fields.Integer(string="Number of Users")
+
+    next_action = fields.Text(string="Next Action")
+
+    description_text = fields.Text(string="Description")

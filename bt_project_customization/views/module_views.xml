@@ -7,6 +7,7 @@
             <list>
                 <field name="name"/>
                 <field name="description"/>
+                <field name="project_ids" widget="many2many_tags" optional="show"/>
             </list>
         </field>
     </record>
@@ -21,7 +22,8 @@
                     <group>
                         <field name="name"/>
                         <field name="description"/>
-<!--                        <field name="active"/>-->
+                        <field name="project_ids" widget="many2many_tags" readonly="1"
+                               help="Projects where this module is used via tasks."/>
                     </group>
                 </sheet>
             </form>

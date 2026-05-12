@@ -60,9 +60,31 @@ class QATicket(models.Model):
     reporter_id = fields.Many2one('res.users', string='Reporter', default=lambda self: self.env.user, tracking=True)
     reported_date = fields.Datetime(string='Reported Date', default=fields.Datetime.now)
     project_id = fields.Many2one('project.project', string='Project', required=True)
-    module = fields.Char(string='Module', tracking=True)
+    module_id = fields.Many2one(
+        'cus.module', string='Module', tracking=True,
+        domain="[('id', 'in', available_module_ids)]",
+    )
+    available_module_ids = fields.Many2many(
+        'cus.module', compute='_compute_available_modules',
+    )
     test_case_id = fields.Many2one('qa_testapp.test_case', string='Related Test Case')
     assignee_id = fields.Many2one('res.users', string='Assignee', required=True, tracking=True)
+
+    @api.depends('project_id')
+    def _compute_available_modules(self):
+        for rec in self:
+            if rec.project_id:
+                tasks = self.env['project.task'].sudo().search([
+                    ('project_id', '=', rec.project_id.id),
+                    ('module_id', '!=', False),
+                ])
+                rec.available_module_ids = tasks.mapped('module_id')
+            else:
+                rec.available_module_ids = self.env['cus.module'].sudo().search([])
+
+    @api.onchange('project_id')
+    def _onchange_project_id(self):
+        self.module_id = False
 
     def action_in_progress(self):
         self.write({'status': 'in_progress'})
@@ -81,4 +103,23 @@ class QATicket(models.Model):
         for vals in vals_list:
             if vals.get('bug_id', 'New') == 'New':
                 vals['bug_id'] = self.env['ir.sequence'].next_by_code('qa_testapp.ticket') or 'New'
-        return super().create(vals_list)
+        records = super().create(vals_list)
+        records._link_evidence_attachments()
+        return records
+
+    def write(self, vals):
+        res = super().write(vals)
+        if 'evidence_attachment_ids' in vals:
+            self._link_evidence_attachments()
+        return res
+
+    def _link_evidence_attachments(self):
+        # Attachments uploaded into the form before save end up with res_id=0,
+        # which blocks non-creator users from reading them. Pin them to this record.
+        for rec in self:
+            atts = rec.sudo().evidence_attachment_ids
+            orphans = atts.filtered(
+                lambda a: a.res_model != 'qa_testapp.ticket' or a.res_id != rec.id
+            )
+            if orphans:
+                orphans.write({'res_model': 'qa_testapp.ticket', 'res_id': rec.id})

@@ -269,14 +269,20 @@ class HelpdeskPortal(CustomerPortal):
         # Filtering
         filters = {
             'all': {'label': _('All'), 'domain': []},
-            'open': {'label': _('Open'),
-                     'domain': [('state', 'not in', ('closed', 'cancelled'))]},
-            'pending': {'label': _('Pending My Reply'),
-                        'domain': [('state', '=', 'pending_customer')]},
+            'new': {'label': _('New'),
+                    'domain': [('state', '=', 'new')]},
+            'open': {'label': _('In Progress'),
+                     'domain': [('state', '=', 'open')]},
+            'pending_internal': {'label': _('Pending Internal'),
+                                 'domain': [('state', '=', 'pending_internal')]},
+            'pending_customer': {'label': _('Pending My Reply'),
+                                 'domain': [('state', '=', 'pending_customer')]},
             'resolved': {'label': _('Resolved'),
-                         'domain': [('state', 'in', ('resolved', 'closed'))]},
-            'urgent': {'label': _('Urgent'),
-                       'domain': [('priority', '=', '3')]},
+                         'domain': [('state', '=', 'resolved')]},
+            'closed': {'label': _('Closed'),
+                       'domain': [('state', '=', 'closed')]},
+            'cancelled': {'label': _('Cancelled'),
+                          'domain': [('state', '=', 'cancelled')]},
         }
         if filterby in filters:
             domain = AND([domain, filters[filterby]['domain']])
