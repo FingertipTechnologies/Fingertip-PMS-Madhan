@@ -3,6 +3,7 @@ access_ft_helpdesk_ticket_agent,ft.helpdesk.ticket agent,model_ft_helpdesk_ticke
 access_ft_helpdesk_ticket_admin,ft.helpdesk.ticket admin,model_ft_helpdesk_ticket,group_ft_helpdesk_admin,1,1,1,1
 access_ft_helpdesk_ticket_portal,ft.helpdesk.ticket portal,model_ft_helpdesk_ticket,base.group_portal,1,0,1,0
 access_ft_helpdesk_team_agent,ft.helpdesk.team agent,model_ft_helpdesk_team,group_ft_helpdesk_agent,1,0,0,0
+access_ft_helpdesk_team_team_lead,ft.helpdesk.team team lead,model_ft_helpdesk_team,group_ft_helpdesk_team_lead,1,1,1,1
 access_ft_helpdesk_team_admin,ft.helpdesk.team admin,model_ft_helpdesk_team,group_ft_helpdesk_admin,1,1,1,1
 access_ft_helpdesk_category_agent,ft.helpdesk.category agent,model_ft_helpdesk_category,group_ft_helpdesk_agent,1,0,0,0
 access_ft_helpdesk_category_portal,ft.helpdesk.category portal,model_ft_helpdesk_category,base.group_portal,1,0,0,0

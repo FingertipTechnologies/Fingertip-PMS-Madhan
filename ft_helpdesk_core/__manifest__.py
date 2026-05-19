@@ -52,6 +52,7 @@
         'views/canned_response_views.xml',
         'views/business_hours_views.xml',
         'views/res_config_settings_views.xml',
+        'views/res_partner_views.xml',
         'views/menus.xml',
         # Portal
         'views/portal_templates.xml',

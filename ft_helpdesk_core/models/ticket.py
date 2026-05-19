@@ -283,7 +283,17 @@ class HelpdeskTicket(models.Model):
             if vals.get('ticket_no', 'New') == 'New':
                 vals['ticket_no'] = self.env['ir.sequence'].next_by_code(
                     'ft.helpdesk.ticket') or 'New'
-            # Auto-assign team from type
+            # Auto-assign team from the customer's configured Support Team.
+            # This takes priority over the ticket type's default team.
+            if not vals.get('team_id') and vals.get('customer_id'):
+                partner = self.env['res.partner'].browse(vals['customer_id'])
+                customer_team = (
+                    partner.commercial_partner_id.helpdesk_team_id
+                    or partner.helpdesk_team_id
+                )
+                if customer_team:
+                    vals['team_id'] = customer_team.id
+            # Auto-assign team from type (fallback when the customer has no team)
             if not vals.get('team_id') and vals.get('type_id'):
                 ticket_type = self.env['ft.helpdesk.ticket.type'].browse(vals['type_id'])
                 if ticket_type.default_team_id:

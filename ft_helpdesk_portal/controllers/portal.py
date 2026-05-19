@@ -462,8 +462,15 @@ class HelpdeskPortal(CustomerPortal):
                 if project.exists() and project.partner_id.commercial_partner_id == partner.commercial_partner_id:
                     vals['project_id'] = project.id
 
-        # Get default team
-        if post.get('type_id'):
+        # Get default team. The customer's configured Support Team wins;
+        # fall back to the ticket type's default team, then the system default.
+        customer_team = (
+            partner.commercial_partner_id.sudo().helpdesk_team_id
+            or partner.sudo().helpdesk_team_id
+        )
+        if customer_team:
+            vals['team_id'] = customer_team.id
+        if not vals.get('team_id') and post.get('type_id'):
             ttype = request.env['ft.helpdesk.ticket.type'].sudo().browse(
                 int(post['type_id']))
             if ttype.default_team_id:
