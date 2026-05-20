@@ -32,5 +32,44 @@
             ]]></field>
             <field name="auto_delete" eval="True"/>
         </record>
+
+        <!-- Email template sent to the internal user when a ticket is assigned to them -->
+        <record id="mt_ticket_assigned_email_template" model="mail.template">
+            <field name="name">Helpdesk Ticket: Assignee Notification</field>
+            <field name="model_id" ref="ft_helpdesk_core.model_ft_helpdesk_ticket"/>
+            <field name="email_from">admin@fingertipplus.com</field>
+            <field name="subject">Ticket {{ object.ticket_no }} assigned to you</field>
+            <field name="partner_to">{{ object.assigned_user_id.partner_id.id }}</field>
+            <field name="body_html"><![CDATA[
+<div style="font-family: Arial, sans-serif; max-width: 600px;">
+    <p style="font-size: 15px;">Hello <strong>{{ object.assigned_user_id.name }}</strong>,</p>
+    <p style="font-size: 14px; color: #333;">
+        You've been assigned support ticket
+        <strong style="color:#6f42c1;">{{ object.ticket_no }}</strong> &mdash; {{ object.name }}.
+    </p>
+    <table style="border-collapse: collapse; width: 100%; margin: 12px 0; border: 1px solid #e0e0e0;">
+        <tr style="background:#f8f9fa;">
+            <td style="padding:8px 12px; font-weight:bold; width:120px; font-size:13px; color:#555;">Customer</td>
+            <td style="padding:8px 12px; font-size:14px;">{{ object.customer_id.name or '' }}</td>
+        </tr>
+        <tr>
+            <td style="padding:8px 12px; font-weight:bold; width:120px; font-size:13px; color:#555;">Priority</td>
+            <td style="padding:8px 12px; font-size:14px;">{{ dict(object._fields['priority'].selection).get(object.priority, '') }}</td>
+        </tr>
+        <tr style="background:#f8f9fa;">
+            <td style="padding:8px 12px; font-weight:bold; width:120px; font-size:13px; color:#555;">Status</td>
+            <td style="padding:8px 12px; font-size:14px;">{{ dict(object._fields['state'].selection).get(object.state, '') }}</td>
+        </tr>
+    </table>
+    <p style="font-size: 14px;">
+        <a href="/web#id={{ object.id }}&amp;model=ft.helpdesk.ticket&amp;view_type=form"
+           style="display:inline-block; background:#6f42c1; color:#fff; text-decoration:none; padding:8px 16px; border-radius:4px; font-weight:600;">
+            Open ticket
+        </a>
+    </p>
+</div>
+            ]]></field>
+            <field name="auto_delete" eval="True"/>
+        </record>
     </data>
 </odoo>
