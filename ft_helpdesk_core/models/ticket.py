@@ -283,7 +283,17 @@ class HelpdeskTicket(models.Model):
             if vals.get('ticket_no', 'New') == 'New':
                 vals['ticket_no'] = self.env['ir.sequence'].next_by_code(
                     'ft.helpdesk.ticket') or 'New'
-            # Auto-assign team from type
+            # Auto-assign team from the customer's configured Support Team.
+            # This takes priority over the ticket type's default team.
+            if not vals.get('team_id') and vals.get('customer_id'):
+                partner = self.env['res.partner'].browse(vals['customer_id'])
+                customer_team = (
+                    partner.commercial_partner_id.helpdesk_team_id
+                    or partner.helpdesk_team_id
+                )
+                if customer_team:
+                    vals['team_id'] = customer_team.id
+            # Auto-assign team from type (fallback when the customer has no team)
             if not vals.get('team_id') and vals.get('type_id'):
                 ticket_type = self.env['ft.helpdesk.ticket.type'].browse(vals['type_id'])
                 if ticket_type.default_team_id:
@@ -351,9 +361,17 @@ class HelpdeskTicket(models.Model):
                             'Failed to send new-ticket email for ticket %s',
                             ticket.ticket_no, exc_info=True,
                         )
+            # Notify the assigned internal user (covers both vals-set and
+            # round-robin-set assignees). Skips self-assignment internally.
+            ticket._notify_assignee()
         return tickets
 
     def write(self, vals):
+        assignee_changed = 'assigned_user_id' in vals
+        old_assignee_ids = (
+            {t.id: t.assigned_user_id.id for t in self}
+            if assignee_changed else {}
+        )
         result = super().write(vals)
         # Track state-change timestamps
         if vals.get('state') == 'resolved':
@@ -373,6 +391,11 @@ class HelpdeskTicket(models.Model):
             for ticket in self:
                 if not ticket.cancelled_at:
                     ticket.cancelled_at = now
+        # Notify newly-assigned users when the assignee actually changed
+        if assignee_changed:
+            for ticket in self:
+                if ticket.assigned_user_id.id != old_assignee_ids.get(ticket.id):
+                    ticket._notify_assignee()
         return result
 
     # =====================
@@ -551,6 +574,39 @@ class HelpdeskTicket(models.Model):
         to be sent from admin@fingertipplus.com instead of the default."""
         kwargs['email_from'] = 'admin@fingertipplus.com'
         return super().message_notify(**kwargs)
+
+    def _notify_assignee(self):
+        """Send a short 'You've been assigned' email to assigned_user_id via
+        message_notify (FYI to the assignee's partner; does not add them as a
+        follower). No-op when there's no assignee, the assignee is the current
+        user (self-assign), or they have no partner/email."""
+        self.ensure_one()
+        assignee = self.assigned_user_id
+        if not assignee or assignee.id == self.env.uid:
+            return
+        partner = assignee.partner_id
+        if not partner or not partner.email:
+            return
+        template = self.env.ref(
+            'ft_helpdesk_core.mt_ticket_assigned_email_template',
+            raise_if_not_found=False,
+        )
+        if not template:
+            return
+        try:
+            rendered = template.sudo()._render_field('body_html', self.ids)
+            subjects = template.sudo()._render_field('subject', self.ids)
+            self.message_notify(
+                partner_ids=partner.ids,
+                body=Markup(rendered[self.id]),
+                subject=subjects[self.id],
+                email_layout_xmlid='mail.mail_notification_light',
+            )
+        except Exception:
+            _logger.warning(
+                'Failed to send assignee notification for ticket %s',
+                self.ticket_no, exc_info=True,
+            )
 
     def _get_access_token(self):
         """Generate access token for portal sharing."""

@@ -16,6 +16,7 @@ class HelpdeskTeam(models.Model):
     leader_user_id = fields.Many2one(
         'res.users', string='Team Leader',
         domain="[('share', '=', False)]",
+        required=True,
     )
     member_user_ids = fields.Many2many(
         'res.users', 'ft_helpdesk_team_member_rel',

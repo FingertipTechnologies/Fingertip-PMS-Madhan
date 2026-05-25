@@ -12,7 +12,7 @@ class HelpdeskPortal(CustomerPortal):
             values['ticket_count'] = request.env['ft.helpdesk.ticket'].search_count([])
         return values
 
-    @http.route('/my/home', type='http', auth='user', website=True)
+    @http.route(['/my', '/my/home'], type='http', auth='user', website=True)
     def portal_my_home_redirect(self, **kw):
         user = request.env.user
         if user.has_group('base.group_portal'):

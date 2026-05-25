@@ -28,7 +28,7 @@
                             <field name="employee_id"/>
                             <field name="task_id" options="{'no_create': True, 'no_create_edit': True}"/>
                             <field name="name"/>
-                            <field name="unit_amount" sum="Total Time" string="Time Spent"/>
+                            <field name="unit_amount" sum="Total Time" string="Time Spent" widget="timesheet_uom"/>
                         </list>
                     </field>
                 </page>

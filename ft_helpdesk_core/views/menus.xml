@@ -4,6 +4,7 @@
     <menuitem id="menu_ft_helpdesk_root"
               name="Helpdesk"
               web_icon="ft_helpdesk_core,static/description/icon.png"
+              groups="base.group_user"
               sequence="25"/>
 
     <!-- Level 1: Tickets -->

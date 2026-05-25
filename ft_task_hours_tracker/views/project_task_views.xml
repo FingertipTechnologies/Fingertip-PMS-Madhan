@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Show Actual Hours and exceeded warning on task form (no per-task time limit field) -->
+    <record id="view_task_form_ft_hours_tracker" model="ir.ui.view">
+        <field name="name">project.task.form.ft.hours.tracker</field>
+        <field name="model">project.task</field>
+        <field name="inherit_id" ref="project.view_task_form2"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='estimated']" position="after">
+                <field name="ft_total_hours_taken"
+                       string="Actual Hours"
+                       widget="float_time"
+                       readonly="1"/>
+                <div invisible="not ft_hours_exceeded or not ft_allow_billable">
+                    <small class="text-danger">
+                        <i class="fa fa-exclamation-triangle me-1"/>
+                        Task time limit reached!
+                        This task has exceeded the allowed hours. Please create a new task to continue the work.
+                    </small>
+                </div>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- Hide the bt_project_customization 'actual' field to avoid duplication -->
+    <record id="view_task_form_ft_hide_bt_actual" model="ir.ui.view">
+        <field name="name">project.task.form.ft.hide.bt.actual</field>
+        <field name="model">project.task</field>
+        <field name="inherit_id" ref="bt_project_customization.view_task_form_inherit"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='actual']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -4,17 +4,18 @@ import logging
 
 from odoo import http, fields, _
 from odoo.http import request
-from odoo.addons.portal.controllers.portal import CustomerPortal, pager as portal_pager
+from odoo.addons.portal.controllers.portal import pager as portal_pager
 from odoo.addons.web.controllers.home import Home
 from odoo.exceptions import AccessError, MissingError
 from odoo.osv.expression import AND
+from odoo.addons.ft_helpdesk_core.controllers.portal import HelpdeskPortal as HelpdeskPortalBase
 
 _logger = logging.getLogger(__name__)
 
 TICKETS_PER_PAGE = 10
 
 
-class HelpdeskPortal(CustomerPortal):
+class HelpdeskPortal(HelpdeskPortalBase):
 
     def _prepare_home_portal_values(self, counters):
         values = super()._prepare_home_portal_values(counters)
@@ -462,8 +463,15 @@ class HelpdeskPortal(CustomerPortal):
                 if project.exists() and project.partner_id.commercial_partner_id == partner.commercial_partner_id:
                     vals['project_id'] = project.id
 
-        # Get default team
-        if post.get('type_id'):
+        # Get default team. The customer's configured Support Team wins;
+        # fall back to the ticket type's default team, then the system default.
+        customer_team = (
+            partner.commercial_partner_id.sudo().helpdesk_team_id
+            or partner.sudo().helpdesk_team_id
+        )
+        if customer_team:
+            vals['team_id'] = customer_team.id
+        if not vals.get('team_id') and post.get('type_id'):
             ttype = request.env['ft.helpdesk.ticket.type'].sudo().browse(
                 int(post['type_id']))
             if ttype.default_team_id:
