@@ -120,7 +120,12 @@
                    widget="timesheet_uom_no_toggle"/>
         </xpath>
 
-     
+        <!-- Hide the standard hr_timesheet Timesheets page — the qa_timesheets tab
+             in qa_testapp already provides the same timesheet_ids list.
+             Having both visible caused every saved entry to appear twice. -->
+        <xpath expr="//page[@name='timesheets']" position="attributes">
+            <attribute name="invisible">1</attribute>
+        </xpath>
 
     </field>
 </record>
