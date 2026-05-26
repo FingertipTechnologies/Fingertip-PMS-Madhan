@@ -43,6 +43,10 @@
                             <field name="reproducibility"/>
                             <field name="environment"/>
                             <field name="device"/>
+                            <field name="reopen_count"/>
+                            <field name="escalation_level" widget="badge"
+                                   decoration-warning="escalation_level == 'qa_lead'"
+                                   decoration-danger="escalation_level == 'manager'"/>
                         </list>
                     </field>
                 </page>

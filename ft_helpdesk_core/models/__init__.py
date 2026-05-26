@@ -8,3 +8,5 @@ from . import ticket
 from . import canned_response
 from . import business_hours
 from . import res_config_settings
+from . import res_partner
+from . import mail_message

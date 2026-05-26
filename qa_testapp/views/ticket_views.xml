@@ -5,8 +5,8 @@
         <field name="name">qa_testapp.ticket.list</field>
         <field name="model">qa_testapp.ticket</field>
         <field name="arch" type="xml">
-            <list decoration-danger="severity == 'blocker'"
-                  decoration-warning="severity == 'critical'"
+            <list decoration-danger="severity == 'blocker' or escalation_level == 'manager'"
+                  decoration-warning="severity == 'critical' or escalation_level == 'qa_lead'"
                   decoration-success="status == 'fixed'"
                   decoration-muted="status == 'closed'">
                 <field name="bug_id"/>
@@ -14,13 +14,25 @@
                 <field name="project_id"/>
                 <field name="severity"/>
                 <field name="priority"/>
+                <field name="target_response_time" optional="show"/>
+                <field name="target_deadline" optional="hide"/>
                 <field name="status"/>
+                <field name="reopen_count"/>
+                <field name="escalation_level" widget="badge"
+                       decoration-warning="escalation_level == 'qa_lead'"
+                       decoration-danger="escalation_level == 'manager'"
+                       optional="show"/>
                 <field name="environment"/>
                 <field name="device"/>
                 <field name="reproducibility"/>
-                <field name="reporter_id"/>
+                    <!-- <field name="reporter_id"/> -->
+                    <field name="reporter_display" string="Reporter"/>
                 <field name="assignee_id"/>
                 <field name="reported_date"/>
+                <field name="approval_state" widget="badge"
+                       decoration-info="approval_state == 'pending'"
+                       decoration-success="approval_state == 'approved'"
+                       decoration-danger="approval_state == 'rejected'"/>
             </list>
         </field>
     </record>
@@ -31,6 +43,19 @@
         <field name="arch" type="xml">
             <form>
                 <header>
+                    <field name="can_user_approve" invisible="1"/>
+                    <button name="action_submit_for_approval" type="object"
+                            string="Submit for Approval" class="btn-primary"
+                            invisible="approval_state not in ('draft', 'rejected')"/>
+                    <button name="action_approve" type="object"
+                            string="Approve" class="btn-success"
+                            invisible="approval_state != 'pending' or not can_user_approve"/>
+                    <button name="action_reject_open_wizard" type="object"
+                            string="Reject" class="btn-danger"
+                            invisible="approval_state != 'pending' or not can_user_approve"/>
+                    <button name="action_reopen_approval" type="object"
+                            string="Re-Open for Edit" class="btn-warning"
+                            invisible="approval_state != 'approved' or not can_user_approve"/>
                     <button name="action_in_progress" type="object" string="In Progress"
                             class="btn-primary" invisible="status in ('in_progress', 'fixed', 'closed')"/>
                     <button name="action_fixed" type="object" string="Fixed"
@@ -39,31 +64,54 @@
                             class="btn-secondary" invisible="status in ('open', 'closed')"/>
                     <button name="action_reopen" type="object" string="Re-Open"
                             class="btn-warning" invisible="status not in ('fixed', 'closed')"/>
+                    <field name="approval_state" widget="statusbar"
+                           statusbar_visible="draft,pending,approved"/>
                     <field name="status" widget="statusbar" clickable="1" statusbar_visible="open,in_progress,fixed,closed,reopened"/>
                 </header>
                 <sheet>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="approval_state != 'rejected'">
+                        <strong>Rejected:</strong>
+                        <field name="rejection_reason" readonly="1" nolabel="1"/>
+                    </div>
                     <div class="oe_title">
                         <h1>
                             <field name="bug_id" readonly="1" class="text-muted"/>
                         </h1>
                         <h2>
-                            <field name="title"/>
+                            <field name="title" readonly="approval_state == 'approved'"/>
                         </h2>
                     </div>
                     <group>
                         <group string="Classification">
                             <field name="severity"/>
                             <field name="priority"/>
+                            <field name="target_response_time"/>
+                            <field name="target_deadline"/>
                             <field name="reproducibility"/>
                             <field name="environment" required="1"/>
                             <field name="device"/>
+                            <field name="reopen_count"/>
+                            <field name="escalation_level" widget="badge"
+                                   decoration-warning="escalation_level == 'qa_lead'"
+                                   decoration-danger="escalation_level == 'manager'"/>
                         </group>
                         <group string="Project and Reporter">
                             <field name="project_id"/>
                             <field name="module_id"
                                    options="{'no_create': True}"
                                    domain="[('project_ids', '=', project_id)]"/>
-                            <field name="reporter_id"/>
+                                                            
+                                <label for="is_client" string="Reporters"/>
+                                <div class="o_row">
+                                    <field name="is_client"/> <span class="me-3">Client</span>
+                                    <field name="is_internal"/> <span>Internal</span>
+                                </div>
+
+                                <field name="reporter_id" 
+                                       invisible="not is_internal" 
+                                       required="is_internal"/>
+                                                                
                             <field name="assignee_id"/>
                             <field name="reported_date"/>
                             <field name="test_case_id"/>
@@ -85,6 +133,20 @@
                         <page string="Evidence">
                             <field name="evidence_notes"/>
                             <field name="evidence_attachment_ids" widget="many2many_binary" string="Attachments"/>
+                        </page>
+                        <page string="Approval Log">
+                            <group>
+                                <group string="Submission">
+                                    <field name="submitted_by_id"/>
+                                    <field name="submitted_date"/>
+                                </group>
+                                <group string="Decision">
+                                    <field name="approved_by_id"/>
+                                    <field name="approved_date"/>
+                                    <field name="rejected_by_id"
+                                           invisible="approval_state != 'rejected'"/>
+                                </group>
+                            </group>
                         </page>
                     </notebook>
                 </sheet>
@@ -120,10 +182,63 @@
             </kanban>
         </field>
     </record>
+
+
+    <record id="qa_testapp_view_ticket_search" model="ir.ui.view">
+        <field name="name">qa_testapp.ticket.search</field>
+        <field name="model">qa_testapp.ticket</field>
+        <field name="arch" type="xml">
+            <search string="Search Bugs">
+                <field name="bug_id"/>
+                <field name="title"/>
+                <field name="project_id"/>
+                <field name="assignee_id"/>
+
+                <filter string="My Bugs" name="my_bugs" domain="[('assignee_id', '=', uid)]"/>
+                <filter string="All Bugs" name="all_bugs" domain="[]"/>
+                <separator/>
+                <filter string="Pending Approval" name="pending_approval"
+                        domain="[('approval_state', '=', 'pending')]"/>
+                <filter string="Draft" name="draft"
+                        domain="[('approval_state', '=', 'draft')]"/>
+                <filter string="Approved" name="approved"
+                        domain="[('approval_state', '=', 'approved')]"/>
+                <filter string="Rejected" name="rejected"
+                        domain="[('approval_state', '=', 'rejected')]"/>
+
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Project" name="group_by_project" context="{'group_by': 'project_id'}"/>
+                    <filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/>
+                    <filter string="Priority" name="group_by_priority" context="{'group_by': 'priority'}"/>
+                    <filter string="Approval State" name="group_by_approval"
+                            context="{'group_by': 'approval_state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <record id="qa_testapp_action_ticket" model="ir.actions.act_window">
         <field name="name">Bug</field>
         <field name="res_model">qa_testapp.ticket</field>
         <field name="view_mode">list,form,kanban</field>
+        <!-- <field name="search_view_id" ref="qa_testapp_view_ticket_search"/>
+        <field name="context">{'search_default_my_bugs': 1}</field>  -->
+    </record>
+    <record id="qa_testapp_action_my_bugs" model="ir.actions.act_window">
+        <field name="name">My Bugs</field>
+        <field name="res_model">qa_testapp.ticket</field>
+        <field name="view_mode">list,form,kanban</field>
+        <field name="search_view_id" ref="qa_testapp_view_ticket_search"/>
+        <field name="context">{'search_default_my_bugs': 1}</field>
+    </record>
+
+    <record id="qa_testapp_action_all_bugs" model="ir.actions.act_window">
+        <field name="name">All Bugs</field>
+        <field name="res_model">qa_testapp.ticket</field>
+        <field name="view_mode">list,form,kanban</field>
+        <field name="search_view_id" ref="qa_testapp_view_ticket_search"/>
+        <field name="context">{}</field>
     </record>
     
     <!-- Action -->
@@ -135,4 +250,47 @@
             <p>No test plans found. Let's create one!</p>
         </field>
     </record>
+
+        <record id="email_template_bug_assigned" model="mail.template">
+            <field name="name">QA Ticket: Bug Assigned Notification</field>
+            <field name="model_id" ref="qa_testapp.model_qa_testapp_ticket"/>
+            <field name="subject">📋 Bug Assignment Notification: [{{ object.bug_id }}] {{ object.title }}</field>
+            <field name="email_to">{{ object.assignee_id.email_formatted }}</field>
+            <field name="description">Sent automatically to the assignee when a bug ticket is assigned to them.</field>
+            <field name="body_html" type="html">
+                <div style="margin: 0px; padding: 0px; font-family: 'Arial', sans-serif;">
+                    <p style="margin: 0px; padding: 0px; font-size: 14px;">
+                        Hello <t t-out="object.assignee_id.name"/>,<br/><br/>
+                        You have been assigned to the following QA bug ticket:
+                    </p>
+                    <table style="width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 14px;">
+                        <tr>
+                            <td style="width: 120px; padding: 8px 0; font-weight: bold; color: #555555;">Bug ID:</td>
+                            <td style="padding: 8px 0;"><t t-out="object.bug_id"/></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; color: #555555;">Title:</td>
+                            <td style="padding: 8px 0;"><t t-out="object.title"/></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; color: #555555;">Project:</td>
+                            <td style="padding: 8px 0;"><t t-out="object.project_id.name"/></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; color: #555555;">Severity:</td>
+                            <td style="padding: 8px 0;"><t t-out="object.severity.capitalize()"/></td>
+                        </tr>
+                    </table>
+                    <p style="margin: 20px 0 0 0;">
+                        <a t-att-href="'/web#id=%s&amp;model=qa_testapp.ticket&amp;view_type=form' % object.id" 
+                           style="background-color: #714B67; padding: 10px 20px; text-decoration: none; color: #ffffff; border-radius: 5px; font-weight: bold; display: inline-block;">
+                            View Bug Ticket
+                        </a>
+                    </p>
+                    <p style="margin: 20px 0 0 0; font-size: 12px; color: #888888;">
+                        This is an automated system notification. Please do not reply directly to this email.
+                    </p>
+                </div>
+            </field>
+        </record>
 </odoo>

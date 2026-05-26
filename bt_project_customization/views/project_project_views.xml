@@ -63,7 +63,7 @@
                     <field name="employee_id"/>
                     <field name="date"/>
                     <field name="name"/>
-                    <field name="unit_amount" sum="Total Time" string="Time Spent"/>
+                    <field name="unit_amount" sum="Total Time" string="Time Spent" widget="timesheet_uom"/>
                 </list>
             </field>
         </record>

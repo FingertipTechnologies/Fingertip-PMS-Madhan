@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_qa_approval_reject_wizard_form" model="ir.ui.view">
+        <field name="name">qa_testapp.approval.reject.wizard.form</field>
+        <field name="model">qa_testapp.approval.reject.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reject">
+                <group>
+                    <field name="res_model" invisible="1"/>
+                    <field name="res_id" invisible="1"/>
+                    <field name="reason"
+                           placeholder="Explain what needs to be fixed before re-submission..."/>
+                </group>
+                <footer>
+                    <button string="Confirm Reject"
+                            type="object"
+                            name="action_confirm_reject"
+                            class="btn-danger"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

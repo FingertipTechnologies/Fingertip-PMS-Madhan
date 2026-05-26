@@ -30,6 +30,22 @@
         <field name="sequence">21</field>
     </record>
 
+    <record id="qa_testapp_action_my_bugs" model="ir.actions.act_window">
+        <field name="name">My Bugs</field>
+        <field name="res_model">qa_testapp.ticket</field>
+        <field name="view_mode">list,form,kanban</field>
+        <field name="search_view_id" ref="qa_testapp_view_ticket_search"/>
+        <field name="context">{'search_default_my_bugs': 1}</field>
+    </record>
+
+    <record id="qa_testapp_action_all_bugs" model="ir.actions.act_window">
+        <field name="name">All Bugs</field>
+        <field name="res_model">qa_testapp.ticket</field>
+        <field name="view_mode">list,form,kanban</field>
+        <field name="search_view_id" ref="qa_testapp_view_ticket_search"/>
+        <field name="context">{}</field>
+    </record>
+
     <!-- ============================= -->
     <!-- Add QA TestApp menus           -->
     <!-- ============================= -->
@@ -39,6 +55,19 @@
               parent="project.menu_main_pm"
               action="qa_testapp.qa_testapp_action_ticket"
               sequence="40"/>
+    
+    <!--  My Bugs: sequence 10 -->
+    <menuitem id="qa_testapp_menu_my_bugs" 
+              name="My Bugs" 
+              parent="menu_updates_bug" 
+              action="qa_testapp_action_my_bugs" 
+              sequence="10"/>
+
+    <menuitem id="qa_testapp_menu_all_bugs" 
+              name="All Bugs" 
+              parent="menu_updates_bug" 
+              action="qa_testapp_action_all_bugs" 
+              sequence="20"/>
 
     <!-- Test Cases: sequence 50 -->
     <menuitem id="menu_updates_test_cases"

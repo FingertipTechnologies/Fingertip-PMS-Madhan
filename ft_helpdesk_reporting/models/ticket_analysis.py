@@ -22,6 +22,9 @@ class HelpdeskTicketAnalysis(models.Model):
     assigned_user_id = fields.Many2one(
         'res.users', string='Assignee', readonly=True,
     )
+    project_id = fields.Many2one(
+        'project.project', string='Project', readonly=True,
+    )
     category_id = fields.Many2one(
         'ft.helpdesk.category', string='Category', readonly=True,
     )
@@ -65,6 +68,10 @@ class HelpdeskTicketAnalysis(models.Model):
         string='Resolution Time (Hours)', readonly=True,
         group_operator='avg',
     )
+    fixed_count = fields.Integer(
+        string='Issues Fixed', readonly=True,
+        group_operator='sum',
+    )
 
     # ----- SLA / Escalation flags -----
     is_sla_breached = fields.Boolean(
@@ -86,6 +93,7 @@ class HelpdeskTicketAnalysis(models.Model):
                     t.create_date               AS create_date,
                     t.closed_at                 AS close_date,
                     t.team_id                   AS team_id,
+                    t.project_id                AS project_id,
                     t.assigned_user_id          AS assigned_user_id,
                     t.category_id               AS category_id,
                     t.type_id                   AS type_id,
@@ -113,7 +121,13 @@ class HelpdeskTicketAnalysis(models.Model):
                              AND (sla.first_response_breached OR sla.resolution_breached)
                         THEN TRUE
                         ELSE FALSE
-                    END                         AS is_sla_breached
+                    END                         AS is_sla_breached,
+                    -- Issues fixed: resolved or closed tickets count as 1
+                    CASE
+                        WHEN t.state IN ('resolved', 'closed')
+                        THEN 1
+                        ELSE 0
+                    END                         AS fixed_count
                 FROM ft_helpdesk_ticket t
                 LEFT JOIN ft_helpdesk_sla_status sla
                     ON sla.id = (
