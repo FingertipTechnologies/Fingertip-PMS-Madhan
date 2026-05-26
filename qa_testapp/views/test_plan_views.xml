@@ -35,6 +35,7 @@
                         <group>
                             <field name="activity_start_date"/>
                             <field name="activity_end_date"/>
+                            <field name="test_environment"/>
                         </group>
                     </group>
                     <notebook>
@@ -50,10 +51,9 @@
                                 <field name="scope_out"/>
                             </group>
                         </page>
-                        <page string="Approach &amp; Environment">
+                        <page string="Approach">
                             <group>
                                 <field name="test_approach"/>
-                                <field name="test_environment"/>
                             </group>
                         </page>
                         <page string="Entry &amp; Exit Criteria">

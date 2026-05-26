@@ -367,6 +367,11 @@ class HelpdeskTicket(models.Model):
         return tickets
 
     def write(self, vals):
+        team_changed = 'team_id' in vals
+        old_team_ids = (
+            {t.id: t.team_id.id for t in self}
+            if team_changed else {}
+        )
         assignee_changed = 'assigned_user_id' in vals
         old_assignee_ids = (
             {t.id: t.assigned_user_id.id for t in self}
@@ -391,6 +396,27 @@ class HelpdeskTicket(models.Model):
             for ticket in self:
                 if not ticket.cancelled_at:
                     ticket.cancelled_at = now
+        # Auto-reassign when team changes. Mirrors the create() rule:
+        #   round_robin team → _get_next_assignee() (rotates the counter)
+        #   manual team with default_assignee_id → use it
+        #   otherwise → clear, user picks manually
+        # Skipped when the same write also sets assigned_user_id explicitly —
+        # in that case respect the caller's choice.
+        if team_changed and 'assigned_user_id' not in vals:
+            for ticket in self:
+                if ticket.team_id.id != old_team_ids.get(ticket.id):
+                    new_assignee_id = False
+                    team = ticket.team_id
+                    if team:
+                        if team.auto_assign_mode == 'round_robin':
+                            next_user = team._get_next_assignee()
+                            if next_user:
+                                new_assignee_id = next_user.id
+                        elif team.default_assignee_id:
+                            new_assignee_id = team.default_assignee_id.id
+                    # Setting via ORM triggers a recursive write that runs
+                    # the assignee_changed branch below → notifies the new user.
+                    ticket.assigned_user_id = new_assignee_id
         # Notify newly-assigned users when the assignee actually changed
         if assignee_changed:
             for ticket in self:
@@ -601,6 +627,7 @@ class HelpdeskTicket(models.Model):
                 body=Markup(rendered[self.id]),
                 subject=subjects[self.id],
                 email_layout_xmlid='mail.mail_notification_light',
+                subtype_xmlid='mail.mt_note',
             )
         except Exception:
             _logger.warning(

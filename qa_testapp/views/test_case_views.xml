@@ -5,7 +5,11 @@
         <field name="name">qa_testapp.test_case.list</field>
         <field name="model">qa_testapp.test_case</field>
         <field name="arch" type="xml">
-            <list string="Test Cases">
+            <list string="Test Cases"
+                  decoration-info="approval_state == 'pending'"
+                  decoration-success="approval_state == 'approved'"
+                  decoration-danger="approval_state == 'rejected'"
+                  decoration-muted="approval_state == 'draft'">
                 <field name="test_case_id"/>
                 <field name="test_case_title"/>
                 <field name="project_id"/>
@@ -15,6 +19,10 @@
                 <field name="test_type"/>
                 <field name="environment"/>
                 <field name="executed_date"/>
+                <field name="approval_state" widget="badge"
+                       decoration-info="approval_state == 'pending'"
+                       decoration-success="approval_state == 'approved'"
+                       decoration-danger="approval_state == 'rejected'"/>
             </list>
         </field>
     </record>
@@ -24,48 +32,131 @@
         <field name="model">qa_testapp.test_case</field>
         <field name="arch" type="xml">
             <form>
+                <header>
+                    <field name="can_user_approve" invisible="1"/>
+                    <button name="action_submit_for_approval" type="object"
+                            string="Submit for Approval" class="btn-primary"
+                            invisible="approval_state not in ('draft', 'rejected')"/>
+                    <button name="action_approve" type="object"
+                            string="Approve" class="btn-success"
+                            invisible="approval_state != 'pending' or not can_user_approve"/>
+                    <button name="action_reject_open_wizard" type="object"
+                            string="Reject" class="btn-danger"
+                            invisible="approval_state != 'pending' or not can_user_approve"/>
+                    <button name="action_reopen" type="object"
+                            string="Re-Open" class="btn-warning"
+                            invisible="approval_state != 'approved' or not can_user_approve"/>
+                    <field name="approval_state" widget="statusbar"
+                           statusbar_visible="draft,pending,approved"/>
+                </header>
                 <sheet>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="approval_state != 'rejected'">
+                        <strong>Rejected:</strong>
+                        <field name="rejection_reason" readonly="1" nolabel="1"/>
+                    </div>
                     <group>
                         <group>
                             <field name="test_case_id" readonly="1"/>
-                            <field name="test_case_title"/>
-                            <field name="project_id"/>
+                            <field name="test_case_title"
+                                   readonly="approval_state in ('pending', 'approved')"/>
+                            <field name="project_id"
+                                   readonly="approval_state in ('pending', 'approved')"/>
                             <field name="available_module_ids" invisible="1"/>
-                            <field name="module_id"/>
+                            <field name="module_id"
+                                   readonly="approval_state in ('pending', 'approved')"/>
                         </group>
                         <group>
-                            <field name="status"/>
-                            <field name="severity"/>
-                            <field name="test_type"/>
-                            <field name="environment"/>
+                            <field name="status"
+                                   readonly="approval_state == 'approved'"/>
+                            <field name="severity"
+                                   readonly="approval_state == 'approved'"/>
+                            <field name="test_type"
+                                   readonly="approval_state == 'approved'"/>
+                            <field name="environment"
+                                   readonly="approval_state == 'approved'"/>
                         </group>
                     </group>
                     <notebook>
                         <page string="Test Details">
-                            <field name="test_objective"/>
-                            <field name="pre_conditions"/>
+                            <field name="test_objective"
+                                   readonly="approval_state == 'approved'"/>
+                            <field name="pre_conditions"
+                                   readonly="approval_state == 'approved'"/>
                         </page>
                         <page string="Test Data &amp; Steps">
                             <group>
-                                <field name="test_data"/>
-                                <field name="test_steps"/>
+                                <field name="test_data"
+                                       readonly="approval_state == 'approved'"/>
+                                <field name="test_steps"
+                                       readonly="approval_state == 'approved'"/>
                             </group>
                         </page>
                         <page string="Results">
                             <group>
-                                <field name="expected_result"/>
-                                <field name="actual_result"/>
+                                <field name="expected_result"
+                                       readonly="approval_state == 'approved'"/>
+                                <field name="actual_result"
+                                       readonly="approval_state == 'approved'"/>
                             </group>
                         </page>
                         <page string="Execution">
                             <group>
-                                <field name="executed_date"/>
-                                <field name="executed_by"/>
+                                <field name="executed_date"
+                                       readonly="approval_state == 'approved'"/>
+                                <field name="executed_by"
+                                       readonly="approval_state == 'approved'"/>
+                            </group>
+                        </page>
+                        <page string="Approval Log">
+                            <group>
+                                <group string="Submission">
+                                    <field name="submitted_by_id"/>
+                                    <field name="submitted_date"/>
+                                </group>
+                                <group string="Decision">
+                                    <field name="approved_by_id"/>
+                                    <field name="approved_date"/>
+                                    <field name="rejected_by_id"
+                                           invisible="approval_state != 'rejected'"/>
+                                </group>
                             </group>
                         </page>
                     </notebook>
                 </sheet>
+                <chatter/>
             </form>
+        </field>
+    </record>
+
+    <!-- Search view -->
+    <record id="qa_testapp_view_test_case_search" model="ir.ui.view">
+        <field name="name">qa_testapp.test_case.search</field>
+        <field name="model">qa_testapp.test_case</field>
+        <field name="arch" type="xml">
+            <search string="Search Test Cases">
+                <field name="test_case_id"/>
+                <field name="test_case_title"/>
+                <field name="project_id"/>
+                <field name="module_id"/>
+                <filter string="Pending Approval" name="pending_approval"
+                        domain="[('approval_state', '=', 'pending')]"/>
+                <filter string="Draft" name="draft"
+                        domain="[('approval_state', '=', 'draft')]"/>
+                <filter string="Approved" name="approved"
+                        domain="[('approval_state', '=', 'approved')]"/>
+                <filter string="Rejected" name="rejected"
+                        domain="[('approval_state', '=', 'rejected')]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Approval State" name="group_by_approval"
+                            context="{'group_by': 'approval_state'}"/>
+                    <filter string="Project" name="group_by_project"
+                            context="{'group_by': 'project_id'}"/>
+                    <filter string="Status" name="group_by_status"
+                            context="{'group_by': 'status'}"/>
+                </group>
+            </search>
         </field>
     </record>
 
@@ -74,5 +165,6 @@
         <field name="name">Test Cases</field>
         <field name="res_model">qa_testapp.test_case</field>
         <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="qa_testapp_view_test_case_search"/>
     </record>
 </odoo>

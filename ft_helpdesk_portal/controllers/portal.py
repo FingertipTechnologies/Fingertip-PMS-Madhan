@@ -4,7 +4,7 @@ import logging
 
 from odoo import http, fields, _
 from odoo.http import request
-from odoo.addons.portal.controllers.portal import pager as portal_pager
+from odoo.addons.portal.controllers.portal import CustomerPortal, pager as portal_pager
 from odoo.addons.web.controllers.home import Home
 from odoo.exceptions import AccessError, MissingError
 from odoo.osv.expression import AND
@@ -15,7 +15,7 @@ _logger = logging.getLogger(__name__)
 TICKETS_PER_PAGE = 10
 
 
-class HelpdeskPortal(HelpdeskPortalBase):
+class HelpdeskPortal(CustomerPortal):
 
     def _prepare_home_portal_values(self, counters):
         values = super()._prepare_home_portal_values(counters)
@@ -496,26 +496,34 @@ class HelpdeskPortal(HelpdeskPortalBase):
             mail_create_nosubscribe=True,
         ).create(vals)
 
-        # Handle attachments
-        files = request.httprequest.files.getlist('attachments')
-        for f in files:
-            if f.filename:
-                data = f.read()
-                if data:
-                    request.env['ir.attachment'].sudo().create({
-                        'name': f.filename,
-                        'datas': base64.b64encode(data),
-                        'res_model': 'ft.helpdesk.ticket',
-                        'res_id': ticket.id,
-                    })
-
-        # Post initial message
-        ticket.sudo().message_post(
+        # Post initial message first so attachments can be linked to it
+        # (must come before attachment handling — Customer Conversation reads
+        # mail.message.attachment_ids, not attachments linked to the ticket).
+        message = ticket.sudo().message_post(
             body=vals.get('description', ''),
             message_type='comment',
             subtype_xmlid='ft_helpdesk_core.mt_ticket_new',
             author_id=partner.id,
         )
+
+        # Handle attachments — link them to the initial message
+        files = request.httprequest.files.getlist('attachments')
+        attachment_ids = []
+        for f in files:
+            if f.filename:
+                data = f.read()
+                if data:
+                    att = request.env['ir.attachment'].sudo().create({
+                        'name': f.filename,
+                        'datas': base64.b64encode(data),
+                        'res_model': 'mail.message',
+                        'res_id': message.id,
+                    })
+                    attachment_ids.append(att.id)
+        if attachment_ids:
+            message.sudo().write({
+                'attachment_ids': [(4, aid) for aid in attachment_ids],
+            })
 
         return request.redirect('/my/support/ticket/%s?just_created=1' % ticket.id)
 

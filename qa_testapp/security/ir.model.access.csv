@@ -3,3 +3,4 @@ access_qa_test_plan_user,QA Test Plan,model_qa_testapp_test_plan,base.group_user
 access_qa_test_scenario_user,QA Test Scenario,model_qa_testapp_test_scenario,base.group_user,1,1,1,1
 access_qa_test_case_user,QA Test Case,model_qa_testapp_test_case,base.group_user,1,1,1,1
 access_qa_ticket_user,QA Ticket,model_qa_testapp_ticket,base.group_user,1,1,1,1
+access_qa_approval_reject_wizard,QA Approval Reject Wizard,model_qa_testapp_approval_reject_wizard,base.group_user,1,1,1,1
