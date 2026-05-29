@@ -18,7 +18,7 @@ class EmployeeExpenseClaim(models.Model):
         tracking=True)
     department = fields.Many2one(
         'hr.department', string="Department",
-        related='employee.department_id', store=True, readonly=False)
+        related='employee.department_id', store=True, readonly=True)
     claim_date = fields.Date(
         string="Claim Date", required=True, tracking=True)
 
