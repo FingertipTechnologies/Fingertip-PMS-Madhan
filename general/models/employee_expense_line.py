@@ -29,7 +29,7 @@ class EmployeeExpenseLine(models.Model):
             ('bank_transfer', 'Bank Transfer'),
         ],
         string="Payment Mode")
-    bill_available = fields.Boolean(string="Bill Available", default=True)
+    bill_available = fields.Boolean(string="Bill Available")
     bill_attachment = fields.Many2many(
         'ir.attachment', 'expense_line_attachment_rel',
         'line_id', 'attachment_id', string="Bill Attachment")

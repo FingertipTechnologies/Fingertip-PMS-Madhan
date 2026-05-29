@@ -41,6 +41,7 @@
                             <field name="currency_id" invisible="1"/>
                             <field name="project_id"/>
                             <field name="partner_id"/>
+                            <field name="bill_available"/>
                         </group>
                     </group>
                     <notebook>
@@ -107,25 +108,23 @@
                         </group>
                     </group>
                     <notebook>
-<!--                        <page string="Expense Lines" name="lines">-->
-<!--                            <field name="expense_line_ids"-->
-<!--                                   context="{'default_expense_claim': id}">-->
-<!--                                <list editable="bottom">-->
-<!--                                    <field name="expense_date"/>-->
-<!--                                    <field name="category"/>-->
-<!--                                    <field name="description"/>-->
-<!--                                    <field name="amount" sum="Total"/>-->
-<!--                                    <field name="tax_amount" sum="Tax"/>-->
-<!--                                    <field name="payment_mode"/>-->
-<!--                                    <field name="bill_attachment" widget="many2many_binary"/>-->
-<!--                                    <field name="currency_id" invisible="1"/>-->
-<!--                                </list>-->
-<!--                            </field>-->
-<!--                            <group class="oe_subtotal_footer">-->
-<!--                                <field name="total_amount" widget="monetary"/>-->
-<!--                                <field name="currency_id" invisible="1"/>-->
-<!--                            </group>-->
-<!--                        </page>-->
+                        <page string="Expense Lines" name="lines">
+                            <field name="expense_line_ids"
+                                   context="{'default_expense_claim': id}">
+                                <list editable="bottom">
+                                    <field name="expense_date"/>
+                                    <field name="category"/>
+                                    <field name="description"/>
+                                    <field name="amount" sum="Total"/>
+                                    <field name="tax_amount" sum="Tax"/>
+                                    <field name="payment_mode"/>
+                                    <field name="bill_attachment" widget="many2many_binary"/>
+                                </list>
+                            </field>
+                            <group class="oe_subtotal_footer">
+                                <field name="total_amount" widget="monetary"/>
+                            </group>
+                        </page>
                         <page string="Approval &amp; Payment" name="approval">
                             <group>
                                 <group string="Approval">
