@@ -45,6 +45,11 @@
 
             </xpath>
 
+            <!-- Website mandatory on Leads (visible in the lead_partner group) -->
+            <xpath expr="//group[@name='lead_partner']//field[@name='website']" position="attributes">
+                <attribute name="required">type == 'lead'</attribute>
+            </xpath>
+
 <!--            <xpath expr="//sheet/notebook/page[1]" position="before">-->
 <!--                <xpath expr="//sheet/notebook/page[@name='lead']" position="replace"/>-->
 <!--            </xpath>-->
