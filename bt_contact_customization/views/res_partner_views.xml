@@ -45,6 +45,11 @@
 
             </xpath>
 
+            <!-- Website is mandatory for Companies, optional for Individuals -->
+            <xpath expr="//field[@name='website']" position="attributes">
+                <attribute name="required">is_company == True</attribute>
+            </xpath>
+
             <xpath expr="//field[@name='mobile']" position="after">
                 <field name="mobile_1" widget="phone"/>
             </xpath>
