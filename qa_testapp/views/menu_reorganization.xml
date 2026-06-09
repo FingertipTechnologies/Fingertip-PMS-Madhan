@@ -120,6 +120,14 @@
         <field name="sequence">90</field>
     </record>
 
+    <!-- PMS → Reporting → Project-wise Analysis (bug analysis) -->
+    <menuitem id="menu_pms_project_wise_analysis"
+              name="Project-wise Analysis"
+              parent="project.menu_project_report"
+              action="action_pms_bug_analysis"
+              groups="project.group_project_user"
+              sequence="50"/>
+
     <!-- Configuration: sequence 100 -->
     <record id="project.menu_project_config" model="ir.ui.menu">
         <field name="sequence">100</field>

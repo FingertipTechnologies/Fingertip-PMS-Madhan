@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 
 from odoo import models, fields, api
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -111,6 +112,33 @@ class QATicket(models.Model):
         ('manager', 'Manager'),
     ], string='Escalation', default='none',
        readonly=True, copy=False, tracking=True)
+
+    approval_state = fields.Selection([
+        ('pending_approval', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ], string='Approval State', default='approved', tracking=True, copy=False,
+       help="Junior QA submissions start as Pending Approval. PM of the project approves or rejects. "
+            "Working status (Open / In Progress / Fixed / ...) can only be changed once approved.")
+    approver_id = fields.Many2one(
+        'res.users', string='Approver (Project PM)',
+        compute='_compute_approver_id', store=True, readonly=True,
+    )
+    rejection_reason = fields.Text(string='Rejection Reason', copy=False, readonly=True)
+    is_current_user_approver = fields.Boolean(
+        string='Current User Is Approver',
+        compute='_compute_is_current_user_approver',
+    )
+
+    @api.depends('project_id', 'project_id.user_id')
+    def _compute_approver_id(self):
+        for rec in self:
+            rec.approver_id = rec.project_id.user_id
+
+    @api.depends('approver_id')
+    def _compute_is_current_user_approver(self):
+        for rec in self:
+            rec.is_current_user_approver = rec.approver_id == self.env.user
 
     @api.depends('project_id')
     def _compute_available_modules(self):
@@ -248,26 +276,96 @@ class QATicket(models.Model):
             ),
         )
 
+    @api.model
+    def _is_junior_qa(self, user=None):
+        user = user or self.env.user
+        return user.has_group('qa_testapp.group_qa_junior')
+
     @api.model_create_multi
     def create(self, vals_list):
+        junior = self._is_junior_qa()
         for vals in vals_list:
             if vals.get('bug_id', 'New') == 'New':
                 vals['bug_id'] = self.env['ir.sequence'].next_by_code('qa_testapp.ticket') or 'New'
+            if junior:
+                vals['approval_state'] = 'pending_approval'
+                vals['status'] = 'open'
         records = super().create(vals_list)
         records._link_evidence_attachments()
         for record in records:
-            if record.assignee_id:
+            # Junior-QA submissions sit in 'pending_approval' for the PM to review
+            # from the Bugs list - no approval email is sent. A directly-created
+            # (auto-approved) bug still notifies its assignee.
+            if record.approval_state != 'pending_approval' and record.assignee_id:
                 record._notify_assignee()
         return records
 
     def write(self, vals):
+        WORKING_STATUS_FIELDS = {'status', 'reopen_count', 'escalation_level'}
+        if vals.keys() & WORKING_STATUS_FIELDS:
+            for rec in self:
+                if rec.approval_state == 'pending_approval':
+                    raise UserError(
+                        "Bug %s is pending approval. The PM must approve it before status changes." % (rec.bug_id or '',)
+                    )
+                if rec.approval_state == 'rejected' and 'status' in vals:
+                    raise UserError(
+                        "Bug %s has been rejected. Status cannot change." % (rec.bug_id or '',)
+                    )
         res = super().write(vals)
         if 'evidence_attachment_ids' in vals:
             self._link_evidence_attachments()
         if 'assignee_id' in vals:
             for rec in self:
-                rec._notify_assignee()
+                if rec.approval_state == 'approved':
+                    rec._notify_assignee()
         return res
+
+    def action_approve(self):
+        for rec in self:
+            if rec.approval_state != 'pending_approval':
+                continue
+            if rec.approver_id and rec.approver_id != self.env.user and not self.env.user.has_group('base.group_system'):
+                raise UserError(
+                    "Only %s (PM of project '%s') can approve bug %s." % (
+                        rec.approver_id.name, rec.project_id.name, rec.bug_id,
+                    )
+                )
+            rec.approval_state = 'approved'
+            rec.message_post(body="Bug approved by %s." % self.env.user.name)
+            if rec.assignee_id:
+                rec._notify_assignee(approved=True)
+
+    def action_reject(self, reason=None):
+        for rec in self:
+            if rec.approval_state != 'pending_approval':
+                continue
+            if rec.approver_id and rec.approver_id != self.env.user and not self.env.user.has_group('base.group_system'):
+                raise UserError(
+                    "Only %s (PM of project '%s') can reject bug %s." % (
+                        rec.approver_id.name, rec.project_id.name, rec.bug_id,
+                    )
+                )
+            rec.approval_state = 'rejected'
+            if reason:
+                rec.rejection_reason = reason
+            rec.message_post(body="Bug rejected by %s. Reason: %s" % (self.env.user.name, reason or '(none)'))
+            rec._notify_rejection()
+
+    def action_reject_open_wizard(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Reject Bug',
+            'res_model': 'qa_testapp.bulk_approve_wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'active_model': 'qa_testapp.ticket',
+                'active_ids': self.ids,
+                'default_action_type': 'reject',
+            },
+        }
 
     def _link_evidence_attachments(self):
         for rec in self:

@@ -5,11 +5,17 @@
         <field name="name">qa_testapp.test_case.list</field>
         <field name="model">qa_testapp.test_case</field>
         <field name="arch" type="xml">
-            <list string="Test Cases">
+            <list string="Test Cases"
+                  decoration-warning="approval_state == 'pending_approval'"
+                  decoration-danger="approval_state == 'rejected'">
                 <field name="test_case_id"/>
                 <field name="test_case_title"/>
                 <field name="project_id"/>
                 <field name="module_id"/>
+                <field name="approval_state" widget="badge"
+                       decoration-warning="approval_state == 'pending_approval'"
+                       decoration-success="approval_state == 'approved'"
+                       decoration-danger="approval_state == 'rejected'"/>
                 <field name="status"/>
                 <field name="severity"/>
                 <field name="test_type"/>
@@ -24,17 +30,37 @@
         <field name="model">qa_testapp.test_case</field>
         <field name="arch" type="xml">
             <form>
+                <header>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="btn-success"
+                            invisible="approval_state != 'pending_approval' or not is_current_user_approver"/>
+                    <button name="action_reject_open_wizard" type="object" string="Reject"
+                            class="btn-danger"
+                            invisible="approval_state != 'pending_approval' or not is_current_user_approver"/>
+                    <field name="approval_state" widget="statusbar" statusbar_visible="pending_approval,approved"/>
+                    <field name="is_current_user_approver" invisible="1"/>
+                </header>
                 <sheet>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="approval_state != 'pending_approval'">
+                        Pending approval from <field name="approver_id" readonly="1" nolabel="1" class="oe_inline"/>.
+                        Execution is locked until approval.
+                    </div>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="approval_state != 'rejected'">
+                        Rejected: <field name="rejection_reason" readonly="1" nolabel="1" class="oe_inline"/>
+                    </div>
                     <group>
                         <group>
                             <field name="test_case_id" readonly="1"/>
-                            <field name="test_case_title"/>
+                            <field name="test_case_title" readonly="id and approval_state == 'approved'"/>
                             <field name="project_id"/>
+                            <field name="approver_id" readonly="1"/>
                             <field name="available_module_ids" invisible="1"/>
                             <field name="module_id"/>
                         </group>
                         <group>
-                            <field name="status"/>
+                            <field name="status" readonly="approval_state != 'approved'"/>
                             <field name="severity"/>
                             <field name="test_type"/>
                             <field name="environment"/>
@@ -80,11 +106,22 @@
                 <field name="test_case_title"/>
                 <field name="project_id"/>
                 <field name="module_id"/>
+                <separator/>
+                <filter string="Pending Approval" name="filter_pending_approval"
+                        domain="[('approval_state', '=', 'pending_approval')]"/>
+                <filter string="Awaiting My Approval" name="filter_awaiting_my_approval"
+                        domain="[('approval_state', '=', 'pending_approval'), ('approver_id', '=', uid)]"/>
+                <filter string="Approved" name="filter_approved"
+                        domain="[('approval_state', '=', 'approved')]"/>
+                <filter string="Rejected" name="filter_rejected"
+                        domain="[('approval_state', '=', 'rejected')]"/>
                 <group expand="0" string="Group By">
                     <filter string="Project" name="group_by_project"
                             context="{'group_by': 'project_id'}"/>
                     <filter string="Status" name="group_by_status"
                             context="{'group_by': 'status'}"/>
+                    <filter string="Approval State" name="group_by_approval_state"
+                            context="{'group_by': 'approval_state'}"/>
                 </group>
             </search>
         </field>
