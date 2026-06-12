@@ -13,6 +13,42 @@
                        string="Actual Hours"
                        widget="float_time"
                        readonly="1"/>
+                <field name="ft_dev_hours_exceeded" invisible="1"/>
+                <field name="ft_qa_hours_exceeded" invisible="1"/>
+                <field name="ft_pm_hours_exceeded" invisible="1"/>
+                <field name="ft_dev_hours"
+                       string="Dev Hours"
+                       widget="float_time"
+                       readonly="1"/>
+                <div invisible="not ft_dev_hours_exceeded or not ft_allow_billable">
+                    <small class="text-danger">
+                        <i class="fa fa-exclamation-triangle me-1"/>
+                        Dev hours time limit reached!
+                        This task has exceeded the allowed Dev hours. Please create a new task to continue the work.
+                    </small>
+                </div>
+                <field name="ft_qa_hours"
+                       string="QA Hours"
+                       widget="float_time"
+                       readonly="1"/>
+                <div invisible="not ft_qa_hours_exceeded or not ft_allow_billable">
+                    <small class="text-danger">
+                        <i class="fa fa-exclamation-triangle me-1"/>
+                        QA hours time limit reached!
+                        This task has exceeded the allowed QA hours. Please create a new task to continue the work.
+                    </small>
+                </div>
+                <field name="ft_pm_hours"
+                       string="PM Hours"
+                       widget="float_time"
+                       readonly="1"/>
+                <div invisible="not ft_pm_hours_exceeded or not ft_allow_billable">
+                    <small class="text-danger">
+                        <i class="fa fa-exclamation-triangle me-1"/>
+                        PM hours time limit reached!
+                        This task has exceeded the allowed PM hours. Please create a new task to continue the work.
+                    </small>
+                </div>
                 <div invisible="not ft_hours_exceeded or not ft_allow_billable">
                     <small class="text-danger">
                         <i class="fa fa-exclamation-triangle me-1"/>

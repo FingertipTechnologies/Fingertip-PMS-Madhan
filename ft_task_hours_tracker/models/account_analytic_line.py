@@ -23,17 +23,37 @@ class AccountAnalyticLine(models.Model):
                 'Please split your time into multiple entries.'
             ) % time_limit)
 
-    def _check_task_time_limit(self, task, new_total):
+    # Department buckets shown on the task form (Dev / QA / PM). The 16h limit
+    # applies to EACH bucket separately, mirroring the per-field warning.
+    _FT_BUCKET_LABELS = {'dev': 'Development', 'qa': 'QA', 'pm': 'Project Management'}
+
+    def _ft_line_bucket(self, employee):
+        """Return the dev/qa/pm bucket for a line's employee, or False."""
+        return self.env['project.task']._ft_department_bucket(employee.department_id)
+
+    def _ft_existing_bucket_hours(self, task, bucket, exclude_line=None):
+        """Sum the hours already logged on `task` for the given department
+        bucket, optionally excluding one line (the one being edited)."""
+        total = 0.0
+        ProjectTask = self.env['project.task']
+        for line in task.timesheet_ids:
+            if exclude_line and line.id and line.id == exclude_line.id:
+                continue
+            if ProjectTask._ft_department_bucket(line.department_id) == bucket:
+                total += line.unit_amount
+        return total
+
+    def _check_department_time_limit(self, task, bucket, new_bucket_total):
         time_limit = self._get_task_time_limit()
-        if task and time_limit > 0 and new_total > time_limit:
+        if task and bucket and time_limit > 0 and new_bucket_total > time_limit:
+            label = self._FT_BUCKET_LABELS.get(bucket, bucket)
             raise UserError(_(
-                'Task time limit reached!\n\n'
+                '%s time limit reached!\n\n'
                 'Task: %s\n'
-                'Time Limit: %.2f hours\n'
-                'Hours Already Logged: %.2f hours\n\n'
-                'You cannot log more hours as it would exceed the task time limit. '
+                'Time Limit: %.2f hours\n\n'
+                'You cannot log more %s hours as it would exceed the time limit. '
                 'Please create a new task to continue the work.'
-            ) % (task.name, time_limit, task.effective_hours))
+            ) % (label, task.name, time_limit, label))
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -53,7 +73,15 @@ class AccountAnalyticLine(models.Model):
             task_id = vals.get('task_id')
             if task_id:
                 task = self.env['project.task'].browse(task_id)
-                self._check_task_time_limit(task, task.effective_hours + unit_amount)
+                employee_id = vals.get('employee_id')
+                employee = (
+                    self.env['hr.employee'].browse(employee_id)
+                    if employee_id else self.env.user.employee_id
+                )
+                bucket = self._ft_line_bucket(employee)
+                if bucket:
+                    existing = self._ft_existing_bucket_hours(task, bucket)
+                    self._check_department_time_limit(task, bucket, existing + unit_amount)
         return super().create(vals_list)
 
     def write(self, vals):
@@ -74,11 +102,16 @@ class AccountAnalyticLine(models.Model):
                 if unit_amount <= 0:
                     raise UserError(_('Time Spent is required. Please enter the hours spent for the timesheet entry.'))
                 self._check_single_entry_hours(unit_amount)
-            # Recalculate task total when hours or task changes
-            if 'unit_amount' in vals or 'task_id' in vals:
+            # Re-check the department bucket limit when hours, task or employee change
+            if 'unit_amount' in vals or 'task_id' in vals or 'employee_id' in vals:
                 unit_amount = vals.get('unit_amount', line.unit_amount) or 0.0
                 task = self.env['project.task'].browse(vals['task_id']) if 'task_id' in vals else line.task_id
-                if task:
-                    old_amount = line.unit_amount if line.task_id == task else 0.0
-                    self._check_task_time_limit(task, task.effective_hours - old_amount + unit_amount)
+                employee = (
+                    self.env['hr.employee'].browse(vals['employee_id'])
+                    if 'employee_id' in vals else line.employee_id
+                )
+                bucket = self._ft_line_bucket(employee)
+                if task and bucket:
+                    existing = self._ft_existing_bucket_hours(task, bucket, exclude_line=line)
+                    self._check_department_time_limit(task, bucket, existing + unit_amount)
         return super().write(vals)
