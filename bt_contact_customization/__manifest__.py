@@ -4,7 +4,7 @@
     'category': 'Contacts',
     'summary': 'Contact Customization',
     'author': 'Broadtech',
-    'depends': ['base', 'contacts', 'utm', 'mail'],
+    'depends': ['base', 'contacts', 'utm', 'mail', 'crm'],
     'external_dependencies': {'python': ['openpyxl']},
     'data': [
         'security/ir.model.access.csv',

@@ -97,6 +97,6 @@
     <menuitem id="menu_contact_upload_wizard"
               name="Upload Contacts &amp; Accounts"
               action="action_contact_upload_wizard"
-              parent="contacts.menu_contacts"
-              sequence="20"/>
+              parent="crm.crm_menu_root"
+              sequence="24"/>
 </odoo>
