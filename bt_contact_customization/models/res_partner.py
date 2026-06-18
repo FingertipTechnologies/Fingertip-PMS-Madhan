@@ -57,7 +57,15 @@ class InheritResPartner(models.Model):
                     ('active', 'in', [True, False]),
                 ]
             partner.activity_count_custom =  Activity.search_count(domain)
-    annual_revenue = fields.Integer(string="Annual Revenue")
+    # Dedicated currency for Annual Revenue only (not a general partner
+    # currency), so this change is scoped purely to the revenue field.
+    annual_revenue_currency_id = fields.Many2one(
+        'res.currency', string="Annual Revenue Currency",
+        default=lambda self: self.env.company.currency_id)
+    # Monetary is stored as double precision, so it holds whole numbers exactly
+    # up to ~15-16 digits (≈ 9 quadrillion) - enough for 15-digit revenues.
+    annual_revenue = fields.Monetary(
+        string="Annual Revenue", currency_field='annual_revenue_currency_id')
     annual_revenue_range = fields.Char(string="Annual Revenue Range")
     company_linkedin = fields.Char(string="Company LinkedIn")
     contact_date = fields.Date(string="Contact Date")
