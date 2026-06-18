@@ -57,21 +57,21 @@ class InheritResPartner(models.Model):
                     ('active', 'in', [True, False]),
                 ]
             partner.activity_count_custom =  Activity.search_count(domain)
-    # Dedicated currency for Annual Revenue only (not a general partner
-    # currency), so this change is scoped purely to the revenue field.
+    # Legacy Annual Revenue (Integer, ~10 digits). Kept so existing data is not
+    # lost, but hidden in the UI; superseded by annual_revenue_amount below.
+    annual_revenue = fields.Integer(string="Annual Revenue (legacy)")
+    # New Annual Revenue: Monetary, stored as double precision so it holds whole
+    # numbers exactly up to ~9.0 quadrillion (16 digits).
     annual_revenue_currency_id = fields.Many2one(
-        'res.currency', string="Annual Revenue Currency",
+        'res.currency', string="Currency",
         default=lambda self: self.env.company.currency_id)
-    # Monetary is stored as double precision, so it holds whole numbers exactly
-    # up to ~15-16 digits (≈ 9 quadrillion) - enough for 15-digit revenues.
-    annual_revenue = fields.Monetary(
+    annual_revenue_amount = fields.Monetary(
         string="Annual Revenue", currency_field='annual_revenue_currency_id')
     annual_revenue_range = fields.Char(string="Annual Revenue Range")
     company_linkedin = fields.Char(string="Company LinkedIn")
     contact_date = fields.Date(string="Contact Date")
-    # No custom 'description' field: the upload's Description column is stored
-    # in Odoo's standard 'comment' (Internal Notes) field, which already
-    # exists, so deploying needs no module upgrade / DB migration.
+    # Dedicated rich-text Description, shown as its own notebook tab.
+    description = fields.Html(string="Description")
     duplicate_check = fields.Boolean(string="Duplicate")
     company_eid = fields.Char(string="EID")
     employees = fields.Many2one('res.users',string="Employee")

@@ -365,21 +365,20 @@ class ContactUploadWizard(models.TransientModel):
         status = self._untouched_status()
         if status:
             vals['account_status_id'] = status.id
-        # Description is stored on the company in the standard 'comment'
-        # (Internal Notes) field, displayed as "Description" below Connected
-        # Contacts. Reusing an existing column means no module upgrade is
-        # needed to deploy this.
+        # Description goes to the dedicated rich-text field shown on the
+        # company's Description tab.
         description = cell(row, 'description')
         if description:
-            vals['comment'] = description
+            vals['description'] = description
         if website:
             vals['website'] = website
         industry = cell(row, 'industry')
         if industry:
             vals['industry_id'] = self._find_or_create_industry(industry).id
+        # Annual Revenue is imported into the Monetary field (annual_revenue_amount).
         annual_revenue = cell(row, 'annual_revenue')
         if annual_revenue:
-            vals['annual_revenue'] = self._to_int(annual_revenue)
+            vals['annual_revenue_amount'] = self._to_int(annual_revenue)
         company_linkedin = cell(row, 'company_linkedin')
         if company_linkedin:
             vals['company_linkedin'] = company_linkedin

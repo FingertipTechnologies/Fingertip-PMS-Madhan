@@ -10,8 +10,9 @@
 <!--                <field name="name" string="Account Name" invisible="is_company == False"/>-->
                 <field name="account_status_id" invisible="is_company == False"/>
                 <field name="activity_count_custom" invisible="is_company == False"/>
+                <field name="annual_revenue" invisible="1"/>
                 <field name="annual_revenue_currency_id" invisible="1"/>
-                <field name="annual_revenue" invisible="is_company == False"/>
+                <field name="annual_revenue_amount" invisible="is_company == False"/>
                 <field name="annual_revenue_range" invisible="is_company == False"/>
                 <field name="company_linkedin" invisible="is_company == False"/>
 <!--                <field name="phone" invisible="is_company == False"/>-->
@@ -25,11 +26,16 @@
                     <field name="connected_contacts"
                         widget="many2many_tags"
                         invisible="is_company == False"/>
+            </xpath>
 
-                <!-- Description reuses the standard 'comment' (Internal Notes)
-                     field so no new column / module upgrade is needed. -->
-                <field name="comment" string="Description"
-                       invisible="is_company == False"/>
+            <!-- Dedicated rich-text Description tab, beside Internal Notes,
+                 shown only for companies. -->
+            <xpath expr="//page[@name='internal_notes']" position="after">
+                <page string="Description" name="company_description"
+                      invisible="is_company == False">
+                    <field name="description" nolabel="1"
+                           placeholder="Company description..."/>
+                </page>
             </xpath>
 
             <xpath expr="//field[@name='vat']" position="after">
