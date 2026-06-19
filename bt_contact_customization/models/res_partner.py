@@ -137,18 +137,46 @@ class InheritResPartner(models.Model):
     # ------------------------------------------------------------------
     @api.model
     def _normalize_website(self, website):
-        """Normalise a website value for matching: strip scheme, 'www.',
-        trailing slash and surrounding spaces, then lowercase."""
+        """Normalise a website to its bare domain, used for matching and as the
+        basis for the standard stored value. Strips scheme, 'www.', any
+        path/query/fragment, credentials/port and trailing slash/dots, then
+        lowercases. e.g. 'https://www.Google.com/search?q=x' -> 'google.com'.
+
+        Pure string handling (no urlparse) so malformed values - brackets,
+        stray colons, etc. - never raise (urlparse can throw 'Invalid IPv6 URL')
+        and never break an import."""
         if not website:
             return ''
-        value = website.strip().lower()
-        for prefix in ('https://', 'http://'):
-            if value.startswith(prefix):
-                value = value[len(prefix):]
-                break
+        value = str(website).strip().lower()
+        if not value:
+            return ''
+        # Strip a leading scheme, tolerating malformed ones written without the
+        # colon or with the wrong number of slashes: http://, https://, http//,
+        # https//, http:/, https:, etc. Requires http/https followed by at least
+        # one ':' or '/' so real domains like 'httpbin.org' are left intact.
+        value = re.sub(r'^https?[:/]+', '', value)
+        # Drop any remaining leading slashes (e.g. '//example.com').
+        value = value.lstrip('/')
+        # Cut off anything from the first path / query / fragment separator.
+        for sep in ('/', '?', '#'):
+            cut = value.find(sep)
+            if cut != -1:
+                value = value[:cut]
+        # Drop 'user:pass@' credentials and any ':port' suffix.
+        value = value.split('@')[-1].split(':')[0]
+        # Strip a leading 'www.'.
         if value.startswith('www.'):
             value = value[4:]
-        return value.rstrip('/')
+        return value.strip().strip('.')
+
+    @api.model
+    def _standardize_website(self, website):
+        """Return the website in the standard stored format
+        'https://www.<domain>', or '' when there is no usable domain.
+        This is the single value actually saved on the record so that every
+        company's website is consistent regardless of how it was entered."""
+        domain = self._normalize_website(website)
+        return 'https://www.%s' % domain if domain else ''
 
     @api.model
     def _find_company_by_website(self, website):
@@ -234,6 +262,11 @@ class InheritResPartner(models.Model):
         to_create = []  # list of (original_index, vals)
 
         for index, vals in enumerate(vals_list):
+            # Standardise the website to 'https://www.<domain>' before any
+            # matching or saving, so imports / manual creates all store a
+            # consistent value and de-duplication is reliable.
+            if vals.get('website'):
+                vals['website'] = self._standardize_website(vals['website'])
             is_company = self._vals_is_company(vals)
 
             # Identify a company by its website (NOT its name): if a company
@@ -280,6 +313,10 @@ class InheritResPartner(models.Model):
         return result
 
     def write(self, vals):
+        # Keep the stored website in the standard 'https://www.<domain>' form
+        # whenever it is edited.
+        if vals.get('website'):
+            vals['website'] = self._standardize_website(vals['website'])
         res = super().write(vals)
         if 'user_id' in vals:
             companies = self.filtered('is_company')

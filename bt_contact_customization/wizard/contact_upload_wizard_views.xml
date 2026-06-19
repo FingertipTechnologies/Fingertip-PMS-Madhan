@@ -98,5 +98,5 @@
               name="Upload"
               action="action_contact_upload_wizard"
               parent="crm.crm_menu_root"
-              sequence="21"/>
+              sequence="24"/>
 </odoo>

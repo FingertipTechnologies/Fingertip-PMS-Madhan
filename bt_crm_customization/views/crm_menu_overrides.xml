@@ -12,35 +12,35 @@
         "Sales" grouping menu is then hidden.
     -->
 
-    <!-- Start: My Pipeline, then Customers (where "Sales" used to sit).
-         Both at sequence 1 so they stay adjacent and ahead of the custom
-         "Activity Management" menu (also sequence 1). -->
+    <!-- Start: Customers (0), then My Pipeline (1) - where "Sales" used to sit.
+         Customers at seq 0 so it leads; My Pipeline at seq 1 stays ahead of the
+         custom "Activity Management" menu (also seq 1, sorts after by id). -->
+    <record id="crm.res_partner_menu_customer" model="ir.ui.menu">
+        <field name="name">Customers</field>
+        <field name="parent_id" ref="crm.crm_menu_root"/>
+        <field name="sequence">0</field>
+    </record>
     <record id="crm.menu_crm_opportunities" model="ir.ui.menu">
         <field name="name">My Pipeline</field>
         <field name="parent_id" ref="crm.crm_menu_root"/>
         <field name="sequence">1</field>
     </record>
-    <record id="crm.res_partner_menu_customer" model="ir.ui.menu">
-        <field name="name">Customers</field>
-        <field name="parent_id" ref="crm.crm_menu_root"/>
-        <field name="sequence">1</field>
-    </record>
 
-    <!-- End: Upload (21), My Quotations (22), Teams (23), Reporting (24),
-         then Configuration (25). Upload keeps seq 21 from bt_contact_customization. -->
+    <!-- End: My Quotations (21), Teams (22), Reporting (23), Upload (24),
+         then Configuration (25). Upload is set to 24 in bt_contact_customization. -->
     <record id="sale_crm.sale_order_menu_quotations_crm" model="ir.ui.menu">
         <field name="name">My Quotations</field>
         <field name="parent_id" ref="crm.crm_menu_root"/>
-        <field name="sequence">22</field>
+        <field name="sequence">21</field>
     </record>
     <record id="crm.sales_team_menu_team_pipeline" model="ir.ui.menu">
         <field name="name">Teams</field>
         <field name="parent_id" ref="crm.crm_menu_root"/>
-        <field name="sequence">23</field>
+        <field name="sequence">22</field>
     </record>
-    <!-- Move Reporting to the end, just before Configuration -->
+    <!-- Reporting just before Upload/Configuration -->
     <record id="crm.crm_menu_report" model="ir.ui.menu">
-        <field name="sequence">24</field>
+        <field name="sequence">23</field>
     </record>
 
     <!-- Hide the now-empty "Sales" grouping menu -->

@@ -158,6 +158,12 @@
                 <field name="company_linkedin" optional="show"/>
             </xpath>
 
+            <!-- Created On / Last Modified On as the last data columns -->
+            <xpath expr="//field[@name='company_linkedin']" position="after">
+                <field name="create_date" string="Created On" optional="show"/>
+                <field name="write_date" string="Last Modified On" optional="show"/>
+            </xpath>
+
             <!-- Keep the remaining base columns out of the default set -->
             <xpath expr="//field[@name='city']" position="attributes">
                 <attribute name="optional">hide</attribute>
