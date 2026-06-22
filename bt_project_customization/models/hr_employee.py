@@ -6,6 +6,9 @@ from odoo import models, fields, api
 class HREmployee(models.Model):
     _inherit = 'hr.employee'
 
+    # Make the Department field mandatory on employees.
+    department_id = fields.Many2one(required=True)
+
     @api.onchange('job_id')
     def _onchange_job_id(self):
         """
