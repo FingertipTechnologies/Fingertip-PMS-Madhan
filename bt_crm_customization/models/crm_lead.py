@@ -1,4 +1,5 @@
-from odoo import models, fields
+from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 
 
 class InheritCrmLead(models.Model):
@@ -53,3 +54,28 @@ class InheritCrmLead(models.Model):
     description_text = fields.Text(string="Description")
 
     linkedin_url = fields.Char(string="LinkedIn URL")
+
+    # True when the opportunity sits in the "Cold" stage. Used by the form view
+    # to relax the mandatory fields for cold opportunities only.
+    is_cold_stage = fields.Boolean(
+        string="Is Cold Stage", compute='_compute_is_cold_stage',
+    )
+
+    @api.depends('stage_id', 'stage_id.name')
+    def _compute_is_cold_stage(self):
+        for lead in self:
+            lead.is_cold_stage = (lead.stage_id.name or '').strip().lower() == 'cold'
+
+    @api.constrains('expected_revenue', 'stage_id', 'type')
+    def _check_expected_revenue_required(self):
+        """Expected Revenue is a monetary field, so a value of 0 is treated as
+        'filled' by the form's `required` modifier. Enforce a real, non-zero
+        amount for opportunities once they leave the Cold stage."""
+        for lead in self:
+            if (lead.type == 'opportunity'
+                    and not lead.is_cold_stage
+                    and not lead.expected_revenue):
+                raise ValidationError(
+                    "Expected Revenue is required (and must be greater than 0) "
+                    "for opportunities from the Discussion stage onward."
+                )
