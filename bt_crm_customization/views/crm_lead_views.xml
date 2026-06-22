@@ -5,62 +5,71 @@
         <field name="priority">1</field>
         <field name="inherit_id" ref="crm.crm_lead_view_form"/>
         <field name="arch" type="xml">
+
+            <!-- Stage helper flags + remaining RIGHT column fields (after Tags) -->
             <xpath expr="//field[@name='tag_ids']" position="after">
-
-                <!-- Helper flag: true only in the Cold stage -->
                 <field name="is_cold_stage" invisible="1"/>
+                <field name="require_qualified_fields" invisible="1"/>
+                <field name="is_won_stage" invisible="1"/>
 
-<!--                <field name="account_id"  invisible="type != 'opportunity'"/>-->
-<!--                <field name="expected_revenue"  invisible="type != 'opportunity'" />-->
-                <field name="profit" invisible="type != 'opportunity'"/>
-                <field name="rating" invisible="type != 'opportunity'"/>
-                <field name="revenue" invisible="type != 'opportunity'"/>
                 <field name="source_amount" invisible="type != 'opportunity'"/>
-                <field name="date_closed" invisible="type != 'opportunity'" />
-                <field name="create_uid" invisible="type != 'opportunity'" />
-                <field name="description_text"
-                       invisible="type != 'opportunity'"
-                       required="type == 'opportunity' and not is_cold_stage"/>
-
+                <field name="date_closed" invisible="type != 'opportunity'"/>
+                <field name="create_uid" invisible="type != 'opportunity'"/>
+                <field name="description_text" invisible="type != 'opportunity'"/>
             </xpath>
 
-            <!-- Expected Revenue: mandatory for opportunities except in Cold -->
-            <xpath expr="//field[@name='expected_revenue']" position="attributes">
-                <attribute name="required">type == 'opportunity' and not is_cold_stage</attribute>
+            <!-- RIGHT column: bring mandatory fields to the top.
+                 Expected Closing stays at the top, Closed Amount goes right
+                 below it, and Salesperson is moved underneath them. -->
+            <xpath expr="//group[@invisible=&quot;type == 'lead'&quot; and not(@name)]/div[field[@name='date_deadline']]" position="after">
+                <field name="revenue"
+                       invisible="type != 'opportunity' or not is_won_stage"
+                       required="type == 'opportunity' and is_won_stage"/>
+                <xpath expr="//group[@invisible=&quot;type == 'lead'&quot; and not(@name)]/field[@name='user_id']" position="move"/>
             </xpath>
 
-            <!-- Expected Closing (date_deadline): mandatory except in Cold -->
-            <xpath expr="//field[@name='date_deadline']" position="attributes">
-                <attribute name="required">type == 'opportunity' and not is_cold_stage</attribute>
-            </xpath>
-
-            <xpath expr="//field[@name='lost_reason_id']" position="after">
-
-<!--                <field name="account_id"  invisible="type != 'opportunity'"/>-->
-<!--                <field name="expected_revenue"  invisible="type != 'opportunity'" />-->
-
-                <field name="features_id" invisible="type != 'opportunity'" />
-<!--                <field name="lead_source" invisible="type != 'opportunity'"/>-->
-                <field name="owner_id" invisible="type != 'opportunity'" />
-
-                <field name="technology_id" invisible="type != 'opportunity'" />
-                <field name="business_challenge"
-                       invisible="type != 'opportunity'"
-                       required="type == 'opportunity' and not is_cold_stage"/>
-
-                <field name="decision_maker"
-                       invisible="type != 'opportunity'"/>
-
-                <field name="number_of_users"
-                       invisible="type != 'opportunity'"/>
-<!--                <field name="cus_type" invisible="type != 'opportunity'" />-->
-                <field name="use_case" invisible="type != 'opportunity'"/>
-                <field name="cus_type" invisible="type != 'opportunity'"/>
-
+            <!-- LEFT column: mandatory fields at the very top, above Contact -->
+            <xpath expr="//group[@name='opportunity_partner']/field[@name='partner_id']" position="before">
                 <field name="next_action"
                        invisible="type != 'opportunity'"
-                       required="type == 'opportunity' and not is_cold_stage"/>
+                       required="type == 'opportunity' and not is_cold_stage"
+                       placeholder="Describe the next action (minimum 20 characters)"/>
+                <field name="technology_id"
+                       invisible="type != 'opportunity'"
+                       required="type == 'opportunity' and require_qualified_fields"/>
+                <field name="business_challenge"
+                       invisible="type != 'opportunity'"
+                       required="type == 'opportunity' and require_qualified_fields"/>
+            </xpath>
 
+            <!-- LEFT column: optional fields lower down -->
+            <xpath expr="//field[@name='lost_reason_id']" position="after">
+                <field name="number_of_users" invisible="type != 'opportunity'"/>
+                <field name="cus_type" invisible="type != 'opportunity'"/>
+            </xpath>
+
+            <!-- Expected Revenue: mandatory from Qualified onward -->
+            <xpath expr="//field[@name='expected_revenue']" position="attributes">
+                <attribute name="required">type == 'opportunity' and require_qualified_fields</attribute>
+            </xpath>
+
+            <!-- Expected Closing: mandatory from Qualified onward -->
+            <xpath expr="//field[@name='date_deadline']" position="attributes">
+                <attribute name="required">type == 'opportunity' and require_qualified_fields</attribute>
+            </xpath>
+
+            <!-- Remove Email & Phone from the opportunity layout -->
+            <xpath expr="//group[@name='opportunity_partner']/label[@for='email_from']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//group[@name='opportunity_partner']/div[field[@name='email_from']]" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//group[@name='opportunity_partner']/label[@for='phone']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//group[@name='opportunity_partner']/div[field[@name='phone']]" position="attributes">
+                <attribute name="invisible">1</attribute>
             </xpath>
 
             <!-- Website mandatory on Leads (visible in the lead_partner group) -->
@@ -73,34 +82,6 @@
                 <field name="linkedin_url" widget="url" placeholder="e.g. https://www.linkedin.com/company/..."/>
             </xpath>
 
-<!--            <xpath expr="//sheet/notebook/page[1]" position="before">-->
-<!--                <xpath expr="//sheet/notebook/page[@name='lead']" position="replace"/>-->
-<!--            </xpath>-->
-
-
         </field>
     </record>
-
-<!--    <record id="view_crm_lead_form_reorder_notebook" model="ir.ui.view">-->
-<!--        <field name="name">crm.lead.form.reorder.notebook</field>-->
-<!--        <field name="model">crm.lead</field>-->
-<!--        <field name="inherit_id" ref="crm.crm_lead_view_form"/>-->
-<!--        <field name="arch" type="xml">-->
-<!--            &lt;!&ndash; Move Extra Information page before Internal Notes page &ndash;&gt;-->
-<!--            <xpath expr="//page[@name='internal_notes']" position="before">-->
-<!--                <page string="Extra Information" name="extra_information">-->
-<!--                    <group>-->
-<!--                        <field name="x_studio_company_name"/>-->
-<!--                        <field name="x_studio_address"/>-->
-<!--                        <field name="x_studio_contact_name"/>-->
-<!--                        <field name="x_studio_job_position"/>-->
-<!--                        <field name="x_studio_mobile"/>-->
-<!--                    </group>-->
-<!--                </page>-->
-<!--            </xpath>-->
-
-<!--            &lt;!&ndash; Remove the original Extra Information page &ndash;&gt;-->
-<!--            <xpath expr="//page[@name='extra_information']" position="replace"/>-->
-<!--        </field>-->
-<!--    </record>-->
 </odoo>

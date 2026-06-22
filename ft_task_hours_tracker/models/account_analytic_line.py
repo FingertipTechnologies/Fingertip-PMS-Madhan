@@ -23,26 +23,32 @@ class AccountAnalyticLine(models.Model):
                 'Please split your time into multiple entries.'
             ) % time_limit)
 
-    # Department buckets shown on the task form (Dev / QA / PM). The 16h limit
-    # applies to EACH bucket separately, mirroring the per-field warning.
-    _FT_BUCKET_LABELS = {'dev': 'Development', 'qa': 'QA', 'pm': 'Project Management'}
+    # Job-position buckets shown on the task form (Dev / QA / PM / BA / Trainee).
+    # The time limit applies to EACH bucket separately, mirroring the per-field
+    # warning.
+    _FT_BUCKET_LABELS = {
+        'dev': 'Development',
+        'qa': 'QA',
+        'pm': 'Project Management',
+        'ba': 'Business Analysis',
+        'trainee': 'Trainee',
+    }
 
     def _ft_line_bucket(self, employee):
-        """Return the dev/qa/pm bucket for a line's employee, or False."""
-        return self.env['project.task']._ft_department_bucket(employee.department_id)
+        """Return the dev/qa/pm/ba/trainee bucket for a line's employee, or False."""
+        return self.env['project.task']._ft_job_bucket(employee.job_id)
 
     def _ft_existing_bucket_hours(self, task, bucket, exclude_line=None):
-        """Sum the hours already logged on `task` for the given department
+        """Sum the hours already logged on `task` for the given job-position
         bucket, optionally excluding one line (the one being edited)."""
         total = 0.0
         ProjectTask = self.env['project.task']
         for line in task.timesheet_ids:
             if exclude_line and line.id and line.id == exclude_line.id:
                 continue
-            # Classify by the employee's current department, consistent with
-            # the task/project hour computes (the line's stored department_id
-            # is stale for historical lines).
-            if ProjectTask._ft_department_bucket(line.employee_id.department_id) == bucket:
+            # Classify by the employee's current job position, consistent with
+            # the task/project hour computes.
+            if ProjectTask._ft_job_bucket(line.employee_id.job_id) == bucket:
                 total += line.unit_amount
         return total
 

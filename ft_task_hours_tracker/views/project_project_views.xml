@@ -51,6 +51,8 @@
                 <field name="ft_dev_hours" string="Dev Hours" widget="float_time" readonly="1"/>
                 <field name="ft_qa_hours" string="QA Hours" widget="float_time" readonly="1"/>
                 <field name="ft_pm_hours" string="PM Hours" widget="float_time" readonly="1"/>
+                <field name="ft_ba_hours" string="BA Hours" widget="float_time" readonly="1"/>
+                <field name="ft_trainee_hours" string="Trainee Hours" widget="float_time" readonly="1"/>
             </xpath>
             
             <xpath expr="//group[group/field[@name='date_start']]" position="after">
