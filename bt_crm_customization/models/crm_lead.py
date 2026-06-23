@@ -170,4 +170,7 @@ class InheritCrmLead(models.Model):
             super(InheritCrmLead, lead).write(
                 {'last_stage_next_action': lead.next_action or ''}
             )
+        # Closed Amount must be filled (non-zero) whenever an opportunity is
+        # saved on the Won stage, even if Closed Amount itself wasn't edited.
+        self._check_closed_amount()
         return res

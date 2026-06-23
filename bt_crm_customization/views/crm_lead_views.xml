@@ -22,7 +22,13 @@
                  Expected Closing stays at the top, Closed Amount goes right
                  below it, and Salesperson is moved underneath them. -->
             <xpath expr="//group[@invisible=&quot;type == 'lead'&quot; and not(@name)]/div[field[@name='date_deadline']]" position="after">
+                <!-- All stages except Won: shown as "Revenue", optional -->
                 <field name="revenue"
+                       string="Revenue"
+                       invisible="type != 'opportunity' or is_won_stage"/>
+                <!-- Won stage: renamed to "Closed Amount" and mandatory -->
+                <field name="revenue"
+                       string="Closed Amount"
                        invisible="type != 'opportunity' or not is_won_stage"
                        required="type == 'opportunity' and is_won_stage"/>
                 <xpath expr="//group[@invisible=&quot;type == 'lead'&quot; and not(@name)]/field[@name='user_id']" position="move"/>
