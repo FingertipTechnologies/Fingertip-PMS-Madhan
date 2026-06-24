@@ -10,4 +10,3 @@ access_qa_test_case_junior,QA Test Case Junior QA,model_qa_testapp_test_case,qa_
 access_qa_ticket_senior,QA Ticket Senior QA,model_qa_testapp_ticket,qa_testapp.group_qa_senior,1,1,1,0
 access_qa_test_case_senior,QA Test Case Senior QA,model_qa_testapp_test_case,qa_testapp.group_qa_senior,1,1,1,0
 access_qa_bulk_approve_wizard,QA Bulk Approve Wizard,model_qa_testapp_bulk_approve_wizard,base.group_user,1,1,1,1
-access_qa_sprint_user,QA Sprint,model_qa_testapp_sprint,base.group_user,1,1,1,1

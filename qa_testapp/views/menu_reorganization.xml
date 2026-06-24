@@ -49,13 +49,6 @@
     <!-- ============================= -->
     <!-- Add QA TestApp menus           -->
     <!-- ============================= -->
-    <!-- Sprints: sequence 30 (right after Tasks) -->
-    <menuitem id="menu_pms_sprints"
-              name="Sprints"
-              parent="project.menu_main_pm"
-              action="qa_testapp.qa_testapp_action_sprint"
-              sequence="30"/>
-
     <!-- Bug: sequence 40 -->
     <menuitem id="menu_updates_bug"
               name="Bugs"

@@ -20,8 +20,6 @@ A comprehensive Quality Assurance suite for Odoo 18 with:
             'security/ir.model.access.csv',
             'data/ticket_sequence.xml',
             'data/approval_mail_templates.xml',
-            'data/task_stages.xml',
-            'views/sprint_views.xml',
             'views/test_plan_views.xml',
             'views/test_scenario_views.xml',
             'views/test_case_views.xml',
