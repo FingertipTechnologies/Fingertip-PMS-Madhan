@@ -23,7 +23,7 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <field name="state" widget="statusbar"
+                    <field name="state" widget="statusbar" options="{'clickable': '1'}"
                            statusbar_visible="planned,working,testing,completed"/>
                 </header>
                 <sheet>
