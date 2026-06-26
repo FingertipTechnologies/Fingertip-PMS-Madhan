@@ -6,7 +6,7 @@
         <field name="arch" type="xml">
             <field name="partner_id" position="after">
                 <group>
-                    <field name="wc_id"/>
+                    <field name="task_type"/>
                     <field name="estimated"/>
                     <field name="actual"/>
                     <field name="module_id" required="True"/>

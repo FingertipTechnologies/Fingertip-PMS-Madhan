@@ -12,6 +12,11 @@ class ProjectTask(models.Model):
     actual = fields.Float(string='Actual')
     module_id = fields.Many2one('cus.module',string="Module",required=True)
     wc_id = fields.Char(string='Wc Id')
+    task_type = fields.Selection([
+        ('user_story', 'User Story'),
+        ('internal_call', 'Internal Call'),
+        ('external_call', 'External Call'),
+    ], string='Task Type', default='user_story', required=True)
 
     @api.constrains('name')
     def _check_task_title_length(self):

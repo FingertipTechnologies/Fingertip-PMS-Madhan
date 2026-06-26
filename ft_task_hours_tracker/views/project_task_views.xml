@@ -8,7 +8,9 @@
         <field name="inherit_id" ref="project.view_task_form2"/>
         <field name="arch" type="xml">
 
-            <xpath expr="//field[@name='estimated']" position="after">
+            <!-- Hours shown as a full-width section above the notebook tabs -->
+            <xpath expr="//notebook" position="before">
+                <group string="Hours" name="ft_hours_section">
                 <field name="ft_total_hours_taken"
                        string="Actual Hours"
                        widget="float_time"
@@ -80,6 +82,7 @@
                         This task has exceeded the allowed hours. Please create a new task to continue the work.
                     </small>
                 </div>
+                </group>
             </xpath>
 
         </field>
