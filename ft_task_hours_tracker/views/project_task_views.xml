@@ -85,6 +85,18 @@
                 </group>
             </xpath>
 
+            <!-- Re-arrange columns. Anchor on user_ids (Assignees): the base
+                 form has a hidden project_id near the top, so anchoring on
+                 project_id would drop the field outside the group.
+                 Module goes above Assignees on the left; Sprint moves to the
+                 right column after Estimated (where Module used to be). -->
+            <xpath expr="//field[@name='user_ids']" position="before">
+                <field name="module_id" position="move"/>
+            </xpath>
+            <xpath expr="//field[@name='estimated']" position="after">
+                <field name="sprint_id" position="move"/>
+            </xpath>
+
         </field>
     </record>
 

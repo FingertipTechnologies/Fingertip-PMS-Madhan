@@ -10,6 +10,7 @@
         'hr_timesheet',
         'bt_project_customization',
         'qa_testapp',
+        'ft_sprint_management',
     ],
     'data': [
         'views/project_task_views.xml',
