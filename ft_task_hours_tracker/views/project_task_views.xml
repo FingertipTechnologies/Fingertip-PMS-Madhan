@@ -115,5 +115,56 @@
         </field>
     </record>
 
+    <!-- Hide sale_project billing fields (Customer + Sales Order Item / "Non-billable").
+         sale_project injects these at priority 100, so this view must run AFTER it
+         (priority 110) for the elements to exist when we set them invisible. -->
+    <record id="view_task_form_ft_hide_billing_fields" model="ir.ui.view">
+        <field name="name">project.task.form.ft.hide.billing.fields</field>
+        <field name="model">project.task</field>
+        <field name="inherit_id" ref="project.view_task_form2"/>
+        <field name="priority">110</field>
+        <field name="arch" type="xml">
+            <!-- Customer (renders the partner name, e.g. "TTS Company") -->
+            <xpath expr="//field[@name='partner_id']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <!-- Sales Order Item field + its "Non-billable" placeholder row -->
+            <xpath expr="//div[@name='sale_line_div']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//div[@name='sale_line_div']/preceding-sibling::label[@for='sale_line_id']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Hide extra task-form fields not used in this workflow: Milestone, Tags
+         and Allocated Time. allocated_hours is rendered by hr_timesheet as a
+         label + div block (with the % progress), so both are hidden. Priority
+         110 keeps this after the core/hr_timesheet views that add them. -->
+    <record id="view_task_form_ft_hide_extra_fields" model="ir.ui.view">
+        <field name="name">project.task.form.ft.hide.extra.fields</field>
+        <field name="model">project.task</field>
+        <field name="inherit_id" ref="project.view_task_form2"/>
+        <field name="priority">110</field>
+        <field name="arch" type="xml">
+            <!-- Milestone -->
+            <xpath expr="//field[@name='milestone_id']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <!-- Tags -->
+            <xpath expr="//field[@name='tag_ids']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <!-- Allocated Time (hr_timesheet label + value/percentage row) -->
+            <xpath expr="//label[@for='allocated_hours']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//div[field[@name='allocated_hours']]" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+        </field>
+    </record>
+
 
 </odoo>

@@ -5,6 +5,8 @@ import logging
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
+from ..models.res_partner import WEBSITE_RE
+
 _logger = logging.getLogger(__name__)
 
 try:
@@ -199,6 +201,21 @@ class ContactUploadWizard(models.TransientModel):
                 'company_id': False,
                 'partner_id': False,
             }
+
+            # --- Reject rows whose website is not already in the accepted
+            # 'https://www.<domain>' format. The value is NOT auto-corrected
+            # here: if the pattern is missing the row is failed and skipped.
+            if website and not WEBSITE_RE.match(website.strip()):
+                line['row_status'] = 'failed'
+                line['account_status'] = 'Error'
+                line['message'] = _(
+                    "Website '%s' is not accepted. It must be in the format "
+                    "https://www.example.com (start with 'https://www.', "
+                    "domain only, nothing after).", website)
+                _logger.info("Contact upload row %s rejected: bad website %r",
+                             excel_row_no, website)
+                results.append((row, line))
+                continue
 
             # --- Account: match by website, create once, never update -----
             company = Partner.browse()
@@ -399,10 +416,16 @@ class ContactUploadWizard(models.TransientModel):
         # or auto-create a parent company; the account is already decided here,
         # so we pass parent_id directly and leave website off to avoid creating
         # a duplicate company.
+        # The contact is owned by whoever runs the import: set the Salesperson
+        # (user_id) to the logged-in user. self.env.uid stays the real user even
+        # though partner ops run under sudo(). Setting it explicitly also bypasses
+        # the res.partner create() override that would otherwise inherit the
+        # parent account's salesperson (which may be empty or someone else's).
         vals = {
             'is_company': False,
             'name': contact_name or email or _('Unknown Contact'),
             'parent_id': company.id if company else False,
+            'user_id': self.env.uid,
         }
         if email:
             vals['email'] = email

@@ -3,10 +3,11 @@ import re
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
-# A website must be a bare domain (optionally with scheme / www.) and end at the
-# TLD with NOTHING after it: no path, no trailing slash, no query string.
-# e.g. https://www.acme.com  -> OK     https://www.acme.com/about -> rejected
-WEBSITE_RE = re.compile(r'^(https?://)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,}$', re.IGNORECASE)
+# A website must start with "https://www." and end at the TLD with NOTHING
+# after it: no path, no trailing slash, no query string.
+# e.g. https://www.acme.com -> OK     https://www.acme.com/about -> rejected
+#      www.acme.com / http://acme.com -> rejected (must be https://www.)
+WEBSITE_RE = re.compile(r'^https://www\.([a-z0-9-]+\.)+[a-z]{2,}$', re.IGNORECASE)
 
 
 class InheritResPartner(models.Model):
@@ -207,14 +208,15 @@ class InheritResPartner(models.Model):
 
     @api.constrains('website')
     def _check_website_format(self):
-        """Website must end at the domain (e.g. www.example.com) with nothing
-        after it - no path, trailing slash, or query string."""
+        """Website must start with 'https://www.' and end at the domain
+        (e.g. https://www.example.com) with nothing after it - no path,
+        trailing slash, or query string."""
         for partner in self:
             if partner.website and not WEBSITE_RE.match(partner.website.strip()):
                 raise ValidationError(_(
-                    "Invalid website '%s'. Enter a domain only, like "
-                    "www.example.com, with nothing after it "
-                    "(no '/', path, or extra characters).",
+                    "Invalid website '%s'. It must start with 'https://www.' "
+                    "and be a domain only, like https://www.example.com, "
+                    "with nothing after it (no '/', path, or extra characters).",
                     partner.website,
                 ))
 
@@ -287,17 +289,27 @@ class InheritResPartner(models.Model):
             if not is_company and vals.get('website'):
                 company = self._find_company_by_website(vals['website'])
                 if not company:
+                    # A company auto-created while placing a contact is owned by
+                    # whoever triggers the create (e.g. the importing user), so
+                    # it gets a Salesperson just like accounts made via the
+                    # upload wizard's _company_vals.
                     company = self.create({
                         'name': vals.get('company_name') or self._company_name_from_website(vals['website']),
                         'is_company': True,
                         'website': vals['website'],
+                        'user_id': self.env.uid,
                     })
                 vals['parent_id'] = company.id
 
-            if not vals.get('user_id') and vals.get('parent_id'):
-                parent = self.browse(vals['parent_id'])
-                if parent.user_id:
-                    vals['user_id'] = parent.user_id.id
+            # Default the Salesperson for every new record that doesn't already
+            # have one: a child contact first inherits its parent company's
+            # salesperson (when the company has one); otherwise — and for any
+            # record with no parent — it falls back to the logged-in user. This
+            # ensures a contact/account created OR imported is always owned by
+            # its creator. self.env.uid stays the real user even under sudo().
+            if not vals.get('user_id'):
+                parent = self.browse(vals['parent_id']) if vals.get('parent_id') else self.browse()
+                vals['user_id'] = parent.user_id.id if parent.user_id else self.env.uid
 
             to_create.append((index, vals))
 
