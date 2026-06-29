@@ -6,6 +6,9 @@
         <field name="name">project.task.form.ft.hours.tracker</field>
         <field name="model">project.task</field>
         <field name="inherit_id" ref="project.view_task_form2"/>
+        <!-- Apply after ft_sprint_management injects sprint_id (default prio 16),
+             otherwise the sprint_id position="move" below can't find the field. -->
+        <field name="priority">99</field>
         <field name="arch" type="xml">
 
             <!-- Hours shown as a full-width section above the notebook tabs -->
