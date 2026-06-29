@@ -166,5 +166,20 @@
         </field>
     </record>
 
+    <!-- Task list: add Estimated and Actual (computed) hours columns. -->
+    <record id="view_task_list_ft_hours_columns" model="ir.ui.view">
+        <field name="name">project.task.list.ft.hours.columns</field>
+        <field name="model">project.task</field>
+        <field name="inherit_id" ref="project.project_task_view_tree_main_base"/>
+        <field name="arch" type="xml">
+            <field name="user_ids" position="after">
+                <field name="estimated" string="Estimated"
+                       widget="float_time" sum="Total Estimated" optional="show"/>
+                <field name="ft_total_hours_taken" string="Actual Hours"
+                       widget="float_time" sum="Total Actual" optional="show"/>
+            </field>
+        </field>
+    </record>
+
 
 </odoo>
