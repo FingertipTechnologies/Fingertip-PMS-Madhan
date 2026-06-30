@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="ft_sales_dashboard.KpiCard">
+        <div class="btsd_kpi" t-att-class="{ 'btsd_kpi--clickable': clickable }"
+             t-on-click="onCardClick" t-att-title="props.tooltip">
+            <div class="btsd_kpi_icon" t-attf-style="background: {{ props.color || '#4F46E5' }}1A; color: {{ props.color || '#4F46E5' }};">
+                <i class="fa" t-att-class="props.icon || 'fa-chart-bar'"/>
+            </div>
+            <div class="btsd_kpi_body">
+                <div class="btsd_kpi_value">
+                    <span t-if="props.prefix" class="btsd_kpi_affix"><t t-esc="props.prefix"/></span><t t-esc="displayValue"/><span t-if="props.suffix" class="btsd_kpi_affix"><t t-esc="props.suffix"/></span>
+                </div>
+                <div class="btsd_kpi_title"><t t-esc="props.title"/></div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="ft_sales_dashboard.ChartCard">
+        <div class="btsd_chart_card" t-att-class="{ 'btsd_chart_card--full': props.fullWidth }">
+            <div class="btsd_chart_head">
+                <h3 class="btsd_chart_title"><t t-esc="props.title"/></h3>
+                <small class="btsd_chart_note" t-if="props.note"><t t-esc="props.note"/></small>
+            </div>
+            <div class="btsd_chart_canvas_wrap">
+                <canvas t-ref="canvas"/>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="ft_sales_dashboard.SalesDashboard">
+        <div class="btsd_dashboard">
+            <div class="btsd_header">
+                <h1 class="btsd_header_title"><i class="fa fa-line-chart me-2"/>Sales Dashboard</h1>
+                <div class="btsd_header_tools">
+                    <div class="btsd_periods">
+                        <t t-foreach="periods" t-as="p" t-key="p.id">
+                            <button class="btsd_period_btn"
+                                    t-att-class="{ 'btsd_period_btn--active': state.period === p.id }"
+                                    t-on-click="() => this.onPeriodChange(p.id)">
+                                <t t-esc="p.label"/>
+                            </button>
+                        </t>
+                    </div>
+                    <div class="btsd_custom" t-if="state.period === 'custom'">
+                        <input type="date" class="btsd_date" t-att-value="state.dateFrom"
+                               t-on-change="(ev) => this.onCustomDateChange('dateFrom', ev)"/>
+                        <span>→</span>
+                        <input type="date" class="btsd_date" t-att-value="state.dateTo"
+                               t-on-change="(ev) => this.onCustomDateChange('dateTo', ev)"/>
+                        <button class="btsd_btn btsd_btn--primary" t-on-click="applyCustomRange">Apply</button>
+                    </div>
+                    <button class="btsd_btn" t-on-click="refresh" title="Refresh"><i class="fa fa-refresh"/></button>
+                </div>
+            </div>
+
+            <div class="btsd_loading" t-if="state.loading">
+                <i class="fa fa-circle-o-notch fa-spin fa-2x"/>
+            </div>
+
+            <div t-else="" class="btsd_content">
+                <div class="btsd_kpi_grid">
+                    <KpiCard title="'Opportunities Generated'" value="kpis.opportunities"
+                             icon="'fa-bullseye'" color="'#4F46E5'"
+                             onClick="() => this.openOpportunities()"/>
+                    <KpiCard title="'Pipeline Value'" value="kpis.pipeline_value" prefix="'₹ '"
+                             icon="'fa-filter'" color="'#06B6D4'"/>
+                    <KpiCard title="'Sales Closed'" value="kpis.sales_closed"
+                             icon="'fa-trophy'" color="'#10B981'"
+                             onClick="() => this.openWon()"/>
+                    <KpiCard title="'Conversion Ratio'" value="kpis.conversion_ratio" suffix="'%'"
+                             icon="'fa-percent'" color="'#F59E0B'"/>
+                </div>
+
+                <div class="btsd_chart_row">
+                    <ChartCard title="'Sales Funnel (Opportunities by Stage)'" type="'bar'"
+                               data="charts.funnel" options="funnelOptions" fullWidth="true"/>
+                </div>
+                <div class="btsd_chart_row">
+                    <ChartCard title="'Pipeline Value by Stage'" type="'bar'"
+                               data="charts.pipeline_by_stage" fullWidth="true"/>
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

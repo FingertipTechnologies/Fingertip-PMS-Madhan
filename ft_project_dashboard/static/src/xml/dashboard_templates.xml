@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- ============================ KPI CARD ============================ -->
+    <t t-name="ft_project_dashboard.KpiCard">
+        <div class="ftpd_kpi" t-att-class="{ 'ftpd_kpi--clickable': clickable }"
+             t-on-click="onCardClick" t-att-title="props.tooltip">
+            <div class="ftpd_kpi_icon" t-attf-style="background: {{ props.color || '#4F46E5' }}1A; color: {{ props.color || '#4F46E5' }};">
+                <i class="fa" t-att-class="props.icon || 'fa-chart-bar'"/>
+            </div>
+            <div class="ftpd_kpi_body">
+                <div class="ftpd_kpi_value">
+                    <t t-esc="displayValue"/><span class="ftpd_kpi_suffix" t-if="props.suffix"><t t-esc="props.suffix"/></span>
+                </div>
+                <div class="ftpd_kpi_title"><t t-esc="props.title"/></div>
+            </div>
+        </div>
+    </t>
+
+    <!-- =========================== CHART CARD =========================== -->
+    <t t-name="ft_project_dashboard.ChartCard">
+        <div class="ftpd_chart_card" t-att-class="{ 'ftpd_chart_card--full': props.fullWidth }">
+            <div class="ftpd_chart_head">
+                <h3 class="ftpd_chart_title"><t t-esc="props.title"/></h3>
+                <small class="ftpd_chart_note" t-if="props.note"><t t-esc="props.note"/></small>
+            </div>
+            <div class="ftpd_chart_canvas_wrap">
+                <canvas t-ref="canvas"/>
+            </div>
+        </div>
+    </t>
+
+    <!-- ========================= MAIN DASHBOARD ========================= -->
+    <t t-name="ft_project_dashboard.ProjectDashboard">
+        <div class="ftpd_dashboard">
+
+            <!-- Sticky header -->
+            <div class="ftpd_header">
+                <h1 class="ftpd_header_title">
+                    <i class="fa fa-rocket me-2"/>Project Dashboard
+                </h1>
+                <div class="ftpd_header_tools">
+                    <div class="ftpd_periods">
+                        <t t-foreach="periods" t-as="p" t-key="p.id">
+                            <button class="ftpd_period_btn"
+                                    t-att-class="{ 'ftpd_period_btn--active': state.period === p.id }"
+                                    t-on-click="() => this.onPeriodChange(p.id)">
+                                <t t-esc="p.label"/>
+                            </button>
+                        </t>
+                    </div>
+                    <div class="ftpd_custom" t-if="state.period === 'custom'">
+                        <input type="date" class="ftpd_date" t-att-value="state.dateFrom"
+                               t-on-change="(ev) => this.onCustomDateChange('dateFrom', ev)"/>
+                        <span>→</span>
+                        <input type="date" class="ftpd_date" t-att-value="state.dateTo"
+                               t-on-change="(ev) => this.onCustomDateChange('dateTo', ev)"/>
+                        <button class="ftpd_btn ftpd_btn--primary" t-on-click="applyCustomRange">Apply</button>
+                    </div>
+                    <button class="ftpd_btn" t-on-click="refresh" title="Refresh">
+                        <i class="fa fa-refresh"/>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading overlay -->
+            <div class="ftpd_loading" t-if="state.loading">
+                <i class="fa fa-circle-o-notch fa-spin fa-2x"/>
+            </div>
+
+            <div t-else="" class="ftpd_content">
+
+                <!-- KPI Row 1 -->
+                <div class="ftpd_kpi_grid">
+                    <KpiCard title="'Active Projects'" value="kpis.active_projects"
+                             icon="'fa-folder-open'" color="'#4F46E5'"
+                             onClick="() => this.openActiveProjects()"/>
+                    <KpiCard title="'Hours Spent'" value="kpis.hours_spent" suffix="'h'"
+                             icon="'fa-clock-o'" color="'#F59E0B'"
+                             onClick="() => this.openTimesheets(false)"/>
+                    <KpiCard title="'Billable Hours'" value="kpis.billable_hours" suffix="'h'"
+                             icon="'fa-money'" color="'#10B981'"
+                             onClick="() => this.openTimesheets(true)"/>
+                    <KpiCard title="'Developers'" value="kpis.developers"
+                             icon="'fa-code'" color="'#06B6D4'"/>
+                    <KpiCard title="'Testers'" value="kpis.testers"
+                             icon="'fa-bug'" color="'#8B5CF6'"/>
+                </div>
+
+                <!-- KPI Row 2 -->
+                <div class="ftpd_kpi_grid">
+                    <KpiCard title="'Project Managers'" value="kpis.project_managers"
+                             icon="'fa-user-circle'" color="'#EC4899'"/>
+                    <KpiCard title="'Estimated Hours'" value="kpis.hours_estimated" suffix="'h'"
+                             icon="'fa-hourglass-half'" color="'#3B82F6'"/>
+                    <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
+                             icon="'fa-hourglass-end'" color="'#F97316'"/>
+                    <KpiCard title="'Resource Need'" value="kpis.resource_need"
+                             icon="'fa-users'" color="'#EF4444'"
+                             tooltip="'No capacity/planning model installed yet.'"/>
+                    <KpiCard title="'Available Resources'" value="kpis.available_resources"
+                             icon="'fa-user-plus'" color="'#14B8A6'"
+                             tooltip="'No capacity/planning model installed yet.'"/>
+                </div>
+
+                <!-- Charts Row: status + resource -->
+                <div class="ftpd_chart_row">
+                    <ChartCard title="'Project Status Distribution'" type="'doughnut'"
+                               data="charts.project_status"
+                               onSegmentClick="(i) => this.onStatusSegment(i)"/>
+                    <ChartCard title="'Resource Status Overview'" type="'bar'"
+                               data="charts.resource_status" options="stackedOptions"
+                               note="charts.resource_status.note"/>
+                </div>
+
+                <!-- Charts Row: project hours (full width) -->
+                <div class="ftpd_chart_row">
+                    <ChartCard title="'Project Hours Analysis'" type="'bar'"
+                               data="charts.project_hours" fullWidth="true"
+                               onSegmentClick="(i) => this.onProjectHoursSegment(i)"/>
+                </div>
+
+                <!-- Charts Row: billable + team -->
+                <div class="ftpd_chart_row">
+                    <ChartCard title="'Billable vs Non-Billable Hours'" type="'bar'"
+                               data="charts.billable"/>
+                    <ChartCard title="'Team Composition'" type="'pie'"
+                               data="charts.team_composition"/>
+                </div>
+
+                <!-- Charts Row: progress trend (full width) -->
+                <div class="ftpd_chart_row">
+                    <ChartCard title="'Project Progress Trend'" type="'line'"
+                               data="charts.progress_trend" options="trendOptions"
+                               fullWidth="true"/>
+                </div>
+
+            </div>
+        </div>
+    </t>
+
+</templates>
