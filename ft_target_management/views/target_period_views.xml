@@ -6,9 +6,9 @@
         <field name="model">ft.target.period</field>
         <field name="arch" type="xml">
             <list string="Target Periods" editable="bottom">
-                <field name="name"/>
-                <field name="start_date"/>
-                <field name="end_date"/>
+                <field name="name" width="33%"/>
+                <field name="start_date" width="33%"/>
+                <field name="end_date" width="34%"/>
             </list>
         </field>
     </record>
