@@ -123,6 +123,9 @@ class FtProjectDashboard(models.TransientModel):
             'project_managers': roles['pm'],
             'hours_estimated': round(estimated, 2),
             'hours_remaining': round(estimated - spent, 2),
+            # No capacity/planning model installed yet -> shown as "N/A".
+            'resource_need': None,
+            'available_resources': None,
         }
 
     # ------------------------------------------------------------------

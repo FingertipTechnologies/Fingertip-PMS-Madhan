@@ -95,6 +95,12 @@
                              icon="'fa-hourglass-half'" color="'#3B82F6'"/>
                     <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
                              icon="'fa-hourglass-end'" color="'#F97316'"/>
+                    <KpiCard title="'Resource Need'" value="kpis.resource_need"
+                             icon="'fa-users'" color="'#EF4444'"
+                             tooltip="'No capacity/planning model installed yet.'"/>
+                    <KpiCard title="'Available Resources'" value="kpis.available_resources"
+                             icon="'fa-user-plus'" color="'#14B8A6'"
+                             tooltip="'No capacity/planning model installed yet.'"/>
                 </div>
 
                 <!-- Full-width table: Project Status -->
