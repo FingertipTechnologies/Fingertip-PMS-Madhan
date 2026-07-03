@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Add a "Change Request" notebook tab to the Project form -->
+    <record id="view_project_form_change_request" model="ir.ui.view">
+        <field name="name">project.project.form.change.request</field>
+        <field name="model">project.project</field>
+        <field name="inherit_id" ref="project.edit_project"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Change Request" name="change_request">
+                    <field name="change_request_ids">
+                        <list editable="bottom"
+                              decoration-info="status == 'submitted'"
+                              decoration-success="status == 'approved'"
+                              decoration-danger="status == 'rejected'"
+                              decoration-muted="status == 'implemented'">
+                            <field name="name" readonly="1"/>
+                            <field name="date"/>
+                            <field name="status"/>
+                            <field name="estimated_hours"/>
+                        </list>
+                    </field>
+                    <separator string="Attachments"/>
+                    <field name="change_request_attachment_ids" widget="many2many_binary"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

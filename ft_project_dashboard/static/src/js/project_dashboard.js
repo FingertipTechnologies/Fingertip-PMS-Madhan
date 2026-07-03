@@ -16,6 +16,9 @@ const PERIODS = [
     { id: "custom", label: "Custom" },
 ];
 
+// How many rows the Project/Resource tables show before "Show all" is used.
+const ROW_LIMIT = 10;
+
 function fmt(date) {
     // -> 'YYYY-MM-DD' in local time.
     const y = date.getFullYear();
@@ -33,12 +36,18 @@ export class ProjectDashboard extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.periods = PERIODS;
+        this.rowLimit = ROW_LIMIT;
         this.state = useState({
             period: "month",
             dateFrom: null,
             dateTo: null,
             data: null,
             loading: true,
+            projectSearch: "",
+            projectShowAll: false,
+            resourceSearch: "",
+            resourceProjectSearch: "",
+            resourceShowAll: false,
         });
 
         onWillStart(async () => {
@@ -160,17 +169,6 @@ export class ProjectDashboard extends Component {
         });
     }
 
-    onStatusSegment(index) {
-        const meta = this.state.data?.charts?.project_status?.meta;
-        const key = meta?.keys?.[index];
-        if (key !== undefined) {
-            this._openProjects(
-                [["active", "=", true], ["status", "=", key]],
-                "Projects"
-            );
-        }
-    }
-
     onProjectHoursSegment(index) {
         const ids = this.state.data?.charts?.project_hours?.meta?.project_ids;
         const pid = ids?.[index];
@@ -192,15 +190,84 @@ export class ProjectDashboard extends Component {
     get charts() {
         return this.state.data?.charts || {};
     }
+    get tables() {
+        return this.state.data?.tables || {};
+    }
 
-    // Stacked bar options for the Resource Status chart.
-    get stackedOptions() {
-        return {
-            scales: {
-                x: { stacked: true, grid: { display: false } },
-                y: { stacked: true, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" } },
-            },
-        };
+    // ----------------------------------------------------------------
+    // Project / Resource table search + row limiting (client-side).
+    // The rows already arrive sorted alphabetically from the server
+    // (project name / resource name).
+    // ----------------------------------------------------------------
+    // Project Status — filter by company/project name.
+    get projectRows() {
+        const q = (this.state.projectSearch || "").trim().toLowerCase();
+        const rows = this.tables.project_status || [];
+        if (!q) return rows;
+        return rows.filter((r) => (r.project || "").toLowerCase().includes(q));
+    }
+    get visibleProjectRows() {
+        const rows = this.projectRows;
+        return this.state.projectShowAll ? rows : rows.slice(0, this.rowLimit);
+    }
+    onProjectSearch(ev) {
+        this.state.projectSearch = ev.target.value || "";
+        this.state.projectShowAll = false;
+    }
+    toggleProjects() {
+        this.state.projectShowAll = !this.state.projectShowAll;
+    }
+
+    // Resource Status — filter by resource (employee) name and/or project.
+    // Rows stay per (resource, project) so per-project status/data is kept; the
+    // template blanks the name/role on repeat rows so each resource shows once.
+    get resourceRows() {
+        const q = (this.state.resourceSearch || "").trim().toLowerCase();
+        const pq = (this.state.resourceProjectSearch || "").trim().toLowerCase();
+        let rows = this.tables.resource_status || [];
+        if (q) {
+            rows = rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
+        }
+        if (pq) {
+            rows = rows.filter((r) => (r.project || "").toLowerCase().includes(pq));
+        }
+        return rows;
+    }
+    get visibleResourceRows() {
+        const rows = this.state.resourceShowAll
+            ? this.resourceRows
+            : this.resourceRows.slice(0, this.rowLimit);
+        // Flag the first row of each resource group so the resource name/role
+        // render only once — consecutive rows for the same person read as one
+        // consolidated entry with no duplicate names.
+        let prev = null;
+        const mapped = rows.map((r) => {
+            const firstOfGroup = r.employee !== prev;
+            prev = r.employee;
+            return { ...r, firstOfGroup };
+        });
+        // Flag rows that are NOT the last of their group so the template can drop
+        // the divider between rows of the same resource (keeping it between
+        // different resources).
+        mapped.forEach((r, i) => {
+            r.midGroup = i < mapped.length - 1 && mapped[i + 1].employee === r.employee;
+        });
+        return mapped;
+    }
+    // Count of distinct resources across the current (filtered) rows.
+    get resourceCount() {
+        return new Set(this.resourceRows.map((r) => r.employee)).size;
+    }
+    onResourceSearch(ev) {
+        this.state.resourceSearch = ev.target.value || "";
+        this.state.resourceShowAll = false;
+    }
+    onResourceProjectSearch(ev) {
+        this.state.resourceProjectSearch = ev.target.value || "";
+        this.state.resourceShowAll = false;
+    }
+    toggleResources() {
+        this.state.resourceShowAll = !this.state.resourceShowAll;
     }
 
     // Dual-axis options for the Progress Trend line chart.

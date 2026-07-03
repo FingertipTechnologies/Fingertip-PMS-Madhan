@@ -6,6 +6,7 @@ import { useService } from "@web/core/utils/hooks";
 import { loadJS } from "@web/core/assets";
 import { KpiCard } from "./kpi_card";
 import { ChartCard } from "./chart_card";
+import { FunnelChart } from "./funnel_chart";
 
 const PERIODS = [
     { id: "today", label: "Today" },
@@ -25,7 +26,7 @@ function fmt(date) {
 
 export class SalesDashboard extends Component {
     static template = "ft_sales_dashboard.SalesDashboard";
-    static components = { KpiCard, ChartCard };
+    static components = { KpiCard, ChartCard, FunnelChart };
     static props = ["*"];
 
     setup() {
@@ -143,18 +144,6 @@ export class SalesDashboard extends Component {
     }
     get charts() {
         return this.state.data?.charts || {};
-    }
-
-    // Horizontal-bar options for the funnel
-    get funnelOptions() {
-        return {
-            indexAxis: "y",
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" } },
-                y: { grid: { display: false } },
-            },
-        };
     }
 }
 

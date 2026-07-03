@@ -95,22 +95,125 @@
                              icon="'fa-hourglass-half'" color="'#3B82F6'"/>
                     <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
                              icon="'fa-hourglass-end'" color="'#F97316'"/>
-                    <KpiCard title="'Resource Need'" value="kpis.resource_need"
-                             icon="'fa-users'" color="'#EF4444'"
-                             tooltip="'No capacity/planning model installed yet.'"/>
-                    <KpiCard title="'Available Resources'" value="kpis.available_resources"
-                             icon="'fa-user-plus'" color="'#14B8A6'"
-                             tooltip="'No capacity/planning model installed yet.'"/>
                 </div>
 
-                <!-- Charts Row: status + resource -->
+                <!-- Full-width table: Project Status -->
                 <div class="ftpd_chart_row">
-                    <ChartCard title="'Project Status Distribution'" type="'doughnut'"
-                               data="charts.project_status"
-                               onSegmentClick="(i) => this.onStatusSegment(i)"/>
-                    <ChartCard title="'Resource Status Overview'" type="'bar'"
-                               data="charts.resource_status" options="stackedOptions"
-                               note="charts.resource_status.note"/>
+                    <div class="ftpd_chart_card ftpd_chart_card--full">
+                        <div class="ftpd_chart_head ftpd_table_head">
+                            <h3 class="ftpd_chart_title">Project Status</h3>
+                            <div class="ftpd_search">
+                                <i class="fa fa-search"/>
+                                <input type="text" placeholder="Search company…"
+                                       t-att-value="state.projectSearch"
+                                       t-on-input="onProjectSearch"/>
+                            </div>
+                        </div>
+                        <div class="ftpd_table_wrap">
+                            <table class="ftpd_table">
+                                <thead>
+                                    <tr>
+                                        <th>Project Name</th>
+                                        <th>Status</th>
+                                        <th>Start Date</th>
+                                        <th>UAT Date</th>
+                                        <th>End Date</th>
+                                        <th class="ftpd_num">Estimated Hrs</th>
+                                        <th class="ftpd_num">Actual Hrs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="visibleProjectRows" t-as="row" t-key="row_index">
+                                        <tr>
+                                            <td><t t-esc="row.project"/></td>
+                                            <td><t t-esc="row.status"/></td>
+                                            <td><t t-esc="row.start_date"/></td>
+                                            <td><t t-esc="row.uat_date"/></td>
+                                            <td><t t-esc="row.end_date"/></td>
+                                            <td class="ftpd_num"><t t-esc="row.estimated"/></td>
+                                            <td class="ftpd_num"><t t-esc="row.actual"/></td>
+                                        </tr>
+                                    </t>
+                                    <tr t-if="!visibleProjectRows.length">
+                                        <td colspan="7" class="ftpd_table_empty">No projects found.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="ftpd_table_foot" t-if="projectRows.length > rowLimit">
+                            <span class="ftpd_table_count">
+                                Showing <t t-esc="visibleProjectRows.length"/> of <t t-esc="projectRows.length"/>
+                            </span>
+                            <button class="ftpd_btn ftpd_link" t-on-click="toggleProjects">
+                                <t t-esc="state.projectShowAll ? 'Show less' : 'Show all'"/>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full-width table: Resource Status -->
+                <div class="ftpd_chart_row">
+                    <div class="ftpd_chart_card ftpd_chart_card--full">
+                        <div class="ftpd_chart_head ftpd_table_head">
+                            <h3 class="ftpd_chart_title">Resource Status</h3>
+                            <div class="ftpd_table_tools">
+                                <div class="ftpd_search">
+                                    <i class="fa fa-search"/>
+                                    <input type="text" placeholder="Search resource…"
+                                           t-att-value="state.resourceSearch"
+                                           t-on-input="onResourceSearch"/>
+                                </div>
+                                <div class="ftpd_search">
+                                    <i class="fa fa-search"/>
+                                    <input type="text" placeholder="Search project…"
+                                           t-att-value="state.resourceProjectSearch"
+                                           t-on-input="onResourceProjectSearch"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ftpd_table_wrap">
+                            <table class="ftpd_table">
+                                <thead>
+                                    <tr>
+                                        <th>Resource Name</th>
+                                        <th>Role</th>
+                                        <th>Project Name</th>
+                                        <th>Project Status</th>
+                                        <th class="ftpd_num">Days Left</th>
+                                        <th class="ftpd_num">Hours Spent</th>
+                                        <th class="ftpd_num">Estimated Hrs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="visibleResourceRows" t-as="row" t-key="row_index">
+                                        <tr t-att-class="{ 'ftpd_group_child': !row.firstOfGroup, 'ftpd_group_mid': row.midGroup }">
+                                            <td class="ftpd_res_name"><t t-esc="row.firstOfGroup ? row.employee : ''"/></td>
+                                            <td><t t-esc="row.firstOfGroup ? row.role : ''"/></td>
+                                            <td><t t-esc="row.project"/></td>
+                                            <td><t t-esc="row.status"/></td>
+                                            <td class="ftpd_num">
+                                                <t t-esc="row.days_left === null ? '—' : row.days_left"/>
+                                            </td>
+                                            <td class="ftpd_num"><t t-esc="row.hours_spent"/></td>
+                                            <td class="ftpd_num"><t t-esc="row.estimated"/></td>
+                                        </tr>
+                                    </t>
+                                    <tr t-if="!visibleResourceRows.length">
+                                        <td colspan="7" class="ftpd_table_empty">No resource activity found.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="ftpd_table_foot" t-if="resourceRows.length > rowLimit">
+                            <span class="ftpd_table_count">
+                                Showing <t t-esc="visibleResourceRows.length"/> of <t t-esc="resourceRows.length"/> rows
+                                (<t t-esc="resourceCount"/> resources)
+                            </span>
+                            <button class="ftpd_btn ftpd_link" t-on-click="toggleResources">
+                                <t t-esc="state.resourceShowAll ? 'Show less' : 'Show all'"/>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Charts Row: project hours (full width) -->

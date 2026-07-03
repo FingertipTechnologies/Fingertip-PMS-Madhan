@@ -28,6 +28,38 @@
         </div>
     </t>
 
+    <t t-name="ft_sales_dashboard.FunnelChart">
+        <div class="btsd_chart_card" t-att-class="{ 'btsd_chart_card--full': props.fullWidth }">
+            <div class="btsd_chart_head">
+                <h3 class="btsd_chart_title"><t t-esc="props.title"/></h3>
+            </div>
+            <div class="btsd_funnel">
+                <t t-foreach="view.stages" t-as="s" t-key="s_index">
+                    <div class="btsd_funnel_row">
+                        <div class="btsd_funnel_num" t-attf-style="color: {{ s.color }};">
+                            <t t-esc="s.num"/>
+                        </div>
+                        <div class="btsd_funnel_bandwrap">
+                            <div class="btsd_funnel_band"
+                                 t-attf-style="clip-path: {{ s.clip }}; -webkit-clip-path: {{ s.clip }}; background: {{ s.color }};">
+                                <span class="btsd_funnel_label"><t t-esc="s.label"/></span>
+                                <span class="btsd_funnel_value"><t t-esc="s.value"/></span>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+                <div class="btsd_funnel_row btsd_funnel_row--tip" t-if="view.tip">
+                    <div class="btsd_funnel_num"/>
+                    <div class="btsd_funnel_bandwrap">
+                        <div class="btsd_funnel_tip"
+                             t-attf-style="clip-path: {{ view.tip.clip }}; -webkit-clip-path: {{ view.tip.clip }}; background: {{ view.tip.color }};"/>
+                    </div>
+                </div>
+                <div t-if="!view.stages.length" class="btsd_funnel_empty">No opportunities found.</div>
+            </div>
+        </div>
+    </t>
+
     <t t-name="ft_sales_dashboard.SalesDashboard">
         <div class="btsd_dashboard">
             <div class="btsd_header">
@@ -73,8 +105,8 @@
                 </div>
 
                 <div class="btsd_chart_row">
-                    <ChartCard title="'Sales Funnel (Opportunities by Stage)'" type="'bar'"
-                               data="charts.funnel" options="funnelOptions" fullWidth="true"/>
+                    <FunnelChart title="'Sales Funnel (Opportunities by Stage)'"
+                                 data="charts.funnel" fullWidth="true"/>
                 </div>
                 <div class="btsd_chart_row">
                     <ChartCard title="'Pipeline Value by Stage'" type="'bar'"

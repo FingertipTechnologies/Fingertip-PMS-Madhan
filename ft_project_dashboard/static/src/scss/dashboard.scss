@@ -209,4 +209,100 @@
             height: 340px;
         }
     }
+
+    // Full-width data tables (Project Status / Resource Status)
+    .ftpd_table_head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .ftpd_table_tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .ftpd_search {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        border: 1px solid var(--ftpd-border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        color: var(--ftpd-muted);
+
+        i { font-size: 12px; }
+        input {
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font-size: 13px;
+            color: var(--ftpd-text);
+            min-width: 180px;
+        }
+    }
+    .ftpd_table_foot {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        padding-top: 12px;
+
+        .ftpd_table_count {
+            font-size: 12px;
+            color: var(--ftpd-muted);
+        }
+        .ftpd_link {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4f46e5;
+            padding: 5px 10px;
+        }
+    }
+    .ftpd_table_wrap {
+        overflow-x: auto;
+    }
+    .ftpd_table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+
+        th, td {
+            padding: 9px 14px;
+            text-align: left;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--ftpd-border);
+        }
+        thead th {
+            background: rgba(0, 0, 0, 0.03);
+            font-weight: 700;
+            color: var(--ftpd-muted);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.03em;
+        }
+        tbody tr:hover {
+            background: rgba(79, 70, 229, 0.04);
+        }
+        .ftpd_num {
+            text-align: right;
+        }
+        // Consolidated resource groups: rows after the first for a resource have
+        // a blank name/role cell, and rows within a group drop the divider so
+        // consecutive projects for one person read as a single entry.
+        tbody tr.ftpd_group_mid td {
+            border-bottom-color: transparent;
+        }
+        .ftpd_res_name {
+            font-weight: 600;
+        }
+        .ftpd_table_empty {
+            text-align: center;
+            color: var(--ftpd-muted);
+            padding: 18px;
+        }
+    }
 }

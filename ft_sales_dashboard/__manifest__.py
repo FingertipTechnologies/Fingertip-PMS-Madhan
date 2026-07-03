@@ -28,6 +28,7 @@ Extracted from bt_crm_customization into its own standalone module.
             'ft_sales_dashboard/static/src/scss/sales_dashboard.scss',
             'ft_sales_dashboard/static/src/js/kpi_card.js',
             'ft_sales_dashboard/static/src/js/chart_card.js',
+            'ft_sales_dashboard/static/src/js/funnel_chart.js',
             'ft_sales_dashboard/static/src/js/sales_dashboard.js',
             'ft_sales_dashboard/static/src/xml/sales_dashboard_templates.xml',
         ],

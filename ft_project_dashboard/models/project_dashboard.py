@@ -76,9 +76,11 @@ class FtProjectDashboard(models.TransientModel):
         """
         return {
             'kpis': self._compute_kpis(date_from, date_to),
+            'tables': {
+                'project_status': self._table_project_status(),
+                'resource_status': self._table_resource_status(),
+            },
             'charts': {
-                'project_status': self._chart_project_status(),
-                'resource_status': self._chart_resource_status(date_from, date_to),
                 'project_hours': self._chart_project_hours(date_from, date_to),
                 'billable': self._chart_billable(date_from, date_to),
                 'team_composition': self._chart_team_composition(),
@@ -121,55 +123,120 @@ class FtProjectDashboard(models.TransientModel):
             'project_managers': roles['pm'],
             'hours_estimated': round(estimated, 2),
             'hours_remaining': round(estimated - spent, 2),
-            # No capacity/planning model exists yet — surfaced as placeholders.
-            'resource_need': None,
-            'available_resources': None,
         }
 
     # ------------------------------------------------------------------
     # Charts
     # ------------------------------------------------------------------
-    def _chart_project_status(self):
-        """Doughnut: project count by the 12 real status values."""
+    # ------------------------------------------------------------------
+    # Tables (full-width)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _fmt_date(d):
+        """Format a date value for display, or '' when unset."""
+        return d.strftime('%d %b %Y') if d else ''
+
+    def _table_project_status(self):
+        """One row per active project with dates and estimated/actual hours.
+
+        Estimated = sum of task.estimated for the project.
+        Actual    = total hours logged (account.analytic.line.unit_amount).
+        Both are all-time totals (a project-status snapshot, not date-filtered).
+        """
         Project = self.env['project.project']
-        sel = dict(Project.fields_get(['status'])['status']['selection'])
-        groups = Project.read_group(
-            [('active', '=', True)], ['status'], ['status'], lazy=False)
-        labels, values, ids_by_label = [], [], []
-        for g in groups:
-            key = g.get('status')
-            labels.append(sel.get(key, key or 'Undefined'))
-            values.append(g['__count'])
-            ids_by_label.append(key)
-        return {
-            'labels': labels,
-            'datasets': [{'data': values, 'backgroundColor': PALETTE[:len(values)]}],
-            'meta': {'field': 'status', 'keys': ids_by_label},
-        }
+        Task = self.env['project.task']
+        AAL = self.env['account.analytic.line']
+        status_labels = dict(Project.fields_get(['status'])['status']['selection'])
 
-    def _chart_resource_status(self, date_from, date_to):
-        """Stacked bar: a light heuristic since no planning module exists.
+        est_by_proj = {}
+        for g in Task.read_group(
+                [('project_id', '!=', False)], ['estimated:sum'],
+                ['project_id'], lazy=False):
+            if g.get('project_id'):
+                est_by_proj[g['project_id'][0]] = g.get('estimated') or 0.0
+        act_by_proj = {}
+        for g in AAL.read_group(
+                [('project_id', '!=', False)], ['unit_amount:sum'],
+                ['project_id'], lazy=False):
+            if g.get('project_id'):
+                act_by_proj[g['project_id'][0]] = g.get('unit_amount') or 0.0
 
-        Allocated  = distinct active employees with timesheet activity in range.
-        Available  = active employees - allocated.
-        Overallocated = 0 (no capacity model to detect over-allocation).
+        rows = []
+        for p in Project.search([('active', '=', True)], order='name'):
+            rows.append({
+                'project': p.name or '',
+                'status': status_labels.get(p.status, p.status or ''),
+                'start_date': self._fmt_date(p.date_start),
+                'uat_date': self._fmt_date(p.uat_start_date),
+                'end_date': self._fmt_date(p.date),
+                'estimated': round(est_by_proj.get(p.id, 0.0), 2),
+                'actual': round(act_by_proj.get(p.id, 0.0), 2),
+            })
+        return rows
+
+    def _table_resource_status(self):
+        """One row per (employee, project), grouped/sorted by employee name.
+
+        Hours Spent    = timesheet hours the employee logged on the project.
+        Estimated      = sum of task.estimated for the project's tasks assigned
+                         to that employee (via task assignees -> employee).
+        Days Left      = project End Date (project.date) - today.
+        Role           = employee's Job Position.
         """
         AAL = self.env['account.analytic.line']
-        groups = AAL.read_group(
-            self._ts_domain(date_from, date_to) + [('employee_id', '!=', False)],
-            ['employee_id'], ['employee_id'])
-        allocated = len([g for g in groups if g.get('employee_id')])
-        total = self.env['hr.employee'].search_count([('active', '=', True)])
-        available = max(total - allocated, 0)
-        return {
-            'labels': ['Resources'],
-            'datasets': [
-                {'label': 'Available', 'data': [available], 'backgroundColor': '#10B981'},
-                {'label': 'Allocated', 'data': [allocated], 'backgroundColor': '#4F46E5'},
-                {'label': 'Overallocated', 'data': [0], 'backgroundColor': '#EF4444'},
-            ],
-            'note': 'Heuristic — no planning/capacity model installed.',
-        }
+        Emp = self.env['hr.employee']
+        Task = self.env['project.task']
+        Project = self.env['project.project']
+        status_labels = dict(Project.fields_get(['status'])['status']['selection'])
+
+        # Employee lookups (id -> record, user_id -> employee id).
+        employees = Emp.search([('active', '=', True)])
+        emp_by_id = {e.id: e for e in employees}
+        emp_by_user = {e.user_id.id: e.id for e in employees if e.user_id}
+
+        # Project lookups.
+        proj_by_id = {p.id: p for p in Project.search([])}
+
+        # Hours spent per (employee, project) from timesheets.
+        hours = {}
+        for g in AAL.read_group(
+                [('employee_id', '!=', False), ('project_id', '!=', False)],
+                ['unit_amount:sum'], ['employee_id', 'project_id'], lazy=False):
+            if g.get('employee_id') and g.get('project_id'):
+                hours[(g['employee_id'][0], g['project_id'][0])] = \
+                    g.get('unit_amount') or 0.0
+
+        # Estimated per (employee, project) via task assignees.
+        est = {}
+        for t in Task.search_read(
+                [('project_id', '!=', False), ('estimated', '>', 0)],
+                ['project_id', 'user_ids', 'estimated']):
+            proj_id = t['project_id'][0]
+            for uid in t.get('user_ids', []):
+                emp_id = emp_by_user.get(uid)
+                if emp_id:
+                    key = (emp_id, proj_id)
+                    est[key] = est.get(key, 0.0) + (t['estimated'] or 0.0)
+
+        today = fields.Date.context_today(self)
+        rows = []
+        for (emp_id, proj_id) in set(hours) | set(est):
+            emp = emp_by_id.get(emp_id)
+            proj = proj_by_id.get(proj_id)
+            if not emp or not proj:
+                continue
+            days_left = (proj.date - today).days if proj.date else None
+            rows.append({
+                'employee': emp.name or '',
+                'role': emp.job_id.name if emp.job_id else '',
+                'project': proj.name or '',
+                'status': status_labels.get(proj.status, proj.status or ''),
+                'days_left': days_left,
+                'hours_spent': round(hours.get((emp_id, proj_id), 0.0), 2),
+                'estimated': round(est.get((emp_id, proj_id), 0.0), 2),
+            })
+        rows.sort(key=lambda r: (r['employee'].lower(), r['project'].lower()))
+        return rows
 
     def _chart_project_hours(self, date_from, date_to):
         """Bar: estimated / spent / remaining for the top active projects."""
