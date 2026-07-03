@@ -15,14 +15,13 @@
                               decoration-success="status == 'approved'"
                               decoration-danger="status == 'rejected'"
                               decoration-muted="status == 'implemented'">
-                            <field name="name" readonly="1"/>
-                            <field name="date"/>
-                            <field name="status"/>
-                            <field name="estimated_hours"/>
+                            <field name="name" readonly="1" width="160"/>
+                            <field name="date" width="120"/>
+                            <field name="status" width="150"/>
+                            <field name="estimated_hours" width="130"/>
+                            <field name="attachment_ids" widget="many2many_binary" string="Attachments"/>
                         </list>
                     </field>
-                    <separator string="Attachments"/>
-                    <field name="change_request_attachment_ids" widget="many2many_binary"/>
                 </page>
             </xpath>
         </field>

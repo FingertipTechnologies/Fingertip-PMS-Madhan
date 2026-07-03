@@ -33,6 +33,7 @@ A modern, executive-level Project Dashboard for management:
             'ft_project_dashboard/static/src/scss/dashboard.scss',
             'ft_project_dashboard/static/src/js/kpi_card.js',
             'ft_project_dashboard/static/src/js/chart_card.js',
+            'ft_project_dashboard/static/src/js/data_table.js',
             'ft_project_dashboard/static/src/js/project_dashboard.js',
             'ft_project_dashboard/static/src/xml/dashboard_templates.xml',
         ],

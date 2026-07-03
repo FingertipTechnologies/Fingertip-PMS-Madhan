@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from odoo import api, fields, models
 
@@ -135,9 +136,13 @@ class FtProjectDashboard(models.TransientModel):
     # Tables (full-width)
     # ------------------------------------------------------------------
     @staticmethod
-    def _fmt_date(d):
-        """Format a date value for display, or '' when unset."""
-        return d.strftime('%d %b %Y') if d else ''
+    def _iso_date(d):
+        """Return an ISO 'YYYY-MM-DD' string (sortable), or '' when unset.
+
+        The client formats these for display; ISO strings also sort
+        chronologically as plain strings, which the table sorter relies on.
+        """
+        return fields.Date.to_string(d) if d else ''
 
     def _table_project_status(self):
         """One row per active project with dates and estimated/actual hours.
@@ -149,7 +154,6 @@ class FtProjectDashboard(models.TransientModel):
         Project = self.env['project.project']
         Task = self.env['project.task']
         AAL = self.env['account.analytic.line']
-        status_labels = dict(Project.fields_get(['status'])['status']['selection'])
 
         est_by_proj = {}
         for g in Task.read_group(
@@ -168,10 +172,12 @@ class FtProjectDashboard(models.TransientModel):
         for p in Project.search([('active', '=', True)], order='name'):
             rows.append({
                 'project': p.name or '',
-                'status': status_labels.get(p.status, p.status or ''),
-                'start_date': self._fmt_date(p.date_start),
-                'uat_date': self._fmt_date(p.uat_start_date),
-                'end_date': self._fmt_date(p.date),
+                # Show the standard Kanban stage (the status bar on the project
+                # form); the custom 'status' selection is unset on most projects.
+                'status': p.stage_id.name or '',
+                'start_date': self._iso_date(p.date_start),
+                'uat_date': self._iso_date(p.uat_start_date),
+                'end_date': self._iso_date(p.date),
                 'estimated': round(est_by_proj.get(p.id, 0.0), 2),
                 'actual': round(act_by_proj.get(p.id, 0.0), 2),
             })
@@ -190,7 +196,6 @@ class FtProjectDashboard(models.TransientModel):
         Emp = self.env['hr.employee']
         Task = self.env['project.task']
         Project = self.env['project.project']
-        status_labels = dict(Project.fields_get(['status'])['status']['selection'])
 
         # Employee lookups (id -> record, user_id -> employee id).
         employees = Emp.search([('active', '=', True)])
@@ -233,7 +238,7 @@ class FtProjectDashboard(models.TransientModel):
                 'employee': emp.name or '',
                 'role': emp.job_id.name if emp.job_id else '',
                 'project': proj.name or '',
-                'status': status_labels.get(proj.status, proj.status or ''),
+                'status': proj.stage_id.name or '',
                 'days_left': days_left,
                 'hours_spent': round(hours.get((emp_id, proj_id), 0.0), 2),
                 'estimated': round(est.get((emp_id, proj_id), 0.0), 2),
@@ -242,20 +247,28 @@ class FtProjectDashboard(models.TransientModel):
         return rows
 
     def _chart_project_hours(self, date_from, date_to):
-        """Bar: estimated / spent / remaining for the top active projects."""
-        Task = self.env['project.task']
+        """Bar: estimated / spent / remaining per project.
+
+        Estimated = the project's Estimated Time (``allocated_hours``) — the
+                    value shown on the project form. (Summing the task-level
+                    ``estimated`` field instead gives 0 whenever tasks were left
+                    blank, which hides the Estimated/Remaining bars.)
+        Spent     = all-time timesheet hours logged on the project (not
+                    date-filtered, so it stays comparable to Estimated).
+        Remaining = max(Estimated - Spent, 0).
+        """
+        Project = self.env['project.project']
         AAL = self.env['account.analytic.line']
 
+        name_by_proj = {}
         est_by_proj = {}
-        for g in Task.read_group(
-                [('project_id', '!=', False)], ['estimated:sum'], ['project_id']):
-            proj = g.get('project_id')
-            if proj:
-                est_by_proj[proj[0]] = (proj[1], g.get('estimated') or 0.0)
+        for p in Project.search_read([], ['name', 'allocated_hours']):
+            name_by_proj[p['id']] = p['name'] or ''
+            est_by_proj[p['id']] = p['allocated_hours'] or 0.0
 
         spent_by_proj = {}
         for g in AAL.read_group(
-                self._ts_domain(date_from, date_to), ['unit_amount:sum'], ['project_id']):
+                [('project_id', '!=', False)], ['unit_amount:sum'], ['project_id']):
             proj = g.get('project_id')
             if proj:
                 spent_by_proj[proj[0]] = g.get('unit_amount') or 0.0
@@ -263,14 +276,16 @@ class FtProjectDashboard(models.TransientModel):
         proj_ids = set(est_by_proj) | set(spent_by_proj)
         rows = []
         for pid in proj_ids:
-            name, est = est_by_proj.get(pid, (None, 0.0))
-            if name is None:
-                name = self.env['project.project'].browse(pid).display_name
+            est = est_by_proj.get(pid, 0.0)
             spent = spent_by_proj.get(pid, 0.0)
+            # Nothing to plot for a project with neither an estimate nor spend.
+            if not est and not spent:
+                continue
+            name = name_by_proj.get(pid) or Project.browse(pid).display_name
             rows.append((pid, name, est, spent, max(est - spent, 0.0)))
-        # Top 10 by estimated+spent volume, descending.
+        # Every project that has estimated or logged hours, biggest first. The
+        # chart scrolls horizontally, so there is no cap on the project count.
         rows.sort(key=lambda r: (r[2] + r[3]), reverse=True)
-        rows = rows[:10]
         return {
             'labels': [r[1] for r in rows],
             'datasets': [
@@ -312,16 +327,24 @@ class FtProjectDashboard(models.TransientModel):
         }
 
     def _chart_progress_trend(self, date_from, date_to):
-        """Line: hours logged and tasks completed per day within the range."""
+        """Line: hours logged and tasks completed per day within the range.
+
+        Uses ``_read_group`` so each day is a real ``date`` object — sorting on
+        those keeps the X axis chronological. (Grouping via ``read_group`` yields
+        formatted labels like '03 Jul 2026' that sort alphabetically, which
+        scrambled the timeline.)
+        """
         AAL = self.env['account.analytic.line']
         Task = self.env['project.task']
 
+        def _as_date(d):
+            return d.date() if isinstance(d, datetime) else d
+
         hours_by_day = {}
-        for g in AAL.read_group(
-                self._ts_domain(date_from, date_to), ['unit_amount:sum'], ['date:day']):
-            label = g.get('date:day')
-            if label:
-                hours_by_day[label] = round(g.get('unit_amount') or 0.0, 2)
+        for day, total in AAL._read_group(
+                self._ts_domain(date_from, date_to), ['date:day'], ['unit_amount:sum']):
+            if day:
+                hours_by_day[_as_date(day)] = round(total or 0.0, 2)
 
         tasks_by_day = {}
         try:
@@ -330,27 +353,27 @@ class FtProjectDashboard(models.TransientModel):
                 task_domain.append(('date_last_stage_update', '>=', date_from))
             if date_to:
                 task_domain.append(('date_last_stage_update', '<=', date_to + ' 23:59:59'))
-            for g in Task.read_group(
-                    task_domain, [], ['date_last_stage_update:day'], lazy=False):
-                label = g.get('date_last_stage_update:day')
-                if label:
-                    tasks_by_day[label] = g['__count']
+            for day, count in Task._read_group(
+                    task_domain, ['date_last_stage_update:day'], ['__count']):
+                if day:
+                    tasks_by_day[_as_date(day)] = count
         except Exception as e:  # pragma: no cover - defensive against field/state drift
             _logger.warning('Progress-trend task series unavailable: %s', e)
 
-        labels = sorted(set(hours_by_day) | set(tasks_by_day))
+        days = sorted(set(hours_by_day) | set(tasks_by_day))
+        labels = [d.strftime('%d %b %Y') for d in days]
         return {
             'labels': labels,
             'datasets': [
                 {
                     'label': 'Hours Logged',
-                    'data': [hours_by_day.get(d, 0) for d in labels],
+                    'data': [hours_by_day.get(d, 0) for d in days],
                     'borderColor': '#4F46E5', 'backgroundColor': 'rgba(79,70,229,0.15)',
                     'tension': 0.35, 'fill': True, 'yAxisID': 'y',
                 },
                 {
                     'label': 'Tasks Completed',
-                    'data': [tasks_by_day.get(d, 0) for d in labels],
+                    'data': [tasks_by_day.get(d, 0) for d in days],
                     'borderColor': '#10B981', 'backgroundColor': 'rgba(16,185,129,0.15)',
                     'tension': 0.35, 'fill': True, 'yAxisID': 'y1',
                 },

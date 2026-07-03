@@ -12,8 +12,8 @@
                 <field name="target_type_id"/>
                 <field name="period_id"/>
                 <field name="assigned_to"/>
-                <field name="target_value" sum="Target"/>
-                <field name="actual_value" sum="Actual"/>
+                <field name="target_value"/>
+                <field name="actual_value"/>
                 <field name="achievement" widget="percentage" optional="show"/>
             </list>
         </field>

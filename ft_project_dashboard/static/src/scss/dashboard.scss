@@ -264,6 +264,11 @@
     }
     .ftpd_table_wrap {
         overflow-x: auto;
+        // Vertical scroll for long tables; the sticky header stays visible.
+        &.ftpd_table_scroll {
+            max-height: 520px;
+            overflow-y: auto;
+        }
     }
     .ftpd_table {
         width: 100%;
@@ -277,12 +282,26 @@
             border-bottom: 1px solid var(--ftpd-border);
         }
         thead th {
-            background: rgba(0, 0, 0, 0.03);
+            background: #eef0f4;
             font-weight: 700;
             color: var(--ftpd-muted);
             text-transform: uppercase;
             font-size: 11px;
             letter-spacing: 0.03em;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+
+            &.ftpd_sortable {
+                cursor: pointer;
+                user-select: none;
+            }
+            &.ftpd_sortable:hover {
+                background: rgba(79, 70, 229, 0.10);
+                color: var(--ftpd-text);
+            }
+            &.ftpd_sort_active { color: #4f46e5; }
+            .ftpd_sort_ico { margin-left: 4px; font-size: 11px; }
         }
         tbody tr:hover {
             background: rgba(79, 70, 229, 0.04);
@@ -303,6 +322,100 @@
             text-align: center;
             color: var(--ftpd-muted);
             padding: 18px;
+        }
+    }
+
+    // Pagination bar: rows-per-page selector + Prev / numbered pages / Next.
+    .ftpd_pager {
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+
+        .ftpd_pager_left {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .ftpd_page_size {
+            font-size: 12px;
+            color: var(--ftpd-muted);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+
+            select {
+                border: 1px solid var(--ftpd-border);
+                border-radius: 6px;
+                padding: 3px 6px;
+                font-size: 12px;
+                background: #fff;
+                color: var(--ftpd-text);
+                cursor: pointer;
+            }
+        }
+        .ftpd_pager_ctrls {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .ftpd_page_btn {
+            min-width: 32px;
+            padding: 5px 9px;
+            font-size: 13px;
+            border: 1px solid var(--ftpd-border);
+            background: #fff;
+            color: var(--ftpd-text);
+            border-radius: 6px;
+            cursor: pointer;
+
+            &:hover:not(:disabled) { background: rgba(79, 70, 229, 0.08); }
+            &:disabled { opacity: 0.5; cursor: default; }
+            &--active {
+                background: #4f46e5;
+                border-color: #4f46e5;
+                color: #fff;
+                font-weight: 700;
+            }
+        }
+    }
+
+    // The canvas fills its wrapper. In fixed-Y scroll mode only the inner scroll
+    // area moves horizontally; the axis overlay stays pinned on the left.
+    .ftpd_chart_scrollarea { height: 100%; }
+    .ftpd_chart_canvas_inner { height: 100%; }
+    .ftpd_chart_canvas_wrap.ftpd_chart_scroll {
+        .ftpd_chart_scrollarea {
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .ftpd_chart_axis {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 54px;
+            z-index: 2;
+            background: var(--ftpd-card, #fff);
+            pointer-events: none;
+        }
+    }
+    // HTML legend for scroll mode (the canvas legend would scroll off-screen).
+    .ftpd_chart_legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--ftpd-text);
+
+        .ftpd_legend_item { display: inline-flex; align-items: center; gap: 6px; }
+        .ftpd_legend_dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
         }
     }
 }

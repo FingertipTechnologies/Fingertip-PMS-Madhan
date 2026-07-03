@@ -33,6 +33,13 @@ class ProjectChangeRequest(models.Model):
         required=True,
     )
     estimated_hours = fields.Float(string="Estimated Hours")
+    attachment_ids = fields.Many2many(
+        "ir.attachment",
+        "change_request_line_attachment_rel",
+        "change_request_id",
+        "attachment_id",
+        string="Attachments",
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
