@@ -19,5 +19,7 @@ class LearningTopic(models.Model):
         string='Domain',
         required=True,
     )
+    phase_id = fields.Many2one('ft.phase', string='Phase', ondelete='restrict')
+    day = fields.Integer(string='Day')
     description = fields.Text(string='Description')
     active = fields.Boolean(default=True)

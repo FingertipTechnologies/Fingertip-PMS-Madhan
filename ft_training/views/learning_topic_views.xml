@@ -8,6 +8,8 @@
             <list string="Learning Trails">
                 <field name="name"/>
                 <field name="domain"/>
+                <field name="phase_id"/>
+                <field name="day"/>
             </list>
         </field>
     </record>
@@ -24,6 +26,8 @@
                     </div>
                     <group>
                         <field name="domain"/>
+                        <field name="phase_id" options="{'no_quick_create': True}"/>
+                        <field name="day"/>
                     </group>
                     <separator string="Description"/>
                     <field name="description" placeholder="Describe this learning topic..."/>
@@ -39,8 +43,10 @@
             <search string="Learning Topics">
                 <field name="name"/>
                 <field name="domain"/>
+                <field name="phase_id"/>
                 <group expand="0" string="Group By">
                     <filter name="group_domain" string="Domain" context="{'group_by': 'domain'}"/>
+                    <filter name="group_phase" string="Phase" context="{'group_by': 'phase_id'}"/>
                 </group>
             </search>
         </field>

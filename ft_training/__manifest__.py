@@ -20,11 +20,13 @@ Supports evaluating trainee progress from a centralized record.
     'data': [
         'security/training_security.xml',
         'security/ir.model.access.csv',
+        'data/phase_data.xml',
         'views/learning_topic_views.xml',
         'views/today_learning_views.xml',
         'views/trainee_review_views.xml',
         'views/assignment_views.xml',
         'views/evaluation_views.xml',
+        'views/phase_views.xml',
         'views/training_menus.xml',
     ],
     'installable': True,
