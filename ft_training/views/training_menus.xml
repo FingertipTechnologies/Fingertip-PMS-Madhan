@@ -20,4 +20,25 @@
               action="action_today_learning"
               sequence="20"/>
 
+    <!-- Tab 3: Review (trainee evaluations, Admin/HR maintained) -->
+    <menuitem id="menu_training_review"
+              name="Review"
+              parent="menu_training_root"
+              action="action_trainee_review"
+              sequence="30"/>
+
+    <!-- Tab 4: Assignment (assignment definitions) -->
+    <menuitem id="menu_training_assignment"
+              name="Assignment"
+              parent="menu_training_root"
+              action="action_assignment"
+              sequence="40"/>
+
+    <!-- Tab 5: Evaluation (assignment ratings per trainee) -->
+    <menuitem id="menu_training_evaluation"
+              name="Evaluation"
+              parent="menu_training_root"
+              action="action_evaluation"
+              sequence="50"/>
+
 </odoo>

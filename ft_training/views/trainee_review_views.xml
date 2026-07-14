@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_trainee_review_list" model="ir.ui.view">
+        <field name="name">ft.trainee.review.list</field>
+        <field name="model">ft.trainee.review</field>
+        <field name="arch" type="xml">
+            <list string="Reviews">
+                <field name="trainee_id"/>
+                <field name="attitude"/>
+                <field name="communication"/>
+                <field name="understanding"/>
+                <field name="technical"/>
+                <field name="problem_solving"/>
+                <field name="self_dependency"/>
+                <field name="create_date" string="Date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_trainee_review_form" model="ir.ui.view">
+        <field name="name">ft.trainee.review.form</field>
+        <field name="model">ft.trainee.review</field>
+        <field name="arch" type="xml">
+            <form string="Review">
+                <sheet>
+                    <notebook>
+                        <page string="Review" name="review">
+                            <group>
+                                <group>
+                                    <field name="trainee_id"
+                                           options="{'no_create': True}"/>
+                                    <field name="description"/>
+                                </group>
+                                <group string="Scores (0 - 10)">
+                                    <field name="attitude"/>
+                                    <field name="communication"/>
+                                    <field name="understanding"/>
+                                    <field name="technical"/>
+                                    <field name="problem_solving"/>
+                                    <field name="self_dependency"/>
+                                </group>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_trainee_review_search" model="ir.ui.view">
+        <field name="name">ft.trainee.review.search</field>
+        <field name="model">ft.trainee.review</field>
+        <field name="arch" type="xml">
+            <search string="Reviews">
+                <field name="trainee_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_trainee" string="Trainee"
+                            context="{'group_by': 'trainee_id'}"/>
+                    <filter name="group_date" string="Date"
+                            context="{'group_by': 'create_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_trainee_review" model="ir.actions.act_window">
+        <field name="name">Review</field>
+        <field name="res_model">ft.trainee.review</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_trainee_review_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Record a trainee review</p>
+            <p>Pick a trainee and score them across the competencies (0 - 10).</p>
+        </field>
+    </record>
+
+</odoo>
