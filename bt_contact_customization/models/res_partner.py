@@ -3,11 +3,33 @@ import re
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
-# A website must start with "https://www." and end at the TLD with NOTHING
-# after it: no path, no trailing slash, no query string.
+# A normal company website must start with "https://www." and end at the TLD
+# with NOTHING after it: no path, no trailing slash, no query string.
 # e.g. https://www.acme.com -> OK     https://www.acme.com/about -> rejected
 #      www.acme.com / http://acme.com -> rejected (must be https://www.)
 WEBSITE_RE = re.compile(r'^https://www\.([a-z0-9-]+\.)+[a-z]{2,}$', re.IGNORECASE)
+
+# Hosts shared by many companies - link-in-bio pages, social profiles and URL
+# shorteners. The domain alone is NOT unique to one company: the PATH is what
+# identifies the company (e.g. https://linktr.ee/acme vs https://linktr.ee/bar).
+# For these hosts we keep the path when matching, checking uniqueness and
+# storing, and we do NOT force a "www." prefix (these services don't use it).
+SHARED_DOMAIN_HOSTS = frozenset({
+    'linktr.ee', 'linktree.com',
+    'instagram.com', 'facebook.com', 'm.facebook.com', 'fb.com',
+    'twitter.com', 'x.com',
+    'linkedin.com',
+    'youtube.com', 'youtu.be',
+    'bit.ly', 'tinyurl.com', 't.co',
+    'wa.me', 'api.whatsapp.com',
+    'sites.google.com', 'business.google.com', 'g.page',
+    'beacons.ai', 'campsite.bio', 'carrd.co', 'about.me', 'taplink.cc',
+})
+
+# For a shared-domain host the URL may carry a path (e.g. https://linktr.ee/acme).
+# Host, optionally followed by a path, with no trailing slash / query / fragment.
+SHARED_WEBSITE_RE = re.compile(
+    r'^https://([a-z0-9-]+\.)+[a-z]{2,}(/[^\s?#]+)?$', re.IGNORECASE)
 
 
 class InheritResPartner(models.Model):
@@ -133,6 +155,18 @@ class InheritResPartner(models.Model):
     # department = fields.Many2one('res.partner.industry',string="Department")
     department = fields.Char(string="Department")
 
+    # Stored, indexed match key derived from the website. Lets website matching
+    # and the uniqueness check use a single indexed query instead of loading and
+    # re-parsing every company in Python (which made bulk imports O(N^2)).
+    website_key = fields.Char(
+        string="Website Key", compute='_compute_website_key',
+        store=True, index=True, copy=False)
+
+    @api.depends('website')
+    def _compute_website_key(self):
+        for partner in self:
+            partner.website_key = self._website_key(partner.website)
+
     # ------------------------------------------------------------------
     # Salesperson sync: company's salesperson flows down to child contacts
     # ------------------------------------------------------------------
@@ -171,29 +205,76 @@ class InheritResPartner(models.Model):
         return value.strip().strip('.')
 
     @api.model
+    def _is_shared_host(self, host):
+        """True when the bare domain is a link-in-bio / social / shortener host
+        that is shared across many companies (see SHARED_DOMAIN_HOSTS)."""
+        return host in SHARED_DOMAIN_HOSTS
+
+    @api.model
+    def _website_path(self, website):
+        """Return the URL path (no leading/trailing slash, without query or
+        fragment), lowercased, or '' when there is none.
+        e.g. 'https://linktr.ee/GkrsProperties/' -> 'gkrsproperties'."""
+        if not website:
+            return ''
+        value = str(website).strip()
+        value = re.sub(r'^https?[:/]+', '', value, flags=re.IGNORECASE)
+        value = value.lstrip('/')
+        slash = value.find('/')
+        if slash == -1:
+            return ''
+        rest = value[slash + 1:]
+        for sep in ('?', '#'):
+            cut = rest.find(sep)
+            if cut != -1:
+                rest = rest[:cut]
+        return rest.strip().strip('/').lower()
+
+    @api.model
+    def _website_key(self, website):
+        """The value used to compare / match websites. For a normal company
+        domain it's the bare domain; for a shared-domain host the path is
+        included so each company's page counts as distinct.
+        e.g. acme.com -> 'acme.com'    linktr.ee/acme -> 'linktr.ee/acme'."""
+        host = self._normalize_website(website)
+        if not host:
+            return ''
+        if self._is_shared_host(host):
+            path = self._website_path(website)
+            return '%s/%s' % (host, path) if path else host
+        return host
+
+    @api.model
     def _standardize_website(self, website):
-        """Return the website in the standard stored format
-        'https://www.<domain>', or '' when there is no usable domain.
-        This is the single value actually saved on the record so that every
-        company's website is consistent regardless of how it was entered."""
-        domain = self._normalize_website(website)
-        return 'https://www.%s' % domain if domain else ''
+        """Return the website in its standard stored format, or '' when there is
+        no usable domain. A normal company domain is stored as
+        'https://www.<domain>'. A shared-domain host keeps its path and is
+        stored as 'https://<host>/<path>' (no forced 'www.', since these
+        services don't use it) so different companies on the same host stay
+        distinct."""
+        host = self._normalize_website(website)
+        if not host:
+            return ''
+        if self._is_shared_host(host):
+            path = self._website_path(website)
+            return 'https://%s/%s' % (host, path) if path else 'https://%s' % host
+        return 'https://www.%s' % host
 
     @api.model
     def _find_company_by_website(self, website):
         """Return an existing company (is_company=True) whose website matches
-        the given one, ignoring scheme/www/trailing slash differences."""
-        normalized = self._normalize_website(website)
-        if not normalized:
+        the given one, ignoring scheme/www/trailing slash differences. Matching
+        uses the path for shared-domain hosts (so linktr.ee/a != linktr.ee/b)
+        and the bare domain for normal company sites."""
+        key = self._website_key(website)
+        if not key:
             return self.browse()
-        companies = self.search([
+        # Single indexed lookup on website_key (was: load every company and
+        # re-parse its website in Python).
+        return self.search([
             ('is_company', '=', True),
-            ('website', '!=', False),
-        ])
-        for company in companies:
-            if self._normalize_website(company.website) == normalized:
-                return company
-        return self.browse()
+            ('website_key', '=', key),
+        ], limit=1)
 
     @api.model
     def _company_name_from_website(self, website):
@@ -208,11 +289,24 @@ class InheritResPartner(models.Model):
 
     @api.constrains('website')
     def _check_website_format(self):
-        """Website must start with 'https://www.' and end at the domain
-        (e.g. https://www.example.com) with nothing after it - no path,
-        trailing slash, or query string."""
+        """A normal company website must start with 'https://www.' and be a
+        domain only (e.g. https://www.example.com) with nothing after it. A
+        shared-domain host (link-in-bio / social / shortener) may include a
+        path (e.g. https://linktr.ee/acme) and is not required to use 'www.'."""
         for partner in self:
-            if partner.website and not WEBSITE_RE.match(partner.website.strip()):
+            if not partner.website:
+                continue
+            value = partner.website.strip()
+            host = self._normalize_website(value)
+            if self._is_shared_host(host):
+                if not SHARED_WEBSITE_RE.match(value):
+                    raise ValidationError(_(
+                        "Invalid website '%s'. For a link-in-bio / social page "
+                        "use the form https://linktr.ee/yourname (https, no "
+                        "spaces).",
+                        partner.website,
+                    ))
+            elif not WEBSITE_RE.match(value):
                 raise ValidationError(_(
                     "Invalid website '%s'. It must start with 'https://www.' "
                     "and be a domain only, like https://www.example.com, "
@@ -228,21 +322,22 @@ class InheritResPartner(models.Model):
         for partner in self:
             if not partner.is_company:
                 continue
-            normalized = self._normalize_website(partner.website)
-            if not normalized:
+            key = partner.website_key
+            if not key:
                 continue
-            others = self.search([
+            # Single indexed lookup on website_key (was: load every other company
+            # and re-parse its website in Python for each record being checked).
+            other = self.search([
                 ('id', '!=', partner.id),
                 ('is_company', '=', True),
-                ('website', '!=', False),
-            ])
-            for other in others:
-                if self._normalize_website(other.website) == normalized:
-                    raise ValidationError(_(
-                        "The website '%s' is already used by company '%s'. "
-                        "A company's website must be unique.",
-                        partner.website, other.name,
-                    ))
+                ('website_key', '=', key),
+            ], limit=1)
+            if other:
+                raise ValidationError(_(
+                    "The website '%s' is already used by company '%s'. "
+                    "A company's website must be unique.",
+                    partner.website, other.name,
+                ))
 
     @api.model
     def _vals_is_company(self, vals):
