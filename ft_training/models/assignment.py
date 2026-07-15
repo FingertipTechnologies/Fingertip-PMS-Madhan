@@ -23,6 +23,7 @@ class Assignment(models.Model):
     domain = fields.Selection(
         DOMAIN_SELECTION, string='Domain',
     )
+    phase_id = fields.Many2one('ft.phase', string='Phase', ondelete='restrict')
 
     @api.constrains('marks')
     def _check_marks(self):
