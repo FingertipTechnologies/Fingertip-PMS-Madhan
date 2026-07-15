@@ -9,6 +9,7 @@
                 <field name="domain"/>
                 <field name="deadline"/>
                 <field name="marks"/>
+                <field name="description" optional="show"/>
             </list>
         </field>
     </record>
