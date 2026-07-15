@@ -29,6 +29,11 @@ Supports evaluating trainee progress from a centralized record.
         'views/phase_views.xml',
         'views/training_menus.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'ft_training/static/src/css/assignment_list.css',
+        ],
+    },
     'installable': True,
     'application': True,
     'license': 'LGPL-3',

@@ -1,0 +1,13 @@
+/* Left-align the Marks column in the Assignment list.
+   Odoo 18 right-aligns numeric columns: the header label is a
+   <span class="o_list_number_th"> and the value cell is right-aligned too. */
+
+/* Header label "Marks" */
+.o_ft_assignment_list thead th[data-name="marks"] .o_list_number_th {
+    text-align: left !important;
+}
+
+/* Value cell (the number) */
+.o_ft_assignment_list tbody td[name="marks"] {
+    text-align: left !important;
+}
