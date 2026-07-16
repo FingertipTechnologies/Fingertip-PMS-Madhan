@@ -15,8 +15,14 @@
         "views/hr_team_activity_views.xml",
         "views/hr_policy_views.xml",
         "views/finance_scorecard_views.xml"
-        
+
     ],
+    'assets': {
+        'web.assets_backend': [
+            'Project_Scorecards/static/src/js/many2many_binary_preview.js',
+            'Project_Scorecards/static/src/xml/many2many_binary_preview.xml',
+        ],
+    },
     'images': ['static/description/icon.png'],
     "installable": True,
     "application": True,

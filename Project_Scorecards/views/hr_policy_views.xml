@@ -30,7 +30,7 @@
                         <group>
                             <field name="version"/>
                             <field name="policy_details"/>
-                            <field name="attachment_ids" widget="many2many_binary"/>
+                            <field name="attachment_ids" widget="many2many_binary_preview_sc"/>
                              <field name="description"/>
                         </group>
                     </sheet>

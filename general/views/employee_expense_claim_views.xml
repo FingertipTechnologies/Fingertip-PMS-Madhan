@@ -16,7 +16,7 @@
                 <field name="tax_amount"/>
                 <field name="payment_mode"/>
                 <field name="bill_available"/>
-                <field name="bill_attachment" widget="many2many_binary"/>
+                <field name="bill_attachment" widget="many2many_binary_preview"/>
                 <field name="currency_id" invisible="1"/>
             </list>
         </field>
@@ -50,7 +50,7 @@
                             <field name="remarks"/>
                         </page>
                         <page string="Bill" name="bill">
-                            <field name="bill_attachment" widget="many2many_binary"/>
+                            <field name="bill_attachment" widget="many2many_binary_preview"/>
                         </page>
                     </notebook>
                 </sheet>
@@ -118,7 +118,7 @@
                                     <field name="amount" sum="Total"/>
                                     <field name="tax_amount" sum="Tax"/>
                                     <field name="payment_mode"/>
-                                    <field name="bill_attachment" widget="many2many_binary"/>
+                                    <field name="bill_attachment" widget="many2many_binary_preview"/>
                                 </list>
                             </field>
                             <group class="oe_subtotal_footer">
@@ -238,7 +238,7 @@
                             <field name="remarks"/>
                         </page>
                         <page string="Bill" name="bill">
-                            <field name="bill_attachment" widget="many2many_binary"/>
+                            <field name="bill_attachment" widget="many2many_binary_preview"/>
                         </page>
                     </notebook>
                 </sheet>

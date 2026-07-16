@@ -68,6 +68,12 @@ Each sub-system has its own top-level menu, sequences and security groups.
         'views/expense_dashboard.xml',
         'views/recruitment_dashboard.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'general/static/src/js/many2many_binary_preview.js',
+            'general/static/src/xml/many2many_binary_preview.xml',
+        ],
+    },
     'installable': True,
     'application': True,
     'auto_install': False,

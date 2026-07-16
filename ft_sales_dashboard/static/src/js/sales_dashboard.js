@@ -3,6 +3,8 @@
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { useSetupAction } from "@web/search/action_hook";
+import { browser } from "@web/core/browser/browser";
 import { loadJS } from "@web/core/assets";
 import { KpiCard } from "./kpi_card";
 import { ChartCard } from "./chart_card";
@@ -24,6 +26,27 @@ function fmt(date) {
     return `${y}-${m}-${d}`;
 }
 
+// The breadcrumb restores props.state, but the browser Back button rebuilds the
+// action from the URL as a brand-new controller with no exported state. Mirror
+// the filter into sessionStorage so both routes come back to the same period.
+const FILTER_KEY = "ft_sales_dashboard.filter";
+
+function readStoredFilter() {
+    try {
+        return JSON.parse(browser.sessionStorage.getItem(FILTER_KEY) || "null");
+    } catch {
+        return null;
+    }
+}
+
+function writeStoredFilter(filter) {
+    try {
+        browser.sessionStorage.setItem(FILTER_KEY, JSON.stringify(filter));
+    } catch {
+        // Storage unavailable/full: filters just won't persist.
+    }
+}
+
 export class SalesDashboard extends Component {
     static template = "ft_sales_dashboard.SalesDashboard";
     static components = { KpiCard, ChartCard, FunnelChart };
@@ -33,17 +56,30 @@ export class SalesDashboard extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.periods = PERIODS;
+
+        // props.state covers the breadcrumb; sessionStorage covers browser Back
+        // (which rebuilds the action fresh). Either way we land on the period
+        // the user last chose rather than the default.
+        const restored = this.props.state || readStoredFilter();
         this.state = useState({
-            period: "month",
-            dateFrom: null,
-            dateTo: null,
+            period: restored?.period || "month",
+            dateFrom: restored?.dateFrom ?? null,
+            dateTo: restored?.dateTo ?? null,
             data: null,
             loading: true,
         });
 
+        useSetupAction({
+            getLocalState: () => this._filter(),
+        });
+
         onWillStart(async () => {
             await loadJS("/web/static/lib/Chart/Chart.js");
-            this._applyPeriod("month");
+            // Only compute a range on a fresh open; a restored one already has
+            // its dates (and recomputing would discard a custom range).
+            if (!restored?.period) {
+                this._applyPeriod("month");
+            }
             await this.loadData();
         });
     }
@@ -100,7 +136,18 @@ export class SalesDashboard extends Component {
         await this.loadData();
     }
 
+    _filter() {
+        return {
+            period: this.state.period,
+            dateFrom: this.state.dateFrom,
+            dateTo: this.state.dateTo,
+        };
+    }
+
     async loadData() {
+        // Every load reflects an applied filter, so this is the one choke point
+        // where persisting it is always correct.
+        writeStoredFilter(this._filter());
         this.state.loading = true;
         try {
             this.state.data = await this.orm.call(
