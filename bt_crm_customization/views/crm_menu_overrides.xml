@@ -48,4 +48,9 @@
         <field name="active" eval="False"/>
     </record>
 
+    <!-- Hide the top-level "Leads" menu (permanent, upgrade-safe) -->
+    <record id="crm.crm_menu_leads" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
 </odoo>

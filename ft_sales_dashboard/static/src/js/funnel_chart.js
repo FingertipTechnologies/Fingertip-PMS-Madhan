@@ -31,7 +31,14 @@ export class FunnelChart extends Component {
         title: { type: String },
         data: { type: Object },
         fullWidth: { type: Boolean, optional: true },
+        onStageClick: { type: Function, optional: true },
     };
+
+    onStageClick(stage) {
+        if (this.props.onStageClick) {
+            this.props.onStageClick(stage);
+        }
+    }
 
     // Centered trapezoid clip-path from a top width to a bottom width (in %).
     _trapezoid(topW, botW) {
@@ -43,6 +50,7 @@ export class FunnelChart extends Component {
     get view() {
         const data = this.props.data || {};
         const labels = data.labels || [];
+        const stageIds = data.stage_ids || [];
         const ds = (data.datasets && data.datasets[0]) || {};
         const values = ds.data || [];
         const colors = ds.backgroundColor || [];
@@ -51,6 +59,7 @@ export class FunnelChart extends Component {
             label,
             value: values[i] || 0,
             color: colors[i] || PALETTE[i % PALETTE.length],
+            stageId: stageIds[i] !== undefined ? stageIds[i] : false,
         }));
         // A funnel reads widest-to-narrowest top-to-bottom, so order by value.
         items.sort((a, b) => b.value - a.value);

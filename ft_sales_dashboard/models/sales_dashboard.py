@@ -71,8 +71,12 @@ class FtSalesDashboard(models.TransientModel):
             ['expected_revenue:sum'], ['stage_id'], lazy=False)
         labels = [g['stage_id'][1] if g.get('stage_id') else 'Undefined' for g in groups]
         counts = [g['__count'] for g in groups]
+        # Stage id per band (False for the "Undefined" group) so the front-end
+        # can open exactly that stage's opportunities on click.
+        stage_ids = [g['stage_id'][0] if g.get('stage_id') else False for g in groups]
         return {
             'labels': labels,
+            'stage_ids': stage_ids,
             'datasets': [{
                 'label': 'Opportunities',
                 'data': counts,

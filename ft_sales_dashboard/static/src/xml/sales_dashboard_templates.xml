@@ -41,7 +41,8 @@
                         </div>
                         <div class="btsd_funnel_bandwrap">
                             <div class="btsd_funnel_band"
-                                 t-attf-style="clip-path: {{ s.clip }}; -webkit-clip-path: {{ s.clip }}; background: {{ s.color }};">
+                                 t-on-click="() => this.onStageClick(s)"
+                                 t-attf-style="clip-path: {{ s.clip }}; -webkit-clip-path: {{ s.clip }}; background: {{ s.color }}; cursor: pointer;">
                                 <span class="btsd_funnel_label"><t t-esc="s.label"/></span>
                                 <span class="btsd_funnel_value"><t t-esc="s.value"/></span>
                             </div>
@@ -106,7 +107,8 @@
 
                 <div class="btsd_chart_row">
                     <FunnelChart title="'Sales Funnel (Opportunities by Stage)'"
-                                 data="charts.funnel" fullWidth="true"/>
+                                 data="charts.funnel" fullWidth="true"
+                                 onStageClick="(stage) => this.openStage(stage)"/>
                 </div>
                 <div class="btsd_chart_row">
                     <ChartCard title="'Pipeline Value by Stage'" type="'bar'"

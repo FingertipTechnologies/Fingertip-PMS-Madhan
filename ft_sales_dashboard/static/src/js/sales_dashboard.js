@@ -129,14 +129,47 @@ export class SalesDashboard extends Component {
         });
     }
 
+    // Selected period, mirroring _date_domain on the server so a drill-down
+    // opens exactly the records its KPI counted.
+    _periodDomain() {
+        const domain = [];
+        if (this.state.dateFrom) {
+            domain.push(["create_date", ">=", this.state.dateFrom + " 00:00:00"]);
+        }
+        if (this.state.dateTo) {
+            domain.push(["create_date", "<=", this.state.dateTo + " 23:59:59"]);
+        }
+        return domain;
+    }
+
     openOpportunities() {
-        this._openLeads([["type", "=", "opportunity"]], "Opportunities");
+        this._openLeads(
+            [["type", "=", "opportunity"], ...this._periodDomain()],
+            "Opportunities"
+        );
     }
     openWon() {
         this._openLeads(
-            [["type", "=", "opportunity"], ["stage_id.is_won", "=", true]],
+            [
+                ["type", "=", "opportunity"],
+                ["stage_id.is_won", "=", true],
+                ...this._periodDomain(),
+            ],
             "Won Opportunities"
         );
+    }
+
+    // Click a funnel stage -> open exactly the opportunities it counts:
+    // that stage, opportunity type, active, within the selected period
+    // (same filter as _chart_funnel on the server).
+    openStage(stage) {
+        const domain = [
+            ["type", "=", "opportunity"],
+            ["active", "=", true],
+            ["stage_id", "=", stage.stageId || false],
+            ...this._periodDomain(),
+        ];
+        this._openLeads(domain, stage.label || "Opportunities");
     }
 
     get kpis() {
