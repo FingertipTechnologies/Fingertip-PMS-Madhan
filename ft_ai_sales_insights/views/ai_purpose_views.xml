@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ai_insights_purpose_list" model="ir.ui.view">
+        <field name="name">ft.ai.insights.purpose.list</field>
+        <field name="model">ft.ai.insights.purpose</field>
+        <field name="arch" type="xml">
+            <list string="Purposes" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="icon"/>
+                <field name="description" optional="show"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_ai_insights_purpose_form" model="ir.ui.view">
+        <field name="name">ft.ai.insights.purpose.form</field>
+        <field name="model">ft.ai.insights.purpose</field>
+        <field name="arch" type="xml">
+            <form string="Purpose">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="icon"/>
+                        </group>
+                        <group>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <field name="description" placeholder="Short description shown in the picker"/>
+                    <group string="Prompt"
+                           help="Purpose-specific instructions appended to the master prompt.">
+                        <field name="prompt" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_ai_insights_purpose" model="ir.actions.act_window">
+        <field name="name">Purposes</field>
+        <field name="res_model">ft.ai.insights.purpose</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+</odoo>
