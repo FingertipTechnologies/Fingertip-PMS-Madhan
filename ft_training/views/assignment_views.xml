@@ -6,11 +6,11 @@
         <field name="model">ft.assignment</field>
         <field name="arch" type="xml">
             <list string="Assignments" class="o_ft_assignment_list">
+                <field name="title" width="200"/>
                 <field name="domain" width="120"/>
                 <field name="phase_id" width="120"/>
                 <field name="deadline" width="120"/>
                 <field name="marks" width="120"/>
-                <field name="description" width="500" optional="show"/>
             </list>
         </field>
     </record>
@@ -23,6 +23,7 @@
                 <sheet>
                     <group>
                         <group>
+                            <field name="title"/>
                             <field name="domain"/>
                             <field name="phase_id"/>
                             <field name="deadline"/>

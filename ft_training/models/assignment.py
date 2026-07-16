@@ -17,6 +17,7 @@ class Assignment(models.Model):
     _order = 'deadline desc, id desc'
     _rec_name = 'domain'
 
+    title = fields.Char(string='Title')
     description = fields.Text(string='Description')
     deadline = fields.Date(string='Deadline')
     marks = fields.Integer(string='Marks', help='Maximum marks, rated 0 to 100.')
