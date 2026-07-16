@@ -16,6 +16,7 @@ class FtTarget(models.Model):
     achievement = fields.Float(
         string="Achievement %", compute="_compute_achievement", store=True
     )
+    description = fields.Text(string="Description")
     active = fields.Boolean(default=True)
 
     @api.depends("target_type_id", "assigned_to", "period_id")

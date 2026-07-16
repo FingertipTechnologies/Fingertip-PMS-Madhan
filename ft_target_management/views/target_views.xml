@@ -37,6 +37,8 @@
                             <field name="achievement" widget="percentage"/>
                         </group>
                     </group>
+                    <separator string="Description"/>
+                    <field name="description" placeholder="Add notes about this target..."/>
                     <field name="active" invisible="1"/>
                 </sheet>
             </form>
