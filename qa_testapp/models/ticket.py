@@ -350,6 +350,15 @@ class QATicket(models.Model):
             for rec in self:
                 if rec.approval_state == 'approved':
                     rec._notify_assignee()
+        # Re-lock once the creator's edit is saved, so Edit shows again for the
+        # next round. The unlock is meant to last for one edit; without this the
+        # flag stayed True forever and the button hid permanently. Skip when the
+        # flag is itself being written (that write IS action_creator_edit), and
+        # go through super() so this never recurses.
+        if 'creator_unlocked' not in vals:
+            unlocked = self.filtered('creator_unlocked')
+            if unlocked:
+                super(QATicket, unlocked).write({'creator_unlocked': False})
         return res
 
     def action_creator_edit(self):

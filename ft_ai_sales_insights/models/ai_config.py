@@ -47,11 +47,24 @@ class FtAiInsightsConfig(models.Model):
     max_tokens = fields.Integer(default=1500)
     request_timeout = fields.Integer(string="Request Timeout (s)", default=60)
     master_prompt = fields.Text(
-        help="System prompt prepended to every analysis. Editable — no code "
-        "change needed."
+        string="Sales Master Prompt",
+        help="System prompt prepended to every Sales analysis. Editable — no "
+        "code change needed.",
     )
     default_purpose_id = fields.Many2one(
-        "ft.ai.insights.purpose", string="Default Purpose"
+        "ft.ai.insights.purpose",
+        string="Default Sales Purpose",
+        domain="[('applies_to', '=', 'sales')]",
+    )
+    project_master_prompt = fields.Text(
+        string="Project Master Prompt",
+        help="System prompt prepended to every Project analysis. Editable — no "
+        "code change needed.",
+    )
+    default_project_purpose_id = fields.Many2one(
+        "ft.ai.insights.purpose",
+        string="Default Project Purpose",
+        domain="[('applies_to', '=', 'project')]",
     )
     debug_mode = fields.Boolean(
         help="Store the full aggregated payload on each audit log entry and "

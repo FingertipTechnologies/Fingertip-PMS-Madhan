@@ -5,15 +5,20 @@
         <field name="name">ft.trainee.review.list</field>
         <field name="model">ft.trainee.review</field>
         <field name="arch" type="xml">
-            <list string="Reviews">
-                <field name="trainee_id"/>
-                <field name="attitude"/>
-                <field name="communication"/>
-                <field name="understanding"/>
-                <field name="technical"/>
-                <field name="problem_solving"/>
-                <field name="self_dependency"/>
-                <field name="create_date" string="Date"/>
+            <!-- Widths are sized to each column's own content rather than shared
+                 flat. The score columns are right-aligned numbers, so a header
+                 wider than its box (Self Dependency) pushed its value up against
+                 the Date column and the two read as one. Self Dependency gets
+                 room for its label; Date gets room for a full datetime. -->
+            <list string="Reviews" class="o_ft_review_list">
+                <field name="trainee_id" width="180px"/>
+                <field name="attitude" width="110px"/>
+                <field name="communication" width="130px"/>
+                <field name="understanding" width="130px"/>
+                <field name="technical" width="110px"/>
+                <field name="problem_solving" width="140px"/>
+                <field name="self_dependency" width="160px"/>
+                <field name="create_date" string="Date" width="180px"/>
             </list>
         </field>
     </record>

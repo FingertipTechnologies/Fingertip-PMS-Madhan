@@ -1,6 +1,9 @@
 {
     'name': 'FT AI Sales Insights',
-    'version': '18.0.1.0.0',
+    # 1.1.0 adds AI Project Insights + re-aims milestones at billing.
+    # The bump also triggers migrations/18.0.1.1.0, which refreshes the
+    # noupdate-protected project purposes.
+    'version': '18.0.1.1.0',
     'category': 'Sales/CRM',
     'summary': 'AI-powered Sales & CRM analytics — configurable prompts, pluggable AI providers (OpenAI/Claude/Gemini/Azure/Ollama).',
     'description': """
@@ -30,6 +33,9 @@ Key design points
         'mail',
         'crm',
         'sale_management',
+        # Project Insights reads projects, tasks, timesheets and employees.
+        'project',
+        'hr_timesheet',
         # Extended (AI Summary button injected into its dashboard). Keeping the
         # dependency here means all AI code lives in this module.
         'ft_project_dashboard',
@@ -53,6 +59,9 @@ Key design points
             'ft_ai_sales_insights/static/src/js/insight_sections.js',
             'ft_ai_sales_insights/static/src/js/ai_sales_insights.js',
             'ft_ai_sales_insights/static/src/xml/ai_sales_insights.xml',
+            # AI Project Insights — reuses the components + styling above.
+            'ft_ai_sales_insights/static/src/js/ai_project_insights.js',
+            'ft_ai_sales_insights/static/src/xml/ai_project_insights.xml',
             # AI Summary injected into the Project Dashboard.
             'ft_ai_sales_insights/static/src/scss/project_dashboard_ai.scss',
             'ft_ai_sales_insights/static/src/js/project_dashboard_ai.js',

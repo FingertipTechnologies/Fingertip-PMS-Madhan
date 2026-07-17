@@ -1,43 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-    <!-- ============================ KPI ============================ -->
-    <t t-name="ft_ai_sales_insights.InsightKpi">
-        <div class="aisi_kpi" t-att-class="statusClass"
-             t-on-click="openRecords"
-             t-att-title="clickable ? 'Open these records' : null">
-            <div class="aisi_kpi_top">
-                <span class="aisi_kpi_value"><t t-esc="props.kpi.value"/></span>
-                <i class="fa aisi_kpi_trend" t-att-class="trendIcon"/>
-            </div>
-            <div class="aisi_kpi_label">
-                <t t-esc="props.kpi.label"/>
-                <i class="fa fa-external-link aisi_kpi_link" t-if="clickable"/>
-            </div>
-        </div>
-    </t>
-
-    <!-- ========================== SECTION ========================== -->
-    <t t-name="ft_ai_sales_insights.InsightSection">
-        <div class="aisi_section" t-att-class="toneClass">
-            <div class="aisi_section_head">
-                <i class="fa" t-att-class="props.section.icon || 'fa-info-circle'"/>
-                <h4><t t-esc="props.section.title"/></h4>
-            </div>
-            <p class="aisi_section_body" t-if="props.section.body"
-               t-esc="props.section.body"/>
-            <ul t-if="items.length" class="aisi_section_items">
-                <li t-foreach="items" t-as="it" t-key="it_index"><t t-esc="it"/></li>
-            </ul>
-        </div>
-    </t>
-
-    <!-- ======================= MAIN DASHBOARD ====================== -->
-    <t t-name="ft_ai_sales_insights.AiSalesInsights">
+    <!-- AI Project Insights — mirrors the Sales dashboard. Reuses the
+         InsightKpi / InsightSection components and the shared `aisi_*` styling,
+         so both dashboards look and behave identically; only the filter bar and
+         the domain-specific result cards differ. -->
+    <t t-name="ft_ai_sales_insights.AiProjectInsights">
         <div class="aisi_dashboard">
 
             <div class="aisi_header">
-                <h1 class="aisi_title"><i class="fa fa-magic me-2"/>AI Sales Insights</h1>
+                <h1 class="aisi_title"><i class="fa fa-magic me-2"/>AI Project Insights</h1>
                 <div class="aisi_meta" t-if="meta.model">
                     <span class="aisi_badge"><i class="fa fa-microchip"/> <t t-esc="meta.provider"/> · <t t-esc="meta.model"/></span>
                     <span class="aisi_badge" t-if="meta.tokens"><i class="fa fa-hashtag"/> <t t-esc="meta.tokens"/> tokens</span>
@@ -80,44 +52,21 @@
                     </div>
 
                     <div class="aisi_field">
-                        <label>Sales Team</label>
-                        <select t-on-change="onTeam">
-                            <option value="all">All Sales Teams</option>
-                            <t t-foreach="state.options.teams" t-as="t" t-key="t.id">
-                                <option t-att-value="t.id"><t t-esc="t.name"/></option>
+                        <label>Project</label>
+                        <select t-on-change="onProject">
+                            <option value="all">All Projects</option>
+                            <t t-foreach="state.options.projects" t-as="p" t-key="p.id">
+                                <option t-att-value="p.id"><t t-esc="p.name"/></option>
                             </t>
                         </select>
                     </div>
 
                     <div class="aisi_field">
-                        <label>Salesperson</label>
-                        <select t-on-change="onUser">
-                            <option value="all">All Salespersons</option>
-                            <t t-foreach="state.options.salespersons" t-as="u" t-key="u.id">
-                                <option t-att-value="u.id"><t t-esc="u.name"/></option>
-                            </t>
-                        </select>
-                    </div>
-
-                    <div class="aisi_field aisi_field--customer">
-                        <label>Customer</label>
-                        <div class="aisi_customer">
-                            <input type="text" placeholder="All Customers"
-                                   t-att-value="state.customerQuery" t-on-input="onCustomerInput"/>
-                            <i class="fa fa-times aisi_customer_clear" t-if="f.partner_id !== 'all'" t-on-click="clearCustomer"/>
-                            <div class="aisi_customer_menu" t-if="state.customerResults.length">
-                                <div class="aisi_customer_opt" t-foreach="state.customerResults" t-as="c" t-key="c.id"
-                                     t-on-click="() => this.pickCustomer(c)"><t t-esc="c.name"/></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="aisi_field">
-                        <label>Sales Stage</label>
-                        <select t-on-change="onStage">
-                            <option value="all">All Stages</option>
-                            <t t-foreach="state.options.stages" t-as="s" t-key="s.id">
-                                <option t-att-value="s.id"><t t-esc="s.name"/></option>
+                        <label>Developer</label>
+                        <select t-on-change="onDeveloper">
+                            <option value="all">All Developers</option>
+                            <t t-foreach="state.options.developers" t-as="dev" t-key="dev.id">
+                                <option t-att-value="dev.id"><t t-esc="dev.name"/></option>
                             </t>
                         </select>
                     </div>
@@ -125,8 +74,8 @@
                     <div class="aisi_field aisi_field--purpose">
                         <label>Purpose</label>
                         <select t-on-change="onPurpose">
-                            <t t-foreach="state.options.purposes" t-as="p" t-key="p.id">
-                                <option t-att-value="p.id" t-att-selected="p.id === f.purpose_id"><t t-esc="p.name"/></option>
+                            <t t-foreach="state.options.purposes" t-as="pu" t-key="pu.id">
+                                <option t-att-value="pu.id" t-att-selected="pu.id === f.purpose_id"><t t-esc="pu.name"/></option>
                             </t>
                         </select>
                     </div>
@@ -139,7 +88,7 @@
                 <!-- Analyzing -->
                 <div class="aisi_analyzing" t-if="state.analyzing">
                     <i class="fa fa-circle-o-notch fa-spin fa-2x"/>
-                    <p>Analysing your sales data with AI…</p>
+                    <p>Analysing your project data with AI…</p>
                 </div>
 
                 <!-- Error -->
@@ -150,7 +99,7 @@
                 <!-- Empty state -->
                 <div class="aisi_empty" t-if="!state.result and !state.analyzing and !state.error">
                     <i class="fa fa-lightbulb-o fa-3x"/>
-                    <p>Choose your filters and a purpose, then hit <b>Analyse</b>.</p>
+                    <p>Choose a project or developer and a purpose, then hit <b>Analyse</b>.</p>
                 </div>
 
                 <!-- ===================== RESULT ===================== -->
@@ -172,7 +121,7 @@
                                 <div class="aisi_score_ring">
                                     <span class="aisi_score_num"><t t-esc="insight.overall_score"/></span>
                                 </div>
-                                <div class="aisi_score_label"><t t-esc="insight.score_label || 'Overall Score'"/></div>
+                                <div class="aisi_score_label"><t t-esc="insight.score_label || 'Delivery Health'"/></div>
                             </div>
                             <div class="aisi_summary" t-if="insight.executive_summary">
                                 <h3>Executive Summary</h3>
@@ -188,43 +137,28 @@
                             <InsightSection t-foreach="insight.sections" t-as="sec" t-key="sec_index" section="sec"/>
                         </div>
 
-                        <div class="aisi_cols">
-                            <!-- Top opportunities -->
-                            <div class="aisi_card" t-if="insight.top_opportunities and insight.top_opportunities.length">
-                                <h4><i class="fa fa-star"/> Top Opportunities</h4>
-                                <ul class="aisi_list">
-                                    <li t-foreach="insight.top_opportunities" t-as="o" t-key="o_index">
-                                        <span class="aisi_list_name"><t t-esc="o.name"/></span>
-                                        <span class="aisi_chip aisi_chip--good" t-if="o.amount"><t t-esc="o.amount"/></span>
-                                        <span class="aisi_chip" t-if="o.probability"><t t-esc="o.probability"/></span>
-                                        <div class="aisi_list_note" t-if="o.note" t-esc="o.note"/>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <!-- At-risk deals -->
-                            <div class="aisi_card" t-if="insight.at_risk_deals and insight.at_risk_deals.length">
-                                <h4><i class="fa fa-warning"/> At-Risk Deals</h4>
-                                <ul class="aisi_list">
-                                    <li t-foreach="insight.at_risk_deals" t-as="d" t-key="d_index">
-                                        <span class="aisi_list_name"><t t-esc="d.name"/></span>
-                                        <span class="aisi_chip aisi_chip--bad" t-if="d.amount"><t t-esc="d.amount"/></span>
-                                        <div class="aisi_list_note" t-if="d.reason" t-esc="d.reason"/>
-                                    </li>
-                                </ul>
-                            </div>
+                        <!-- At-risk projects -->
+                        <div class="aisi_card" t-if="insight.at_risk_projects and insight.at_risk_projects.length">
+                            <h4><i class="fa fa-warning"/> At-Risk Projects</h4>
+                            <ul class="aisi_list">
+                                <li t-foreach="insight.at_risk_projects" t-as="p" t-key="p_index">
+                                    <span class="aisi_list_name"><t t-esc="p.name"/></span>
+                                    <span class="aisi_chip aisi_chip--bad" t-if="p.reason"><t t-esc="p.reason"/></span>
+                                    <div class="aisi_list_note" t-if="p.detail" t-esc="p.detail"/>
+                                </li>
+                            </ul>
                         </div>
 
-                        <!-- Salesperson performance -->
-                        <div class="aisi_card" t-if="insight.salesperson_performance and insight.salesperson_performance.length">
-                            <h4><i class="fa fa-users"/> Salesperson Performance</h4>
+                        <!-- Resource performance -->
+                        <div class="aisi_card" t-if="insight.resource_performance and insight.resource_performance.length">
+                            <h4><i class="fa fa-users"/> Resource Performance</h4>
                             <table class="aisi_table">
-                                <thead><tr><th>Salesperson</th><th>Highlight</th><th>Coaching</th></tr></thead>
+                                <thead><tr><th>Developer</th><th>Highlight</th><th>Coaching</th></tr></thead>
                                 <tbody>
-                                    <tr t-foreach="insight.salesperson_performance" t-as="sp" t-key="sp_index">
-                                        <td><t t-esc="sp.name"/></td>
-                                        <td><t t-esc="sp.highlight"/></td>
-                                        <td><t t-esc="sp.coaching"/></td>
+                                    <tr t-foreach="insight.resource_performance" t-as="rp" t-key="rp_index">
+                                        <td><t t-esc="rp.name"/></td>
+                                        <td><t t-esc="rp.highlight"/></td>
+                                        <td><t t-esc="rp.coaching"/></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -242,16 +176,8 @@
                                 </ul>
                             </div>
 
-                            <!-- Immediate priorities + forecast + warnings -->
-                            <div class="aisi_card" t-if="(insight.immediate_priorities and insight.immediate_priorities.length) or insight.forecast or (insight.warnings and insight.warnings.length)">
-                                <div t-if="insight.forecast">
-                                    <h4><i class="fa fa-line-chart"/> Forecast</h4>
-                                    <p class="aisi_forecast">
-                                        <span class="aisi_forecast_amt"><t t-esc="insight.forecast.amount"/></span>
-                                        <span class="aisi_chip" t-if="insight.forecast.confidence">confidence: <t t-esc="insight.forecast.confidence"/></span>
-                                    </p>
-                                    <p class="aisi_list_note" t-if="insight.forecast.note" t-esc="insight.forecast.note"/>
-                                </div>
+                            <!-- Immediate priorities + warnings -->
+                            <div class="aisi_card" t-if="(insight.immediate_priorities and insight.immediate_priorities.length) or (insight.warnings and insight.warnings.length)">
                                 <div t-if="insight.immediate_priorities and insight.immediate_priorities.length">
                                     <h4><i class="fa fa-flag"/> Immediate Priorities</h4>
                                     <ul class="aisi_list">

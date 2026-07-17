@@ -279,15 +279,15 @@ export class ProjectDashboard extends Component {
         this.state.projectHoursSearch = ev.target.value || "";
     }
 
-    // Dual-axis options for the Progress Trend line chart.
+    // Dual-axis options for the Progress Trend bar chart. The server buckets the
+    // range into days/weeks/months, so every label it sends is meant to be shown.
     get trendOptions() {
         return {
             interaction: { mode: "index", intersect: false },
             scales: {
                 x: {
                     grid: { display: false },
-                    // Thin out the day labels so a long range stays readable.
-                    ticks: { autoSkip: true, maxTicksLimit: 16, maxRotation: 0 },
+                    ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 },
                 },
                 y: {
                     type: "linear", position: "left", beginAtZero: true,

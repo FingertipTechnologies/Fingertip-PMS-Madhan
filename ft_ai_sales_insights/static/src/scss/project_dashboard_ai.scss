@@ -32,10 +32,14 @@
         .ftpd_ai_left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
             i { color: #6d28d9; } }
         .ftpd_ai_heading { font-size: 15px; font-weight: 700; }
-        .ftpd_ai_period {
+        .ftpd_ai_period,
+        .ftpd_ai_purpose {
             border: 1px solid var(--ftpd-border); border-radius: 8px;
             padding: 7px 10px; font-size: 13px; min-height: 36px;
         }
+        // The purpose label carries more text than the period preset; cap it so
+        // a long name can't push the Generate button off the bar.
+        .ftpd_ai_purpose { max-width: 240px; }
         .ftpd_ai_meta { font-size: 12px; color: var(--ftpd-muted); }
 
         .ftpd_ai_note {

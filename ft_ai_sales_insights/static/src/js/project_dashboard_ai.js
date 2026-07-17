@@ -19,6 +19,8 @@ patch(ProjectDashboard.prototype, {
             loading: false,
             period: "this_month",
             periods: [],
+            purposeId: null,
+            purposes: [],
             configured: false,
             provider: null,
             error: null,
@@ -28,10 +30,15 @@ patch(ProjectDashboard.prototype, {
             try {
                 const opts = await this.orm.call(
                     "ft.project.dashboard",
-                    "get_ai_period_options",
+                    "get_ai_options",
                     []
                 );
                 this.aiState.periods = opts.periods || [];
+                this.aiState.purposes = opts.purposes || [];
+                // Fall back to the first purpose so Generate always has one,
+                // matching the server-side resolver.
+                this.aiState.purposeId =
+                    opts.default_purpose_id || this.aiState.purposes[0]?.id || null;
                 this.aiState.configured = opts.configured;
                 this.aiState.provider = opts.provider;
             } catch {
@@ -46,6 +53,9 @@ patch(ProjectDashboard.prototype, {
     onAiPeriod(ev) {
         this.aiState.period = ev.target.value;
     },
+    onAiPurpose(ev) {
+        this.aiState.purposeId = parseInt(ev.target.value, 10) || null;
+    },
     async runAiSummary() {
         const ai = this.aiState;
         if (ai.loading) {
@@ -57,7 +67,7 @@ patch(ProjectDashboard.prototype, {
             ai.result = await this.orm.call(
                 "ft.project.dashboard",
                 "get_ai_summary",
-                [ai.period]
+                [ai.period, ai.purposeId]
             );
         } catch (e) {
             ai.error = e?.data?.message || e?.message || "AI summary failed.";

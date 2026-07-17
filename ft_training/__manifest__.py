@@ -31,7 +31,7 @@ Supports evaluating trainee progress from a centralized record.
     ],
     'assets': {
         'web.assets_backend': [
-            'ft_training/static/src/css/assignment_list.css',
+            'ft_training/static/src/css/training_lists.css',
         ],
     },
     'installable': True,

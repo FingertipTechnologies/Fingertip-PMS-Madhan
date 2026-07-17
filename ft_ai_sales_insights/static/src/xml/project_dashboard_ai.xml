@@ -18,6 +18,14 @@
                     <div class="ftpd_ai_left">
                         <i class="fa fa-magic"/>
                         <span class="ftpd_ai_heading">AI Project Summary</span>
+                        <select class="ftpd_ai_purpose" t-on-change="onAiPurpose"
+                                title="What to analyse">
+                            <t t-foreach="aiState.purposes" t-as="pu" t-key="pu.id">
+                                <option t-att-value="pu.id" t-att-selected="pu.id === aiState.purposeId">
+                                    <t t-esc="pu.name"/>
+                                </option>
+                            </t>
+                        </select>
                         <select class="ftpd_ai_period" t-on-change="onAiPeriod">
                             <t t-foreach="aiState.periods" t-as="p" t-key="p.key">
                                 <option t-att-value="p.key" t-att-selected="p.key === aiState.period">
@@ -31,6 +39,7 @@
                         </button>
                     </div>
                     <span class="ftpd_ai_meta" t-if="aiMeta.model">
+                        <t t-if="aiMeta.purpose"><t t-esc="aiMeta.purpose"/> · </t>
                         <t t-esc="aiMeta.provider"/> · <t t-esc="aiMeta.model"/>
                         <t t-if="aiMeta.tokens"> · <t t-esc="aiMeta.tokens"/> tokens</t>
                     </span>

@@ -15,7 +15,9 @@ class Assignment(models.Model):
     _name = 'ft.assignment'
     _description = 'Assignment'
     _order = 'deadline desc, id desc'
-    _rec_name = 'domain'
+    # Assignments are identified by their Title everywhere they are referenced
+    # (Evaluation, Review, …). Also makes name_search match on the title.
+    _rec_name = 'title'
 
     title = fields.Char(string='Title')
     description = fields.Text(string='Description')
@@ -32,10 +34,18 @@ class Assignment(models.Model):
             if rec.marks < 0 or rec.marks > 100:
                 raise ValidationError(_("Marks must be between 0 and 100."))
 
-    def name_get(self):
-        result = []
+    @api.depends('title', 'domain')
+    def _compute_display_name(self):
+        """Show the assignment's Title wherever it is referenced.
+
+        Replaces the old ``name_get`` override, which Odoo 18 no longer calls —
+        that is why assignments were displaying the raw domain value ("odoo")
+        instead of a readable name.
+        """
         for rec in self:
-            domain = dict(DOMAIN_SELECTION).get(rec.domain) or _("Assignment")
-            day = fields.Date.to_string(rec.deadline) if rec.deadline else ''
-            result.append((rec.id, f"{domain} ({day})" if day else domain))
-        return result
+            title = (rec.title or '').strip()
+            # Assignments created before the Title field existed have none;
+            # fall back to the domain label so they stay identifiable.
+            rec.display_name = (
+                title or dict(DOMAIN_SELECTION).get(rec.domain) or _("Assignment")
+            )

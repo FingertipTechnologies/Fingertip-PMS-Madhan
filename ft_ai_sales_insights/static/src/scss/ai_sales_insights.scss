@@ -136,7 +136,21 @@
         .aisi_kpi_top { display: flex; align-items: baseline; justify-content: space-between; }
         .aisi_kpi_value { font-size: 22px; font-weight: 800; }
         .aisi_kpi_trend { font-size: 12px; color: var(--aisi-muted); }
-        .aisi_kpi_label { font-size: 12px; color: var(--aisi-muted); margin-top: 4px; }
+        .aisi_kpi_label {
+            font-size: 12px; color: var(--aisi-muted); margin-top: 4px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        // Only tiles with a real drill-down behind them advertise a click.
+        &.aisi_kpi--clickable {
+            cursor: pointer;
+            transition: box-shadow .12s ease, transform .12s ease;
+            &:hover {
+                box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+                transform: translateY(-1px);
+                .aisi_kpi_link { opacity: 1; }
+            }
+        }
+        .aisi_kpi_link { font-size: 10px; opacity: .45; }
     }
 
     // ---------------- Sections ----------------

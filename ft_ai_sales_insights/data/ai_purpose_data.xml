@@ -189,5 +189,106 @@
             <field name="prompt">Analyse the supplied sales and CRM data and surface the most important, actionable insights for a sales leader, with specific recommended actions and priorities.</field>
         </record>
 
+        <!-- ============================================================
+             Project purposes (applies_to='project').
+             The payload here is delivery data (projects, resources,
+             task_health, milestones, accounts) — see ProjectDataCollector.
+             Add more by creating records; no Python change needed.
+             ============================================================ -->
+
+        <record id="purpose_project_status" model="ft.ai.insights.purpose">
+            <field name="name">Project Status Summary</field>
+            <field name="code">project_status</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">10</field>
+            <field name="icon">fa-folder-open</field>
+            <field name="description">Overall delivery status: project-wise and resource-wise work, plus task health.</field>
+            <field name="prompt">Produce an executive delivery status summary.
+
+Emit sections in exactly this order, omitting any whose data is absent:
+1. "Project-wise Summary" (fa-folder-open) — used vs estimated hours, completed vs pending tasks, variance_pct.
+2. "Resource-wise Summary" (fa-users) — workload per person from the resources block.
+3. "Task Health" (fa-tasks) — open/overdue/unassigned/no-deadline counts and throughput from task_health.
+4. "Accounts, Opportunities &amp; Activities" (fa-handshake-o) — ONLY if an accounts block is present.
+
+Call out what is on track and what is slipping. Where variance_pct is null there is no estimate to compare against: report that as an estimation gap, never as being on budget.</field>
+        </record>
+
+        <record id="purpose_project_delivery_risk" model="ft.ai.insights.purpose">
+            <field name="name">Analyse Delivery Risk</field>
+            <field name="code">project_delivery_risk</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">20</field>
+            <field name="icon">fa-exclamation-triangle</field>
+            <field name="description">Overdue tasks and projects trending over estimate.</field>
+            <field name="prompt">Assess delivery risk. Use overdue_tasks, no_deadline_tasks and per-project variance_pct to identify which projects are most at risk and why. Rank risks by severity, quantify each, and give a concrete mitigation per risk. Put anything needing immediate attention in warnings.
+
+Emit sections in this order: "At-Risk Delivery" (fa-exclamation-triangle), then "Schedule Gaps" (fa-calendar-times-o) covering work with no deadline.
+
+Only overdue_tasks evidences lateness. A task or project that is merely open, pending or unestimated is NOT late — say the schedule cannot be assessed instead of inferring delay.</field>
+        </record>
+
+        <record id="purpose_project_resource_utilisation" model="ft.ai.insights.purpose">
+            <field name="name">Analyse Resource Utilisation</field>
+            <field name="code">project_resource_utilisation</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">30</field>
+            <field name="icon">fa-users</field>
+            <field name="description">Who is over- or under-loaded, and how work is distributed.</field>
+            <field name="prompt">Analyse resource utilisation from the resources block. Identify over-loaded and under-utilised people using logged hours and pending vs completed task counts, and comment on how evenly work is distributed. Flag key-person concentration risk and recommend specific rebalancing actions.</field>
+        </record>
+
+        <record id="purpose_project_estimate_accuracy" model="ft.ai.insights.purpose">
+            <field name="name">Analyse Estimate Accuracy</field>
+            <field name="code">project_estimate_accuracy</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">40</field>
+            <field name="icon">fa-balance-scale</field>
+            <field name="description">Used vs estimated hours, and which projects consistently over-run.</field>
+            <field name="prompt">Analyse estimation accuracy using used_hours, estimated_hours and variance_pct per project. Identify which projects over-run and which are under-estimated, quantify the gap, and look for patterns. Note where variance_pct is null (no estimate recorded) as an estimation-discipline gap rather than treating it as accurate. Recommend how to improve estimation.</field>
+        </record>
+
+        <record id="purpose_project_milestone_progress" model="ft.ai.insights.purpose">
+            <field name="name">Milestone Billing &amp; Revenue</field>
+            <field name="code">project_milestone_billing</field>
+            <field name="applies_to">project</field>
+            <field name="include_milestones" eval="True"/>
+            <field name="sequence">50</field>
+            <field name="icon">fa-money</field>
+            <field name="description">Delivered-but-unbilled and invoiced-but-unpaid milestone value.</field>
+            <field name="prompt">Analyse milestone BILLING using the milestones block. These are payment milestones (see status_meaning), not a delivery schedule.
+
+Lead with the cash: completed_not_invoiced is delivered work that has never been billed, and awaiting_payment is invoiced work not yet collected. Quantify both in money and count — they are the point of this analysis. Then cover the status mix in by_status and reconcile total_amount, paid_amount and outstanding_amount.
+
+Emit sections in this order:
+1. "Unbilled Value" (fa-money) — completed_not_invoiced, and what to invoice now.
+2. "Collection" (fa-credit-card) — awaiting_payment and outstanding_amount.
+3. "Milestone Mix" (fa-list) — by_status breakdown.
+
+Do NOT comment on delivery timing, delay or progress: these records carry no usable due dates. If no_due_date is high, state once that due dates are not maintained so schedule cannot be assessed, and move on. Never call a milestone late unless it appears in overdue_list.
+
+If the milestones block reports available=false or total=0, say milestone data is unavailable rather than inferring anything.</field>
+        </record>
+
+        <record id="purpose_project_backlog_hygiene" model="ft.ai.insights.purpose">
+            <field name="name">Analyse Backlog Hygiene</field>
+            <field name="code">project_backlog_hygiene</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">60</field>
+            <field name="icon">fa-tasks</field>
+            <field name="description">Unassigned tasks, missing deadlines and stalled backlog.</field>
+            <field name="prompt">Analyse backlog hygiene using the task_health block: open_tasks, overdue_tasks, unassigned_tasks, no_deadline_tasks, closed_in_period and by_state. Quantify how much of the backlog is unassigned or has no deadline, comment on throughput (closed_in_period vs open_tasks), and recommend specific clean-up actions for the PMO.</field>
+        </record>
+
+        <record id="purpose_project_custom" model="ft.ai.insights.purpose">
+            <field name="name">Custom Project Analysis</field>
+            <field name="code">project_custom</field>
+            <field name="applies_to">project</field>
+            <field name="sequence">900</field>
+            <field name="icon">fa-magic</field>
+            <field name="description">General-purpose delivery analysis; edit this prompt for ad-hoc needs.</field>
+            <field name="prompt">Analyse the supplied project delivery data and surface the most important, actionable insights for a delivery leader, with specific recommended actions and priorities.</field>
+        </record>
+
     </data>
 </odoo>

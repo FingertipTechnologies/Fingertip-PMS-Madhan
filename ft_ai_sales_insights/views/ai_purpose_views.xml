@@ -9,6 +9,7 @@
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="code"/>
+                <field name="applies_to"/>
                 <field name="icon"/>
                 <field name="description" optional="show"/>
                 <field name="active" widget="boolean_toggle"/>
@@ -26,11 +27,14 @@
                         <group>
                             <field name="name"/>
                             <field name="code"/>
+                            <field name="applies_to"/>
                             <field name="icon"/>
                         </group>
                         <group>
                             <field name="sequence"/>
                             <field name="active"/>
+                            <field name="include_milestones"
+                                   invisible="applies_to != 'project'"/>
                         </group>
                     </group>
                     <field name="description" placeholder="Short description shown in the picker"/>
@@ -43,11 +47,34 @@
         </field>
     </record>
 
+    <record id="view_ai_insights_purpose_search" model="ir.ui.view">
+        <field name="name">ft.ai.insights.purpose.search</field>
+        <field name="model">ft.ai.insights.purpose</field>
+        <field name="arch" type="xml">
+            <search string="Purposes">
+                <field name="name"/>
+                <field name="code"/>
+                <filter name="filter_sales" string="Sales"
+                        domain="[('applies_to', '=', 'sales')]"/>
+                <filter name="filter_project" string="Project"
+                        domain="[('applies_to', '=', 'project')]"/>
+                <separator/>
+                <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="filter_inactive" string="Archived" domain="[('active', '=', False)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_applies_to" string="Applies To"
+                            context="{'group_by': 'applies_to'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
     <record id="action_ai_insights_purpose" model="ir.actions.act_window">
         <field name="name">Purposes</field>
         <field name="res_model">ft.ai.insights.purpose</field>
         <field name="view_mode">list,form</field>
-        <field name="context">{'active_test': False}</field>
+        <field name="search_view_id" ref="view_ai_insights_purpose_search"/>
+        <field name="context">{'active_test': False, 'search_default_group_applies_to': 1}</field>
     </record>
 
 </odoo>

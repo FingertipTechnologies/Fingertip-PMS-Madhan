@@ -21,6 +21,7 @@ from odoo.addons.ft_ai_sales_insights.services.ai_service import AIService
 from odoo.addons.ft_ai_sales_insights.services.data_collector import (
     SalesDataCollector,
 )
+from odoo.addons.ft_ai_sales_insights.services.drilldown import attach_kpi_actions
 from odoo.addons.ft_ai_sales_insights.services.prompt_builder import PromptBuilder
 from odoo.addons.ft_ai_sales_insights.services.providers.base import AIProviderError
 
@@ -65,7 +66,8 @@ class FtAiSalesInsights(models.TransientModel):
         )
         stages = self.env["crm.stage"].search_read([], ["id", "name"], order="sequence")
         purposes = self.env["ft.ai.insights.purpose"].search_read(
-            [("active", "=", True)], ["id", "name", "code", "icon", "description"],
+            [("active", "=", True), ("applies_to", "=", "sales")],
+            ["id", "name", "code", "icon", "description"],
             order="sequence, name",
         )
         return {
@@ -154,7 +156,11 @@ class FtAiSalesInsights(models.TransientModel):
         )
 
         # 1) Collect aggregated data AS THE CURRENT USER (record rules apply).
-        payload = SalesDataCollector(self.env, filters, date_from, date_to).collect()
+        collector = SalesDataCollector(self.env, filters, date_from, date_to)
+        payload = collector.collect()
+        # Offer the model the metrics it may tag for click-through.
+        drilldowns = collector.drilldowns()
+        payload["available_kpi_keys"] = sorted(drilldowns)
 
         # 2) Build the prompt from editable master + purpose prompts.
         currency = self.env.company.currency_id.name or ""
@@ -195,6 +201,7 @@ class FtAiSalesInsights(models.TransientModel):
 
         duration_ms = int((time.monotonic() - started) * 1000)
         structured, raw_text = self._parse_response(result.text)
+        structured = attach_kpi_actions(structured, drilldowns)
 
         # 4) Audit log.
         log = self.env["ft.ai.insights.log"].sudo().create({
@@ -231,17 +238,11 @@ class FtAiSalesInsights(models.TransientModel):
     # Helpers
     # ------------------------------------------------------------------
     def _resolve_purpose(self, filters, cfg):
-        Purpose = self.env["ft.ai.insights.purpose"]
-        pid = filters.get("purpose_id")
-        purpose = Purpose.browse(int(pid)) if pid else cfg.default_purpose_id
-        if not purpose or not purpose.exists():
-            purpose = Purpose.search([("active", "=", True)], limit=1)
-        if not purpose:
-            raise UserError(
-                "No analysis purposes are configured. Add one under "
-                "AI Insights > Configuration > Purposes."
-            )
-        return purpose
+        # Shared with the Project dashboard so both resolve identically; only
+        # the domain differs.
+        return self.env["ft.ai.insights.purpose"]._resolve_for(
+            "sales", filters.get("purpose_id"), default=cfg.default_purpose_id
+        )
 
     @staticmethod
     def _filters_label(filters):

@@ -1,0 +1,51 @@
+/* Left-aligned score columns across the Training lists.
+
+   Odoo 18 right-aligns any integer/float column, and it decides that from the
+   FIELD TYPE alone — a `class` on the field reaches the value cell but never the
+   header, so the arch can't turn it off. These columns are scores and ratings
+   rather than money or totals, so they read better flush left.
+
+   Two hooks are needed per column because the header and the cell are styled
+   separately:
+     - header label: thead th[data-name="..."] .o_list_number_th
+     - value cell:   tbody td[name="..."]
+   Each rule is scoped by the view class on the <list> arch, so no other list in
+   the database is affected. !important because the framework rules being
+   overridden have equal specificity and would otherwise win on source order. */
+
+/* --- Assignment: Marks ------------------------------------------------ */
+.o_ft_assignment_list thead th[data-name="marks"] .o_list_number_th {
+    text-align: left !important;
+}
+
+.o_ft_assignment_list tbody td[name="marks"] {
+    text-align: left !important;
+}
+
+/* --- Evaluation: Rating ----------------------------------------------- */
+.o_ft_evaluation_list thead th[data-name="rating"] .o_list_number_th {
+    text-align: left !important;
+}
+
+.o_ft_evaluation_list tbody td[name="rating"] {
+    text-align: left !important;
+}
+
+/* --- Review: the six competency scores -------------------------------- */
+.o_ft_review_list thead th[data-name="attitude"] .o_list_number_th,
+.o_ft_review_list thead th[data-name="communication"] .o_list_number_th,
+.o_ft_review_list thead th[data-name="understanding"] .o_list_number_th,
+.o_ft_review_list thead th[data-name="technical"] .o_list_number_th,
+.o_ft_review_list thead th[data-name="problem_solving"] .o_list_number_th,
+.o_ft_review_list thead th[data-name="self_dependency"] .o_list_number_th {
+    text-align: left !important;
+}
+
+.o_ft_review_list tbody td[name="attitude"],
+.o_ft_review_list tbody td[name="communication"],
+.o_ft_review_list tbody td[name="understanding"],
+.o_ft_review_list tbody td[name="technical"],
+.o_ft_review_list tbody td[name="problem_solving"],
+.o_ft_review_list tbody td[name="self_dependency"] {
+    text-align: left !important;
+}

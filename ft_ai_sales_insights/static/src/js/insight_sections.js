@@ -1,13 +1,22 @@
 /** @odoo-module **/
 
 import { Component } from "@odoo/owl";
+import { useService } from "@web/core/utils/hooks";
 
 /**
- * A single KPI chip. props.kpi = { label, value, trend, status }.
+ * A single KPI chip. props.kpi = { label, value, trend, status, action? }.
+ *
+ * `action` is attached server-side (see services/drilldown.py) only for metrics
+ * with a real domain behind them, so a tile is clickable exactly when it can
+ * open the records it counts.
  */
 export class InsightKpi extends Component {
     static template = "ft_ai_sales_insights.InsightKpi";
     static props = { kpi: { type: Object } };
+
+    setup() {
+        this.action = useService("action");
+    }
 
     get trendIcon() {
         return {
@@ -17,7 +26,26 @@ export class InsightKpi extends Component {
         }[this.props.kpi.trend] || "fa-minus";
     }
     get statusClass() {
-        return `aisi_status--${this.props.kpi.status || "good"}`;
+        const base = `aisi_status--${this.props.kpi.status || "good"}`;
+        return this.clickable ? `${base} aisi_kpi--clickable` : base;
+    }
+    get clickable() {
+        return Boolean(this.props.kpi.action?.res_model);
+    }
+    openRecords() {
+        const a = this.props.kpi.action;
+        if (!a?.res_model) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: a.name || this.props.kpi.label || "Records",
+            res_model: a.res_model,
+            views: [[false, "list"], [false, "form"]],
+            domain: a.domain || [],
+            context: a.context || {},
+            target: "current",
+        });
     }
 }
 

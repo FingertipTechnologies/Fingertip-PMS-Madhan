@@ -17,7 +17,7 @@ Return a SINGLE valid JSON object (no markdown fences, no prose) with this shape
   "executive_summary": "2-4 sentence markdown summary",
   "overall_score": 0-100 integer,
   "score_label": "short qualitative label, e.g. 'Healthy', 'At Risk'",
-  "kpis": [{"label": "", "value": "", "trend": "up|down|flat", "status": "good|warning|bad"}],
+  "kpis": [{"label": "", "value": "", "trend": "up|down|flat", "status": "good|warning|bad", "key": "optional"}],
   "sections": [{"title": "", "icon": "fa-... (FontAwesome)", "tone": "info|success|warning|danger", "body": "markdown", "items": ["bullet", ...]}],
   "top_opportunities": [{"name": "", "amount": "", "probability": "", "note": ""}],
   "at_risk_deals": [{"name": "", "amount": "", "reason": ""}],
@@ -29,21 +29,33 @@ Return a SINGLE valid JSON object (no markdown fences, no prose) with this shape
 }
 Only include keys that are relevant to the requested purpose; omit the rest.
 Base every statement on the supplied DATA. Never invent numbers.
+
+On kpi "key": the DATA contains "available_kpi_keys". When a KPI you emit is
+exactly one of those metrics, set "key" to that exact string so the user can
+click through to the records. If it is a derived or blended figure, omit "key".
+Never invent a key that is not in available_kpi_keys.
 """
 
 
 class PromptBuilder:
-    def __init__(self, master_prompt: str, purpose_prompt: str, currency: str = ""):
+    def __init__(
+        self,
+        master_prompt: str,
+        purpose_prompt: str,
+        currency: str = "",
+        contract: str = RESPONSE_CONTRACT,
+    ):
         self.master_prompt = (master_prompt or "").strip()
         self.purpose_prompt = (purpose_prompt or "").strip()
         self.currency = currency
+        # Domains return different shapes (Sales scores deals, Project scores
+        # delivery), so the contract is injectable. Defaults to the Sales one.
+        self.contract = (contract or "").strip()
 
     def build(self, payload: dict, filters_label: str = "") -> list[dict]:
         """Return the OpenAI-style ``messages`` list."""
         system = "\n\n".join(
-            part
-            for part in (self.master_prompt, RESPONSE_CONTRACT.strip())
-            if part
+            part for part in (self.master_prompt, self.contract) if part
         )
         cur = f"\nAll monetary values are in {self.currency}." if self.currency else ""
         user = (

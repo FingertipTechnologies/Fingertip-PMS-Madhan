@@ -4,6 +4,7 @@
     <!-- App root (top bar) -->
     <menuitem id="menu_training_root"
               name="Training"
+              web_icon="ft_training,static/description/icon.png"
               sequence="50"/>
 
     <!-- Tab 1: Learning Trails (the curriculum of topics) -->

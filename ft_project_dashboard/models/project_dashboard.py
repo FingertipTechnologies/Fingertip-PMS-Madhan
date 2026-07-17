@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from odoo import api, fields, models
 
@@ -326,13 +326,50 @@ class FtProjectDashboard(models.TransientModel):
             }],
         }
 
+    # Bucket sizes for the progress trend, picked from the span of the range so
+    # the X axis never carries more labels than it can legibly show.
+    TREND_DAY_SPAN = 31
+    TREND_WEEK_SPAN = 120
+
+    def _trend_bucket(self, days):
+        """Return the bucket granularity to use for ``days`` (a sorted list)."""
+        if not days:
+            return 'day'
+        span = (days[-1] - days[0]).days
+        if span <= self.TREND_DAY_SPAN:
+            return 'day'
+        if span <= self.TREND_WEEK_SPAN:
+            return 'week'
+        return 'month'
+
+    def _trend_bucket_key(self, day, bucket):
+        """Collapse ``day`` onto the start of its bucket."""
+        if bucket == 'week':
+            return day - timedelta(days=day.weekday())
+        if bucket == 'month':
+            return day.replace(day=1)
+        return day
+
+    def _trend_bucket_label(self, key, bucket):
+        if bucket == 'week':
+            return 'Wk of %s' % key.strftime('%d %b')
+        if bucket == 'month':
+            return key.strftime('%b %Y')
+        return key.strftime('%d %b %Y')
+
     def _chart_progress_trend(self, date_from, date_to):
-        """Line: hours logged and tasks completed per day within the range.
+        """Bar: hours logged and tasks completed per bucket within the range.
 
         Uses ``_read_group`` so each day is a real ``date`` object — sorting on
         those keeps the X axis chronological. (Grouping via ``read_group`` yields
         formatted labels like '03 Jul 2026' that sort alphabetically, which
         scrambled the timeline.)
+
+        Days are then rolled up into day/week/month buckets depending on how
+        long the selected range is. Plotting a full year day-by-day produced
+        ~250 labels that Chart.js thinned to an arbitrary, uneven-looking subset
+        ('01 Jan, 10 Jan, 19 Jan, ...'), which read as noise rather than a
+        trend. Bucketing keeps every bar meaningful and every label round.
         """
         AAL = self.env['account.analytic.line']
         Task = self.env['project.task']
@@ -361,21 +398,32 @@ class FtProjectDashboard(models.TransientModel):
             _logger.warning('Progress-trend task series unavailable: %s', e)
 
         days = sorted(set(hours_by_day) | set(tasks_by_day))
-        labels = [d.strftime('%d %b %Y') for d in days]
+        bucket = self._trend_bucket(days)
+
+        hours_by_bucket = {}
+        tasks_by_bucket = {}
+        for day in days:
+            key = self._trend_bucket_key(day, bucket)
+            hours_by_bucket[key] = hours_by_bucket.get(key, 0.0) + hours_by_day.get(day, 0.0)
+            tasks_by_bucket[key] = tasks_by_bucket.get(key, 0) + tasks_by_day.get(day, 0)
+
+        keys = sorted(hours_by_bucket)
         return {
-            'labels': labels,
+            'labels': [self._trend_bucket_label(k, bucket) for k in keys],
             'datasets': [
                 {
                     'label': 'Hours Logged',
-                    'data': [hours_by_day.get(d, 0) for d in days],
-                    'borderColor': '#4F46E5', 'backgroundColor': 'rgba(79,70,229,0.15)',
-                    'tension': 0.35, 'fill': True, 'yAxisID': 'y',
+                    'data': [round(hours_by_bucket.get(k, 0.0), 2) for k in keys],
+                    'backgroundColor': 'rgba(79,70,229,0.85)',
+                    'borderColor': '#4F46E5', 'borderWidth': 1,
+                    'borderRadius': 4, 'yAxisID': 'y',
                 },
                 {
                     'label': 'Tasks Completed',
-                    'data': [tasks_by_day.get(d, 0) for d in days],
-                    'borderColor': '#10B981', 'backgroundColor': 'rgba(16,185,129,0.15)',
-                    'tension': 0.35, 'fill': True, 'yAxisID': 'y1',
+                    'data': [tasks_by_bucket.get(k, 0) for k in keys],
+                    'backgroundColor': 'rgba(16,185,129,0.85)',
+                    'borderColor': '#10B981', 'borderWidth': 1,
+                    'borderRadius': 4, 'yAxisID': 'y1',
                 },
             ],
         }

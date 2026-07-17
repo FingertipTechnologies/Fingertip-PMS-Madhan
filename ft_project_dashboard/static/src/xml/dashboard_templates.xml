@@ -262,7 +262,7 @@
 
                 <!-- Charts Row: progress trend (full width) -->
                 <div class="ftpd_chart_row">
-                    <ChartCard title="'Project Progress Trend'" type="'line'"
+                    <ChartCard title="'Project Progress Trend'" type="'bar'"
                                data="charts.progress_trend" options="trendOptions"
                                fullWidth="true"/>
                 </div>

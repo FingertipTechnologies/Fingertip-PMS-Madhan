@@ -62,6 +62,62 @@ class SalesDataCollector:
         return domain + (extra or [])
 
     # ------------------------------------------------------------------
+    # Drill-downs
+    # ------------------------------------------------------------------
+    def drilldowns(self) -> dict:
+        """Clickable record lists behind the KPI tiles.
+
+        Built from the same domain helpers that produce the numbers, so a tile
+        and the list it opens can never disagree. Keys are offered to the model,
+        which tags a KPI with one; unknown/absent keys simply aren't clickable.
+        """
+        dd = {
+            "leads": {
+                "res_model": "crm.lead",
+                "name": "Leads",
+                "domain": self._lead_domain([("type", "=", "lead")]),
+            },
+            "opportunities": {
+                "res_model": "crm.lead",
+                "name": "Opportunities",
+                "domain": self._lead_domain([("type", "=", "opportunity")]),
+            },
+            "won_deals": {
+                "res_model": "crm.lead",
+                "name": "Won Deals",
+                "domain": self._lead_domain([("stage_id.is_won", "=", True)]),
+            },
+            "open_pipeline": {
+                "res_model": "crm.lead",
+                "name": "Open Pipeline",
+                "domain": self._lead_domain([("type", "=", "opportunity"),
+                                             ("active", "=", True),
+                                             ("stage_id.is_won", "=", False)]),
+            },
+            # Lost leads are archived, so the list must opt into inactive records
+            # or it would open empty.
+            "lost_deals": {
+                "res_model": "crm.lead",
+                "name": "Lost Deals",
+                "domain": self._lead_domain([("active", "=", False),
+                                             ("probability", "=", 0)]),
+                "context": {"active_test": False},
+            },
+        }
+        if "sale.order" in self.env:
+            dd["quotations"] = {
+                "res_model": "sale.order",
+                "name": "Quotations",
+                "domain": self._order_domain([("state", "in", ["draft", "sent"])]),
+            }
+            dd["sales_orders"] = {
+                "res_model": "sale.order",
+                "name": "Sales Orders",
+                "domain": self._order_domain([("state", "in", ["sale", "done"])]),
+            }
+        return dd
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
     def collect(self) -> dict:

@@ -5,11 +5,14 @@
         <field name="name">ft.evaluation.list</field>
         <field name="model">ft.evaluation</field>
         <field name="arch" type="xml">
-            <list string="Evaluations">
-                <field name="trainee_id"/>
-                <field name="assignment_id"/>
-                <field name="rating"/>
-                <field name="create_date" string="Date"/>
+            <!-- Every column carries the same fixed width, so Odoo spreads the
+                 leftover space equally instead of letting Assignment absorb it
+                 all and strand the right-aligned Rating against the Date. -->
+            <list string="Evaluations" class="o_ft_evaluation_list">
+                <field name="trainee_id" width="180px"/>
+                <field name="assignment_id" width="180px"/>
+                <field name="rating" width="180px"/>
+                <field name="create_date" string="Date" width="180px"/>
             </list>
         </field>
     </record>

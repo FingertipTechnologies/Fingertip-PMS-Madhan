@@ -1,5 +1,11 @@
 /** @odoo-module **/
 
+/**
+ * AI Project Insights — the Project counterpart of the AI Sales Insights
+ * dashboard. Same shape (filter bar -> Analyse -> structured insight), same
+ * InsightKpi/InsightSection renderers and `aisi_*` styling; only the filters
+ * and the RPC model differ.
+ */
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
@@ -7,13 +13,13 @@ import { useSetupAction } from "@web/search/action_hook";
 import { browser } from "@web/core/browser/browser";
 import { InsightKpi, InsightSection } from "./insight_sections";
 
-const MODEL = "ft.ai.sales.insights";
+const MODEL = "ft.ai.project.insights";
 
 // The breadcrumb restores props.state, but browser Back rebuilds the action from
 // the URL with no exported state. Mirror the filters into sessionStorage so both
 // routes return to the same selection. The result itself is deliberately NOT
 // stored — a stale analysis reappearing on a fresh open would be misleading.
-const FILTER_KEY = "ft_ai_sales_insights.filters";
+const FILTER_KEY = "ft_ai_project_insights.filters";
 
 function readStoredFilters() {
     try {
@@ -31,8 +37,8 @@ function writeStoredFilters(filters) {
     }
 }
 
-export class AiSalesInsights extends Component {
-    static template = "ft_ai_sales_insights.AiSalesInsights";
+export class AiProjectInsights extends Component {
+    static template = "ft_ai_sales_insights.AiProjectInsights";
     static components = { InsightKpi, InsightSection };
     static props = ["*"];
 
@@ -44,34 +50,22 @@ export class AiSalesInsights extends Component {
         // (e.g. back from a KPI drill-down). Keeping the result too means the
         // round trip costs no extra tokens.
         const restored = this.props.state || { filters: readStoredFilters() };
-        // Restoring from storage has no query text, so rebuild it from the
-        // chosen customer; otherwise the box would look empty while filtered.
-        const rf = restored?.filters;
-        const customerQuery =
-            restored?.customerQuery ??
-            (rf?.partner_id && rf.partner_id !== "all" ? rf.partner_label : "");
         this.state = useState({
             options: null,
             loadingOptions: true,
             analyzing: false,
             error: null,
             result: restored?.result || null,
-            customerQuery: customerQuery || "",
-            customerResults: [],
             filters: restored?.filters
                 ? { ...restored.filters }
                 : {
                       date_filter: "this_month",
                       date_from: null,
                       date_to: null,
-                      team_id: "all",
-                      team_label: "All Teams",
-                      user_id: "all",
-                      user_label: "All Salespersons",
-                      partner_id: "all",
-                      partner_label: "All Customers",
-                      stage_id: "all",
-                      stage_label: "All Stages",
+                      project_id: "all",
+                      project_label: "All Projects",
+                      employee_id: "all",
+                      developer_label: "All Developers",
                       purpose_id: null,
                       purpose_label: null,
                   },
@@ -81,7 +75,6 @@ export class AiSalesInsights extends Component {
             getLocalState: () => ({
                 filters: { ...this.state.filters },
                 result: this.state.result,
-                customerQuery: this.state.customerQuery,
             }),
         });
 
@@ -90,9 +83,11 @@ export class AiSalesInsights extends Component {
             this.state.options = opts;
             // A restored view already has its purpose; don't overwrite it.
             if (!this.state.filters.purpose_id) {
-                const def = opts.default_purpose_id;
                 const purposes = opts.purposes || [];
-                const chosen = purposes.find((p) => p.id === def) || purposes[0] || null;
+                const chosen =
+                    purposes.find((p) => p.id === opts.default_purpose_id) ||
+                    purposes[0] ||
+                    null;
                 if (chosen) {
                     this.state.filters.purpose_id = chosen.id;
                     this.state.filters.purpose_label = chosen.name;
@@ -121,46 +116,23 @@ export class AiSalesInsights extends Component {
         const rec = (list || []).find((r) => String(r.id) === String(id));
         return rec ? rec.name : allLabel;
     }
-    onTeam(ev) {
-        this.f.team_id = ev.target.value;
-        this.f.team_label = this._labelFor(this.state.options.teams, ev.target.value, "All Teams");
+    onProject(ev) {
+        this.f.project_id = ev.target.value;
+        this.f.project_label = this._labelFor(
+            this.state.options.projects, ev.target.value, "All Projects"
+        );
     }
-    onUser(ev) {
-        this.f.user_id = ev.target.value;
-        this.f.user_label = this._labelFor(this.state.options.salespersons, ev.target.value, "All Salespersons");
-    }
-    onStage(ev) {
-        this.f.stage_id = ev.target.value;
-        this.f.stage_label = this._labelFor(this.state.options.stages, ev.target.value, "All Stages");
+    onDeveloper(ev) {
+        this.f.employee_id = ev.target.value;
+        this.f.developer_label = this._labelFor(
+            this.state.options.developers, ev.target.value, "All Developers"
+        );
     }
     onPurpose(ev) {
         this.f.purpose_id = Number(ev.target.value);
-        this.f.purpose_label = this._labelFor(this.state.options.purposes, ev.target.value, null);
-    }
-
-    // ---- Customer autocomplete -----------------------------------------
-    async onCustomerInput(ev) {
-        const q = ev.target.value;
-        this.state.customerQuery = q;
-        if (!q) {
-            this.state.customerResults = [];
-            this.f.partner_id = "all";
-            this.f.partner_label = "All Customers";
-            return;
-        }
-        this.state.customerResults = await this.orm.call(MODEL, "search_customers", [q, 15]);
-    }
-    pickCustomer(c) {
-        this.f.partner_id = c.id;
-        this.f.partner_label = c.name;
-        this.state.customerQuery = c.name;
-        this.state.customerResults = [];
-    }
-    clearCustomer() {
-        this.f.partner_id = "all";
-        this.f.partner_label = "All Customers";
-        this.state.customerQuery = "";
-        this.state.customerResults = [];
+        this.f.purpose_label = this._labelFor(
+            this.state.options.purposes, ev.target.value, null
+        );
     }
 
     // ---- Analysis -------------------------------------------------------
@@ -176,8 +148,7 @@ export class AiSalesInsights extends Component {
         this.state.analyzing = true;
         this.state.error = null;
         try {
-            const res = await this.orm.call(MODEL, "analyze", [{ ...this.f }]);
-            this.state.result = res;
+            this.state.result = await this.orm.call(MODEL, "analyze", [{ ...this.f }]);
         } catch (e) {
             this.state.error = e?.data?.message || e?.message || "Analysis failed.";
         } finally {
@@ -216,7 +187,9 @@ export class AiSalesInsights extends Component {
         if (!i) return this.rawText || "";
         const lines = [];
         if (i.executive_summary) lines.push(i.executive_summary, "");
-        if (i.overall_score != null) lines.push(`Overall score: ${i.overall_score} (${i.score_label || ""})`, "");
+        if (i.overall_score != null) {
+            lines.push(`Delivery score: ${i.overall_score} (${i.score_label || ""})`, "");
+        }
         (i.kpis || []).forEach((k) => lines.push(`- ${k.label}: ${k.value}`));
         (i.sections || []).forEach((s) => {
             lines.push("", s.title || "");
@@ -246,8 +219,11 @@ export class AiSalesInsights extends Component {
         (i.recommended_actions || []).forEach((a) =>
             rows.push(["Action", a.priority || "", a.action || ""])
         );
-        (i.at_risk_deals || []).forEach((d) =>
-            rows.push(["At-Risk", d.name || "", `${d.amount || ""} — ${d.reason || ""}`])
+        (i.at_risk_projects || []).forEach((p) =>
+            rows.push(["At-Risk", p.name || "", `${p.reason || ""} — ${p.detail || ""}`])
+        );
+        (i.resource_performance || []).forEach((r) =>
+            rows.push(["Resource", r.name || "", `${r.highlight || ""} — ${r.coaching || ""}`])
         );
         const csv = rows
             .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
@@ -256,7 +232,7 @@ export class AiSalesInsights extends Component {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `ai-sales-insight-${this.meta.log_id || "export"}.csv`;
+        a.download = `ai-project-insight-${this.meta.log_id || "export"}.csv`;
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -272,4 +248,4 @@ export class AiSalesInsights extends Component {
     }
 }
 
-registry.category("actions").add("ft_ai_sales_insights", AiSalesInsights);
+registry.category("actions").add("ft_ai_project_insights", AiProjectInsights);
