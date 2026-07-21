@@ -42,7 +42,18 @@ export class ChartCard extends Component {
         this._needsRender = false;
 
         onMounted(() => this._renderChart());
-        onWillUpdateProps(() => {
+        onWillUpdateProps((nextProps) => {
+            // Only rebuild when something the chart actually draws has changed.
+            // The dashboard re-renders on every keystroke in any search box, but
+            // hands us the SAME data object when our own data is unaffected — so
+            // a reference check avoids a needless teardown/redraw (the flicker).
+            const changed =
+                nextProps.data !== this.props.data ||
+                nextProps.type !== this.props.type ||
+                nextProps.scrollMinWidth !== this.props.scrollMinWidth;
+            if (!changed) {
+                return;
+            }
             // Tear down the old chart; redraw after the DOM is patched.
             this._destroy();
             this._needsRender = true;

@@ -127,7 +127,6 @@ class FtProjectDashboard(models.TransientModel):
             'billable_hours': round(billable, 2),
             'developers': roles['dev'],
             'testers': roles['qa'],
-            'trainees': roles['trainee'],
             'project_managers': roles['pm'],
             # Counted separately from Developers/Testers: trainees are detected
             # by a job position starting with "trainee", so they are never

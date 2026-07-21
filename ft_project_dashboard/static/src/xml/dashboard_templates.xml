@@ -177,8 +177,6 @@
 
                 <!-- KPI Row 2 -->
                 <div class="ftpd_kpi_grid">
-                    <KpiCard title="'Trainees'" value="kpis.trainees"
-                             icon="'fa-graduation-cap'" color="'#0EA5E9'"/>
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
                              icon="'fa-user-circle'" color="'#EC4899'"/>
                     <!-- Trainees sits beside the other headcount cards, and is
