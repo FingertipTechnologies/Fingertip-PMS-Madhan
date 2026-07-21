@@ -1,6 +1,6 @@
 {
     'name': 'QA TestApp – Test & Bug Tracker',
-    'version': '18.0.1.0.4',
+    'version': '18.0.1.1.0',
     'category': 'Quality Assurance',
     'summary': 'Test Plans, Scenarios, Test Cases & Bug Tickets — all-in-one QA suite',
     'description': """
@@ -31,6 +31,14 @@ A comprehensive Quality Assurance suite for Odoo 18 with:
             'views/menu_reorganization.xml',
         ],
     'static': ['static/description/icon.svg'],
+    'assets': {
+        'web.assets_backend': [
+            'qa_testapp/static/src/evidence_description/evidence.scss',
+            'qa_testapp/static/src/evidence_description/evidence_html_field.js',
+            'qa_testapp/static/src/evidence_attachments/evidence_attachments_field.js',
+            'qa_testapp/static/src/evidence_attachments/evidence_attachments_field.xml',
+        ],
+    },
     'installable': True,
     'application': True,
     'license': 'LGPL-3',

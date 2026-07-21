@@ -84,11 +84,19 @@ class QATicket(models.Model):
         ('unable', 'Unable to Reproduce')
     ], string='Reproducibility', default='always')
     evidence_notes = fields.Text(string='Evidence Notes')
+    # Rich content area so testers can paste screenshots straight into the
+    # evidence write-up. Kept alongside the legacy plain-text evidence_notes so
+    # existing records keep their notes; new rich content lives here.
+    evidence_description = fields.Html(
+        string='Evidence Description', sanitize=True, sanitize_attributes=True,
+    )
     evidence_attachment_ids = fields.Many2many(
         'ir.attachment', 'qa_testapp_ticket_attachment_rel',
         'ticket_id', 'attachment_id',
         string='Attachments',
     )
+    url_ids = fields.One2many(
+        'qa_testapp.resource_url', 'ticket_id', string='URLs')
     reported_date = fields.Datetime(string='Reported Date', default=fields.Datetime.now)
     project_id = fields.Many2one('project.project', string='Project', required=True)
     module = fields.Char(string='Module (legacy)', tracking=True)

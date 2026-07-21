@@ -1,0 +1,19 @@
+// Evidence Description: render pasted images as small clickable icons rather
+// than full-size inline pictures. Scoped to the evidence_description field so
+// no other html field is affected.
+.o_field_widget[name='evidence_description'] {
+    img {
+        max-width: 120px;
+        max-height: 90px;
+        object-fit: cover;
+        border: 1px solid var(--border-color, #dee2e6);
+        border-radius: 4px;
+        margin: 2px 4px 2px 0;
+        vertical-align: middle;
+    }
+
+    // Only hint "click to zoom" where the click handler is active (readonly).
+    &.o_readonly img {
+        cursor: zoom-in;
+    }
+}

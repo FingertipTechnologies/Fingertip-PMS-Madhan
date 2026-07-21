@@ -10,6 +10,8 @@ class QATestCase(models.Model):
     _rec_name = 'test_case_id'
 
     test_case_id = fields.Char(string='Test Case ID', readonly=True, copy=False, default='New')
+    url_ids = fields.One2many(
+        'qa_testapp.resource_url', 'test_case_id', string='URLs')
     test_case_title = fields.Char(string='Test Case Title', required=True, tracking=True)
     project_id = fields.Many2one('project.project', string='Project', required=True, tracking=True)
     module_id = fields.Many2one(

@@ -148,8 +148,35 @@
                             </group>
                         </page>
                         <page string="Evidence">
-                            <field name="evidence_notes" readonly="id and not (is_creator and creator_unlocked)"/>
-                            <field name="evidence_attachment_ids" widget="many2many_binary" string="Attachments" readonly="id and not (is_creator and creator_unlocked)"/>
+                            <separator string="Description"/>
+                            <!-- qa_evidence_html: the standard description editor
+                                 (type + paste screenshots), with pasted images
+                                 shown small and click-to-preview. -->
+                            <field name="evidence_description" widget="qa_evidence_html"
+                                   nolabel="1"
+                                   readonly="id and not (is_creator and creator_unlocked)"
+                                   options="{'height': 200}"
+                                   placeholder="Describe the evidence. Paste screenshots directly here."/>
+                            <!-- Legacy plain-text notes: only shown when an older
+                                 record already has some, so no data is hidden. -->
+                            <field name="evidence_notes" invisible="not evidence_notes"
+                                   readonly="id and not (is_creator and creator_unlocked)"/>
+                            <separator string="Attachments"/>
+                            <!-- qa_evidence_files: same upload/delete as
+                                 many2many_binary, plus click-to-preview. -->
+                            <field name="evidence_attachment_ids" widget="qa_evidence_files"
+                                   nolabel="1"
+                                   readonly="id and not (is_creator and creator_unlocked)"/>
+                        </page>
+                        <page string="URLs" name="urls">
+                            <field name="url_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="url_type"/>
+                                    <field name="name"/>
+                                    <field name="url" widget="url"/>
+                                </list>
+                            </field>
                         </page>
                     </notebook>
                 </sheet>

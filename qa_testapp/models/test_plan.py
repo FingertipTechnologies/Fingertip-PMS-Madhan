@@ -6,6 +6,8 @@ class QATestPlan(models.Model):
     _order = 'id desc'
 
     name = fields.Char(string='Test Plan Name', required=True)
+    url_ids = fields.One2many(
+        'qa_testapp.resource_url', 'test_plan_id', string='URLs')
     project_id = fields.Many2one('project.project', string='Project', required=True)
     project_org_id = fields.Many2one('res.partner', string='Project ORG ID', required=True)
     introduction = fields.Html(string='Introduction (Purpose)')

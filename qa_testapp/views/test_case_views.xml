@@ -101,6 +101,16 @@
                                 <field name="executed_by" readonly="approval_state != 'approved'"/>
                             </group>
                         </page>
+                        <page string="URLs" name="urls">
+                            <field name="url_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="url_type"/>
+                                    <field name="name"/>
+                                    <field name="url" widget="url"/>
+                                </list>
+                            </field>
+                        </page>
                     </notebook>
                 </sheet>
                 <chatter/>
