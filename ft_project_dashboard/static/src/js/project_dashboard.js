@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { browser } from "@web/core/browser/browser";
 import { loadJS } from "@web/core/assets";
 import { KpiCard } from "./kpi_card";
 import { ChartCard } from "./chart_card";
@@ -16,6 +17,39 @@ const PERIODS = [
     { id: "year", label: "This Year" },
     { id: "custom", label: "Custom" },
 ];
+
+const DEFAULT_PERIOD = "month";
+
+// Drilling into a card opens a list view as a new action; coming back rebuilds
+// this dashboard from scratch, which reset the period to the default and threw
+// away the selection. Mirror it into sessionStorage so the round trip returns to
+// the period the user was actually looking at. Only the period/range is stored —
+// the data itself is always refetched, so nothing stale is shown.
+const PERIOD_KEY = "ft_project_dashboard.period";
+
+function readStoredPeriod() {
+    try {
+        const stored = JSON.parse(browser.sessionStorage.getItem(PERIOD_KEY) || "null");
+        // Guard against a stale key from an older build naming a period that no
+        // longer exists, which would leave the dashboard with no range at all.
+        if (stored && PERIODS.some((p) => p.id === stored.period)) {
+            return stored;
+        }
+    } catch {
+        // Unreadable/corrupt storage: fall back to the default period.
+    }
+    return null;
+}
+
+function writeStoredPeriod(period, dateFrom, dateTo) {
+    try {
+        browser.sessionStorage.setItem(
+            PERIOD_KEY, JSON.stringify({ period, dateFrom, dateTo })
+        );
+    } catch {
+        // Storage unavailable/full: the period just won't persist.
+    }
+}
 
 function fmt(date) {
     // -> 'YYYY-MM-DD' in local time.
@@ -44,11 +78,22 @@ export class ProjectDashboard extends Component {
             resourceSearch: "",
             resourceProjectSearch: "",
             projectHoursSearch: "",
+            deliverySearch: "",
         });
 
         onWillStart(async () => {
             await loadJS("/web/static/lib/Chart/Chart.js");
-            this._applyPeriod("month");
+            const restored = readStoredPeriod();
+            if (restored?.period === "custom") {
+                // _applyPeriod's "custom" branch reads the dates back off state,
+                // so they must be in place before it runs.
+                this.state.dateFrom = restored.dateFrom;
+                this.state.dateTo = restored.dateTo;
+            }
+            // Named periods are recomputed against today rather than restored
+            // from the stored dates: coming back to "This Year" should mean this
+            // year now, not the year it was when the range was first picked.
+            this._applyPeriod(restored?.period || DEFAULT_PERIOD);
             await this.loadData();
         });
     }
@@ -91,6 +136,7 @@ export class ProjectDashboard extends Component {
         this.state.period = period;
         this.state.dateFrom = from;
         this.state.dateTo = to;
+        writeStoredPeriod(period, from, to);
     }
 
     async onPeriodChange(period) {
@@ -106,6 +152,8 @@ export class ProjectDashboard extends Component {
 
     async applyCustomRange() {
         this.state.period = "custom";
+        // Set directly rather than via _applyPeriod, so persist here too.
+        writeStoredPeriod("custom", this.state.dateFrom, this.state.dateTo);
         await this.loadData();
     }
 
@@ -217,10 +265,33 @@ export class ProjectDashboard extends Component {
         ];
     }
 
+    get deliveryColumns() {
+        return [
+            { key: "employee", label: "Resource Name", group: true, cls: "ftpd_res_name" },
+            { key: "role", label: "Role", group: true },
+            { key: "delivered", label: "Delivered", numeric: true },
+            { key: "on_time", label: "On Time", numeric: true },
+            { key: "late", label: "Late", numeric: true },
+            { key: "on_time_rate", label: "On-Time %", numeric: true },
+            { key: "no_deadline", label: "No Deadline", numeric: true },
+            { key: "overdue_open", label: "Open & Overdue", numeric: true },
+        ];
+    }
+
     // ----------------------------------------------------------------
     // Table search (client-side). Rows arrive sorted alphabetically from
     // the server; DataTable re-sorts/paginates on top of the filtered set.
     // ----------------------------------------------------------------
+    get deliveryRows() {
+        const q = (this.state.deliverySearch || "").trim().toLowerCase();
+        const rows = this.tables.delivery || [];
+        if (!q) return rows;
+        return rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
+    }
+    onDeliverySearch(ev) {
+        this.state.deliverySearch = ev.target.value || "";
+    }
+
     get projectRows() {
         const q = (this.state.projectSearch || "").trim().toLowerCase();
         const rows = this.tables.project_status || [];

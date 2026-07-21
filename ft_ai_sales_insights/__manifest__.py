@@ -36,6 +36,12 @@ Key design points
         # Project Insights reads projects, tasks, timesheets and employees.
         'project',
         'hr_timesheet',
+        # Owns the shared stage-based definition of a completed/open task
+        # (project.task._ft_delivery_domain / _ft_open_domain), which the
+        # collector calls so its counts match the project fields and the PMS
+        # dashboard. Reached transitively via ft_project_dashboard, but this
+        # module uses the API directly, so the dependency is declared here.
+        'bt_project_customization',
         # Extended (AI Summary button injected into its dashboard). Keeping the
         # dependency here means all AI code lives in this module.
         'ft_project_dashboard',

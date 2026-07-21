@@ -68,6 +68,152 @@ class InheritProjectProject(models.Model):
             lines = self.env['account.analytic.line'].search([('project_id', '=', project.id)])
             project.timesheet_count = sum(lines.mapped('unit_amount'))
 
+    # ------------------------------------------------------------------
+    # On-Time Delivery (all-time; the dashboard shows the same figures per
+    # period). The maths lives on project.task so the two can never drift.
+    # ------------------------------------------------------------------
+    ft_on_time_rate = fields.Float(
+        string='On-Time Delivery (%)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        # Not 'group_operator' — deprecated in Odoo 18. Averaging a ratio across
+        # projects would be wrong anyway (a 1-task project would weigh the same
+        # as a 500-task one), so no aggregate is offered.
+        aggregator=False,
+        help="Share of delivered tasks that met their deadline, all-time. "
+             "Target: 95% or above. Tasks delivered without a deadline are not "
+             "counted either way — see Delivered Without Deadline. Reads 0 when "
+             "nothing measurable has been delivered yet.",
+    )
+    ft_delivered_tasks = fields.Integer(
+        string='Delivered Tasks',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Tasks that reached a Completed (folded) stage. Excludes cancelled.",
+    )
+    ft_on_time_tasks = fields.Integer(
+        string='Delivered On Time',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Delivered tasks whose completion date was on or before the deadline.",
+    )
+    ft_late_tasks = fields.Integer(
+        string='Delivered Late',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Delivered tasks whose completion date was after the deadline.",
+    )
+    ft_no_deadline_tasks = fields.Integer(
+        string='Delivered Without Deadline',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Delivered tasks that had no deadline set, so they could not be "
+             "judged on time. The On-Time Delivery percentage ignores these; a "
+             "large number here means the percentage covers only a small slice "
+             "of the work.",
+    )
+    ft_overdue_open_tasks = fields.Integer(
+        string='Open & Overdue',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Tasks still open whose deadline has already passed. Read this "
+             "alongside On-Time Delivery: the percentage only counts work that "
+             "finished, so late work that never finishes is invisible to it.",
+    )
+
+    ft_efficiency_rate = fields.Float(
+        string='Delivery Efficiency (%)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        aggregator=False,
+        help="Estimated hours divided by actual hours across delivered tasks, "
+             "as a percentage. Target: 90-110%. Below 90% the work is taking "
+             "longer than estimated; above 110% the estimates are padded. Only "
+             "tasks that have BOTH an estimate and logged time are counted — see "
+             "Tasks Without an Estimate.",
+    )
+    ft_estimated_hours = fields.Float(
+        string='Estimated Hours (Delivered)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Allocated hours on delivered tasks that also have logged time. "
+             "The numerator of Delivery Efficiency.",
+    )
+    ft_actual_hours = fields.Float(
+        string='Actual Hours (Delivered)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Timesheeted hours on the same tasks. The denominator of Delivery "
+             "Efficiency.",
+    )
+    ft_unestimated_tasks = fields.Integer(
+        string='Tasks Without an Estimate',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Delivered tasks left out of Delivery Efficiency because they had "
+             "no estimate or no logged time. A large number here means the "
+             "percentage covers only a small slice of the work.",
+    )
+    ft_rework_rate = fields.Float(
+        string='Rework Rate (%)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        aggregator=False,
+        help="Share of delivered tasks that were reopened at least once. "
+             "Target: 10% or below. Counts tasks, not reopen events, so one task "
+             "bounced repeatedly cannot push the rate past 100%. Only reopens "
+             "since this feature was installed are counted.",
+    )
+    ft_reworked_tasks = fields.Integer(
+        string='Reworked Tasks',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Delivered tasks that were moved back out of a Completed stage at "
+             "least once.",
+    )
+
+    @api.depends('task_ids.date_end', 'task_ids.date_deadline',
+                 'task_ids.stage_id.fold', 'task_ids.state',
+                 'task_ids.estimated', 'task_ids.effective_hours',
+                 'task_ids.ft_reopen_count')
+    def _compute_ft_delivery_stats(self):
+        Task = self.env['project.task']
+        # Two queries for the whole set rather than two per project — this
+        # compute runs for every row of the project list view.
+        stats_by_project = Task._ft_on_time_stats_by_project(self.ids)
+        overdue_by_project = Task._ft_overdue_open_count_by_project(self.ids)
+        for project in self:
+            stats = stats_by_project.get(project.id) or {}
+            project.ft_delivered_tasks = stats.get('completed', 0)
+            project.ft_on_time_tasks = stats.get('on_time', 0)
+            project.ft_late_tasks = stats.get('late', 0)
+            project.ft_no_deadline_tasks = stats.get('no_deadline', 0)
+            # A Float cannot hold "no data", so an unmeasurable project reads 0.
+            # ft_delivered_tasks / ft_no_deadline_tasks are what tell them apart.
+            project.ft_on_time_rate = stats.get('rate') or 0.0
+            project.ft_overdue_open_tasks = overdue_by_project.get(project.id, 0)
+            # Same "a Float cannot hold no-data" caveat as the on-time rate:
+            # ft_unestimated_tasks / ft_delivered_tasks tell 0% apart from
+            # nothing-to-measure.
+            project.ft_efficiency_rate = stats.get('efficiency_rate') or 0.0
+            project.ft_estimated_hours = stats.get('estimated_hours', 0.0)
+            project.ft_actual_hours = stats.get('actual_hours', 0.0)
+            project.ft_unestimated_tasks = stats.get('unestimated', 0)
+            project.ft_rework_rate = stats.get('rework_rate') or 0.0
+            project.ft_reworked_tasks = stats.get('reworked', 0)
+
     @api.model_create_multi
     def create(self, vals_list):
         # #3 - Only Administrators may create projects.

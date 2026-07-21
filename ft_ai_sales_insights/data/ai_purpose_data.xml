@@ -277,7 +277,7 @@ If the milestones block reports available=false or total=0, say milestone data i
             <field name="sequence">60</field>
             <field name="icon">fa-tasks</field>
             <field name="description">Unassigned tasks, missing deadlines and stalled backlog.</field>
-            <field name="prompt">Analyse backlog hygiene using the task_health block: open_tasks, overdue_tasks, unassigned_tasks, no_deadline_tasks, closed_in_period and by_state. Quantify how much of the backlog is unassigned or has no deadline, comment on throughput (closed_in_period vs open_tasks), and recommend specific clean-up actions for the PMO.</field>
+            <field name="prompt">Analyse backlog hygiene using the task_health block: open_tasks, completed_tasks, overdue_tasks, unassigned_tasks, no_deadline_tasks, completed_in_period and by_stage. by_stage shows how the work is spread across the project's stages (Planned, Working, Testing, Completed) — use it to say where the pipeline is bunching up. Quantify how much of the backlog is unassigned or has no deadline, comment on throughput (completed_in_period vs open_tasks), and recommend specific clean-up actions for the PMO.</field>
         </record>
 
         <record id="purpose_project_custom" model="ft.ai.insights.purpose">

@@ -16,9 +16,6 @@ from __future__ import annotations
 
 TOP_N = 15
 
-DONE_STATE = "1_done"
-CLOSED_TASK_STATES = ("1_done", "1_canceled")
-
 # qa_testapp.ticket ("Bugs" in the PMS menu). Resolved through ``env`` at call
 # time rather than declared as a manifest dependency, so this module still
 # installs on a database without the QA app.
@@ -112,6 +109,32 @@ class ProjectDataCollector:
         return dom + (extra or [])
 
     # ------------------------------------------------------------------
+    # Completed / open are decided by the task's STAGE (Planned, Working,
+    # Testing, Completed), not by the `state` field. Stages do not set state in
+    # Odoo 18, so counting state '1_done' reported almost nothing as completed
+    # and almost everything as open. The rules live on project.task
+    # (bt_project_customization) and are shared with the project fields and the
+    # PMS dashboard, so all three always agree on what "completed" means.
+    # ------------------------------------------------------------------
+    def _done_domain(self, extra=None, dated=False):
+        """Tasks that reached a folded (Completed) stage. Excludes cancelled.
+
+        ``dated=True`` restricts to work COMPLETED inside the report period,
+        using the stage-completion date rather than write_date (which moves on
+        any edit, so an old task touched yesterday looked freshly completed).
+        """
+        Task = self.env["project.task"]
+        return Task._ft_delivery_domain(
+            self._task_domain(extra),
+            date_from=self.date_from if dated else None,
+            date_to=self.date_to if dated else None,
+        )
+
+    def _open_domain(self, extra=None):
+        """Tasks still in an unfolded stage (Planned / Working / Testing)."""
+        return self.env["project.task"]._ft_open_domain(self._task_domain(extra))
+
+    # ------------------------------------------------------------------
     # Drill-downs
     # ------------------------------------------------------------------
     def drilldowns(self, include_milestones=False) -> dict:
@@ -124,27 +147,26 @@ class ProjectDataCollector:
         ``include_milestones`` mirrors the payload: a metric the report never
         received must not be offered as a clickable key.
         """
-        open_extra = [("state", "not in", CLOSED_TASK_STATES)]
         dd = {
             "open_tasks": {
                 "res_model": "project.task",
                 "name": "Open Tasks",
-                "domain": self._task_domain(open_extra),
+                "domain": self._open_domain(),
             },
             "completed_tasks": {
                 "res_model": "project.task",
                 "name": "Completed Tasks",
-                "domain": self._task_domain([("state", "=", DONE_STATE)]),
+                "domain": self._done_domain(),
             },
             "unassigned_tasks": {
                 "res_model": "project.task",
                 "name": "Unassigned Tasks",
-                "domain": self._task_domain(open_extra + [("user_ids", "=", False)]),
+                "domain": self._open_domain([("user_ids", "=", False)]),
             },
             "no_deadline_tasks": {
                 "res_model": "project.task",
                 "name": "Tasks Without a Deadline",
-                "domain": self._task_domain(open_extra + [("date_deadline", "=", False)]),
+                "domain": self._open_domain([("date_deadline", "=", False)]),
             },
             "used_hours": {
                 "res_model": "account.analytic.line",
@@ -156,9 +178,9 @@ class ProjectDataCollector:
             dd["overdue_tasks"] = {
                 "res_model": "project.task",
                 "name": "Overdue Tasks",
-                "domain": self._task_domain(
-                    open_extra + [("date_deadline", "<", str(self.date_to)),
-                                  ("date_deadline", "!=", False)]
+                "domain": self._open_domain(
+                    [("date_deadline", "<", str(self.date_to)),
+                     ("date_deadline", "!=", False)]
                 ),
             }
         if include_milestones:
@@ -273,15 +295,13 @@ class ProjectDataCollector:
             rec = used[pid]
             rec.setdefault("estimated_hours", 0.0)
             rec["completed_tasks"] = Task.search_count(
-                self._task_domain([("project_id", "=", pid), ("state", "=", DONE_STATE)])
+                self._done_domain([("project_id", "=", pid)])
             )
             rec["pending_tasks"] = Task.search_count(
-                self._task_domain([("project_id", "=", pid),
-                                   ("state", "not in", CLOSED_TASK_STATES)])
+                self._open_domain([("project_id", "=", pid)])
             )
-            rec["overdue_tasks"] = Task.search_count(self._task_domain([
+            rec["overdue_tasks"] = Task.search_count(self._open_domain([
                 ("project_id", "=", pid),
-                ("state", "not in", CLOSED_TASK_STATES),
                 ("date_deadline", "<", str(self.date_to)),
                 ("date_deadline", "!=", False),
             ])) if self.date_to else 0
@@ -318,14 +338,17 @@ class ProjectDataCollector:
         for eid, rec in used.items():
             uid = user_by_emp.get(eid)
             if uid:
+                # Scoped per resource, so this builds its own base rather than
+                # going through _task_domain; the stage rules still come from
+                # the shared helpers.
                 base = [("user_ids", "in", [uid])]
                 if self.project_id:
                     base.append(("project_id", "=", self.project_id))
                 rec["completed_tasks"] = Task.search_count(
-                    base + [("state", "=", DONE_STATE)]
+                    Task._ft_delivery_domain(base)
                 )
                 rec["pending_tasks"] = Task.search_count(
-                    base + [("state", "not in", CLOSED_TASK_STATES)]
+                    Task._ft_open_domain(base)
                 )
             else:
                 rec["completed_tasks"] = rec["pending_tasks"] = 0
@@ -333,36 +356,41 @@ class ProjectDataCollector:
         return rows
 
     def _task_health(self):
-        """Open-task shape within scope: overdue, unassigned, by state."""
+        """Task shape within scope: where the work sits, overdue, unassigned."""
         Task = self.env["project.task"]
-        open_dom = self._task_domain([("state", "not in", CLOSED_TASK_STATES)])
-        by_state = []
-        for g in Task.read_group(self._task_domain(), ["id"], ["state"], lazy=False):
-            by_state.append({"state": g.get("state") or "unset", "count": g["__count"]})
+        by_stage = []
+        for g in Task.read_group(
+            self._task_domain(), ["id"], ["stage_id"], lazy=False,
+        ):
+            stage = g.get("stage_id")
+            by_stage.append({
+                "stage": stage[1] if stage else "unset",
+                "count": g["__count"],
+            })
         health = {
-            "open_tasks": Task.search_count(open_dom),
+            "open_tasks": Task.search_count(self._open_domain()),
+            "completed_tasks": Task.search_count(self._done_domain()),
             "unassigned_tasks": Task.search_count(
-                self._task_domain([("state", "not in", CLOSED_TASK_STATES),
-                                   ("user_ids", "=", False)])
+                self._open_domain([("user_ids", "=", False)])
             ),
             "no_deadline_tasks": Task.search_count(
-                self._task_domain([("state", "not in", CLOSED_TASK_STATES),
-                                   ("date_deadline", "=", False)])
+                self._open_domain([("date_deadline", "=", False)])
             ),
-            "by_state": by_state,
+            # The real pipeline: Planned / Working / Testing / Completed, in the
+            # project's own stage order. Replaces the old "by_state" breakdown,
+            # which reported everything as "01_in_progress" because stages never
+            # write state.
+            "by_stage": by_stage,
         }
         if self.date_to:
             health["overdue_tasks"] = Task.search_count(
-                self._task_domain([("state", "not in", CLOSED_TASK_STATES),
-                                   ("date_deadline", "<", str(self.date_to)),
+                self._open_domain([("date_deadline", "<", str(self.date_to)),
                                    ("date_deadline", "!=", False)])
             )
         if self.date_from and self.date_to:
-            health["closed_in_period"] = Task.search_count(self._task_domain([
-                ("state", "=", DONE_STATE),
-                ("write_date", ">=", str(self.date_from)),
-                ("write_date", "<=", str(self.date_to) + " 23:59:59"),
-            ]))
+            health["completed_in_period"] = Task.search_count(
+                self._done_domain(dated=True)
+            )
         return health
 
     def _timesheets(self):

@@ -78,8 +78,9 @@ class FtProjectDashboard(models.TransientModel):
         return {
             'kpis': self._compute_kpis(date_from, date_to),
             'tables': {
-                'project_status': self._table_project_status(),
-                'resource_status': self._table_resource_status(),
+                'project_status': self._table_project_status(date_from, date_to),
+                'resource_status': self._table_resource_status(date_from, date_to),
+                'delivery': self._table_delivery(date_from, date_to),
             },
             'charts': {
                 'project_hours': self._chart_project_hours(date_from, date_to),
@@ -115,6 +116,11 @@ class FtProjectDashboard(models.TransientModel):
 
         roles = self._role_counts()
 
+        # On-time delivery for the selected period. The maths lives on
+        # project.task so this and the project.project fields can never disagree
+        # about what "delivered" or "on time" means.
+        delivery = Task._ft_on_time_stats(date_from=date_from, date_to=date_to)
+
         return {
             'active_projects': active_projects,
             'hours_spent': round(spent, 2),
@@ -122,8 +128,19 @@ class FtProjectDashboard(models.TransientModel):
             'developers': roles['dev'],
             'testers': roles['qa'],
             'project_managers': roles['pm'],
+            # Counted separately from Developers/Testers: trainees are detected
+            # by a job position starting with "trainee", so they are never
+            # folded into a delivery role bucket.
+            'trainees': roles['trainee'],
             'hours_estimated': round(estimated, 2),
             'hours_remaining': round(estimated - spent, 2),
+            # None (not 0) when nothing measurable was delivered in the period,
+            # so the card reads "N/A" rather than a 0% that looks like failure.
+            'on_time_delivery': delivery['rate'],
+            'tasks_delivered': delivery['completed'],
+            # Snapshot of now, deliberately not period-filtered: it is the check
+            # on the percentage above, which only ever counts work that finished.
+            'overdue_open_tasks': delivery['overdue_open'],
             # No capacity/planning model installed yet -> shown as "N/A".
             'resource_need': None,
             'available_resources': None,
@@ -144,12 +161,30 @@ class FtProjectDashboard(models.TransientModel):
         """
         return fields.Date.to_string(d) if d else ''
 
-    def _table_project_status(self):
+    @staticmethod
+    def _overlaps_period(start, end, date_from, date_to):
+        """True when [start, end] overlaps the selected period.
+
+        Open-ended dates count as overlapping: a project with no end date is
+        still running, and one with no start date has no evidence it began
+        after the period.
+        """
+        if date_from and end and fields.Date.to_string(end) < date_from:
+            return False
+        if date_to and start and fields.Date.to_string(start) > date_to:
+            return False
+        return True
+
+    def _table_project_status(self, date_from=None, date_to=None):
         """One row per active project with dates and estimated/actual hours.
 
-        Estimated = sum of task.estimated for the project.
-        Actual    = total hours logged (account.analytic.line.unit_amount).
-        Both are all-time totals (a project-status snapshot, not date-filtered).
+        Estimated = sum of task.estimated for the project (all-time: an
+                    estimate belongs to the whole project, not to a period).
+        Actual    = hours logged (account.analytic.line.unit_amount) *within
+                    the selected period*, so it lines up with the period's
+                    KPI cards.
+        Rows are limited to projects whose start/end window overlaps the
+        period; projects with open-ended dates always show.
         """
         Project = self.env['project.project']
         Task = self.env['project.task']
@@ -163,13 +198,15 @@ class FtProjectDashboard(models.TransientModel):
                 est_by_proj[g['project_id'][0]] = g.get('estimated') or 0.0
         act_by_proj = {}
         for g in AAL.read_group(
-                [('project_id', '!=', False)], ['unit_amount:sum'],
+                self._ts_domain(date_from, date_to), ['unit_amount:sum'],
                 ['project_id'], lazy=False):
             if g.get('project_id'):
                 act_by_proj[g['project_id'][0]] = g.get('unit_amount') or 0.0
 
         rows = []
         for p in Project.search([('active', '=', True)], order='name'):
+            if not self._overlaps_period(p.date_start, p.date, date_from, date_to):
+                continue
             rows.append({
                 'project': p.name or '',
                 # Show the standard Kanban stage (the status bar on the project
@@ -183,10 +220,77 @@ class FtProjectDashboard(models.TransientModel):
             })
         return rows
 
-    def _table_resource_status(self):
+    def _table_delivery(self, date_from, date_to):
+        """One row per person: how much they delivered and how much was on time.
+
+        Covers TLs and Developers (and everyone else) in one table, with the
+        Role column carrying the employee's actual job position. That is
+        deliberate: the dashboard's ROLE_BUCKETS map lumps 'technical lead' and
+        'software developer' into the same 'dev' bucket, so bucketing here would
+        make TLs and Developers indistinguishable — the very split that was
+        asked for. The raw job name keeps them apart without disturbing the
+        bucket counts the existing KPIs and the team pie depend on.
+
+        A task with several assignees counts in full for each of them, matching
+        _table_resource_status. So the column totals exceed the portfolio's task
+        count; each row answers "how did this person's work land", not "who owns
+        what share".
+        """
+        Task = self.env['project.task']
+        Emp = self.env['hr.employee']
+
+        employees = Emp.search([('active', '=', True)])
+        emp_by_user = {e.user_id.id: e for e in employees if e.user_id}
+
+        # Delivered tasks in the period, attributed to each assignee. Ids are
+        # collected and browsed once per employee; unioning recordsets in the
+        # loop would rebuild the set on every step.
+        delivered_ids = {}
+        for task in Task.search(Task._ft_delivery_domain(
+                date_from=date_from, date_to=date_to)):
+            for user in task.user_ids:
+                emp = emp_by_user.get(user.id)
+                if emp:
+                    delivered_ids.setdefault(emp.id, []).append(task.id)
+        delivered_by_emp = {
+            emp_id: Task.browse(ids) for emp_id, ids in delivered_ids.items()
+        }
+
+        # Open + overdue right now, same attribution. One search, grouped in
+        # Python, rather than a count per employee.
+        overdue_by_emp = {}
+        for task in Task.search(Task._ft_overdue_open_domain()):
+            for user in task.user_ids:
+                emp = emp_by_user.get(user.id)
+                if emp:
+                    overdue_by_emp[emp.id] = overdue_by_emp.get(emp.id, 0) + 1
+
+        emp_by_id = {e.id: e for e in employees}
+        rows = []
+        for emp_id in set(delivered_by_emp) | set(overdue_by_emp):
+            emp = emp_by_id.get(emp_id)
+            if not emp:
+                continue
+            stats = Task._ft_on_time_aggregate(
+                delivered_by_emp.get(emp_id, Task.browse()))
+            rows.append({
+                'employee': emp.name or '',
+                'role': emp.job_id.name if emp.job_id else '',
+                'delivered': stats['completed'],
+                'on_time': stats['on_time'],
+                'late': stats['late'],
+                'no_deadline': stats['no_deadline'],
+                'on_time_rate': stats['rate'],
+                'overdue_open': overdue_by_emp.get(emp_id, 0),
+            })
+        rows.sort(key=lambda r: r['employee'].lower())
+        return rows
+
+    def _table_resource_status(self, date_from=None, date_to=None):
         """One row per (employee, project), grouped/sorted by employee name.
 
-        Hours Spent    = timesheet hours the employee logged on the project.
+        Hours Spent    = timesheet hours the employee logged on the project
+                         *within the selected period*.
         Estimated      = sum of task.estimated for the project's tasks assigned
                          to that employee (via task assignees -> employee).
         Days Left      = project End Date (project.date) - today.
@@ -208,7 +312,7 @@ class FtProjectDashboard(models.TransientModel):
         # Hours spent per (employee, project) from timesheets.
         hours = {}
         for g in AAL.read_group(
-                [('employee_id', '!=', False), ('project_id', '!=', False)],
+                self._ts_domain(date_from, date_to) + [('employee_id', '!=', False)],
                 ['unit_amount:sum'], ['employee_id', 'project_id'], lazy=False):
             if g.get('employee_id') and g.get('project_id'):
                 hours[(g['employee_id'][0], g['project_id'][0])] = \
@@ -232,6 +336,10 @@ class FtProjectDashboard(models.TransientModel):
             emp = emp_by_id.get(emp_id)
             proj = proj_by_id.get(proj_id)
             if not emp or not proj:
+                continue
+            # An estimate carries no date of its own, so a pair that only has
+            # estimated hours is kept or dropped on the project's own window.
+            if not self._overlaps_period(proj.date_start, proj.date, date_from, date_to):
                 continue
             days_left = (proj.date - today).days if proj.date else None
             rows.append({

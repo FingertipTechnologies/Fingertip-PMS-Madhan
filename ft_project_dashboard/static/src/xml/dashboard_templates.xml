@@ -179,6 +179,11 @@
                 <div class="ftpd_kpi_grid">
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
                              icon="'fa-user-circle'" color="'#EC4899'"/>
+                    <!-- Trainees sits beside the other headcount cards, and is
+                         counted on its own — never inside Developers/Testers. -->
+                    <KpiCard title="'Trainees'" value="kpis.trainees"
+                             icon="'fa-graduation-cap'" color="'#0EA5E9'"
+                             tooltip="'Active employees whose Job Position starts with &quot;Trainee&quot;. Counted separately, not included in Developers or Testers.'"/>
                     <KpiCard title="'Estimated Hours'" value="kpis.hours_estimated" suffix="'h'"
                              icon="'fa-hourglass-half'" color="'#3B82F6'"/>
                     <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
@@ -186,6 +191,21 @@
                     <KpiCard title="'Resource Need'" value="kpis.resource_need"
                              icon="'fa-users'" color="'#EF4444'"
                              tooltip="'No capacity/planning model installed yet.'"/>
+                </div>
+
+                <!-- KPI Row 3: delivery. Open &amp; Overdue sits beside the
+                     percentage on purpose — the percentage only counts work that
+                     finished, so late work still open is invisible to it. -->
+                <div class="ftpd_kpi_grid">
+                    <KpiCard title="'On-Time Delivery'" value="kpis.on_time_delivery" suffix="'%'"
+                             icon="'fa-check-circle'" color="'#10B981'"
+                             tooltip="'Delivered tasks that met their deadline, in the selected period. Target: 95% or above. Tasks delivered without a deadline are excluded.'"/>
+                    <KpiCard title="'Tasks Delivered'" value="kpis.tasks_delivered"
+                             icon="'fa-flag-checkered'" color="'#4F46E5'"
+                             tooltip="'Tasks that reached a Completed stage in the selected period. Excludes cancelled.'"/>
+                    <KpiCard title="'Open &amp; Overdue'" value="kpis.overdue_open_tasks"
+                             icon="'fa-exclamation-triangle'" color="'#EF4444'"
+                             tooltip="'Tasks still open whose deadline has passed. A snapshot of now, not filtered by the selected period.'"/>
                     <KpiCard title="'Available Resources'" value="kpis.available_resources"
                              icon="'fa-user-plus'" color="'#14B8A6'"
                              tooltip="'No capacity/planning model installed yet.'"/>
@@ -230,6 +250,27 @@
                                 <input type="text" placeholder="Search project…"
                                        t-att-value="state.resourceProjectSearch"
                                        t-on-input="onResourceProjectSearch"/>
+                            </div>
+                        </t>
+                    </DataTable>
+                </div>
+
+                <!-- Full-width table: On-Time Delivery per person. Role holds the
+                     employee's job title, so TLs and Developers read separately. -->
+                <div class="ftpd_chart_row">
+                    <DataTable title="'On-Time Delivery by Resource'"
+                               columns="deliveryColumns"
+                               rows="deliveryRows"
+                               groupKey="'employee'"
+                               groupLabel="'resources'"
+                               emptyText="'Nothing delivered in this period.'"
+                               defaultSort="{ key: 'employee', dir: 'asc' }">
+                        <t t-set-slot="tools">
+                            <div class="ftpd_search">
+                                <i class="fa fa-search"/>
+                                <input type="text" placeholder="Search resource…"
+                                       t-att-value="state.deliverySearch"
+                                       t-on-input="onDeliverySearch"/>
                             </div>
                         </t>
                     </DataTable>

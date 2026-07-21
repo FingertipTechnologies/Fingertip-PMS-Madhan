@@ -214,6 +214,42 @@
                 </xpath>
 
                 <xpath expr="//page[@name='description']" position="before">
+                    <!-- On-Time Delivery. The counts sit next to the percentage on
+                         purpose: the percentage alone hides both of its blind
+                         spots. "Delivered Without Deadline" shows how much work
+                         the percentage ignored, and "Open & Overdue" shows the
+                         late work that never finished and so never counted. -->
+                    <page name="delivery" string="Delivery">
+                        <group>
+                            <group string="On-Time Delivery">
+                                <!-- No widget="percentage": that formatter does
+                                     value*100 and expects a 0-1 fraction, which
+                                     would render 95 as 9500%. The value is
+                                     already 0-100 and the label carries the %. -->
+                                <field name="ft_on_time_rate" digits="[5, 1]"/>
+                                <field name="ft_delivered_tasks"/>
+                                <field name="ft_on_time_tasks"/>
+                                <field name="ft_late_tasks"/>
+                            </group>
+                            <group string="Blind Spots">
+                                <field name="ft_no_deadline_tasks"/>
+                                <field name="ft_overdue_open_tasks"/>
+                                <field name="ft_unestimated_tasks"/>
+                            </group>
+                            <group string="Delivery Efficiency">
+                                <!-- Target 90-110%. Same no-percentage-widget
+                                     reasoning as the on-time rate above. -->
+                                <field name="ft_efficiency_rate" digits="[5, 1]"/>
+                                <field name="ft_estimated_hours" widget="float_time"/>
+                                <field name="ft_actual_hours" widget="float_time"/>
+                            </group>
+                            <group string="Rework">
+                                <!-- Target 10% or below. -->
+                                <field name="ft_rework_rate" digits="[5, 1]"/>
+                                <field name="ft_reworked_tasks"/>
+                            </group>
+                        </group>
+                    </page>
                     <page name="extra_info" string="Extra Information">
                         <!--                        <field name="description"/>-->
                         <group>
