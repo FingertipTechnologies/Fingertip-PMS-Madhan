@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+<data noupdate="0">
+
+   
+
+    <!-- General PMS — All users -->
+    <record id="general.menu_general_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [])]"/>
+    </record>
+
+    <!-- Training — All users (root menu already has no group restriction,
+         so every internal user, including Trainees, already sees it; kept
+         explicit here for clarity/auditability). -->
+    <record id="ft_training.menu_training_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [])]"/>
+    </record>
+
+    <!-- Help Desk — everyone with a Helpdesk role, PMs included explicitly -->
+    <record id="helpdesk_mgmt.helpdesk_ticket_main_menu" model="ir.ui.menu">
+        <field name="groups_id" eval="[
+            (6, 0, [
+                ref('helpdesk_mgmt.group_helpdesk_user_own'),
+                ref('project.group_project_manager'),
+            ])
+        ]"/>
+    </record>
+    <!-- The parallel in-house Helpdesk app is already open to all internal
+         users (base.group_user), which already covers PMs. -->
+    <record id="ft_helpdesk_core.menu_ft_helpdesk_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
+    </record>
+
+    <!-- Employees — common / all -->
+    <record id="hr.menu_hr_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [])]"/>
+    </record>
+
+    <!-- CRM — Sales team only -->
+    <record id="crm.crm_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
+    </record>
+
+    <!-- Sales — Sales team only -->
+    <record id="sale.sale_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
+    </record>
+
+    <!-- Email Marketing — Sales + Marketing team only.
+         VERIFY: confirm the mass_mailing root menu external id on this
+         instance (it can be `mass_mailing.mass_mailing_menu_root` or
+         `mass_mailing.menu_email_marketing` depending on version/edition). -->
+    <record id="mass_mailing.mass_mailing_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
+    </record>
+
+    <!-- Scorecard — PMs + Project Coordinators only -->
+    <record id="Project_Scorecards.menu_project_scorecard_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[
+            (6, 0, [
+                ref('project.group_project_manager'),
+                ref('ft_homepage.group_project_coordinator'),
+            ])
+        ]"/>
+    </record>
+
+    <!-- Dashboard — Admin only.
+         VERIFY: confirm the spreadsheet_dashboard root menu external id
+         (module not present in this codebase / installed separately). -->
+    <record id="spreadsheet_dashboard.spreadsheet_dashboard_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+
+    <!-- AI Insights — Admin only -->
+    <record id="ft_ai_sales_insights.menu_ai_insights_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Target — Admin only -->
+    <record id="ft_target_management.menu_ft_target_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+
+    <!-- Invoicing — Admin only (plus the accounting team, so Finance can
+         still work day to day).
+         VERIFY: on this instance, Accounting and Invoicing may be two
+         separate root menus (e.g. `account.menu_finance` is often shared);
+         adjust the external id if Invoicing has its own. -->
+    <record id="account.menu_finance" model="ir.ui.menu">
+        <field name="groups_id" eval="[
+            (6, 0, [
+                ref('base.group_system'),
+                ref('account.group_account_invoice'),
+            ])
+        ]"/>
+    </record>
+
+    <!-- QA Techstar Test App — hide for everyone (already covered inside
+         PMS/Project, kept installed but removed from the Homepage/menu
+         entirely). -->
+    <record id="qa_testapp.qa_testapp_menu_root" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- Link Tracker — admin only.
+         VERIFY: the Link Tracker menu lives under the Email Marketing /
+         Sales app (module `utm`/`link_tracker`); adjust the external id to
+         match its actual xmlid on this instance. -->
+    <!--
+    <record id="mass_mailing.menu_link_tracker_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+    -->
+
+</data>
+</odoo>

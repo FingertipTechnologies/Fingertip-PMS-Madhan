@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ft_quote_announcement_list" model="ir.ui.view">
+        <field name="name">ft.quote.announcement.list</field>
+        <field name="model">ft.quote.announcement</field>
+        <field name="arch" type="xml">
+            <list string="Quotes / Announcements">
+                <field name="sequence" widget="handle"/>
+                <field name="title"/>
+                <field name="kind"/>
+                <field name="content_type"/>
+                <field name="contributor_id"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_ft_quote_announcement_form" model="ir.ui.view">
+        <field name="name">ft.quote.announcement.form</field>
+        <field name="model">ft.quote.announcement</field>
+        <field name="arch" type="xml">
+            <form string="Quote / Announcement">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="title"/>
+                        <h1><field name="title" placeholder="e.g. Quote of the Day - 20 Jul"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="kind"/>
+                            <field name="content_type" widget="radio"/>
+                            <field name="text_content" invisible="content_type != 'text'"
+                                   placeholder="The quote or announcement text..."/>
+                            <field name="image" widget="image" invisible="content_type != 'image'"/>
+                            <field name="video_url" invisible="content_type != 'video'"
+                                   placeholder="https://youtube.com/... or a .mp4 link"/>
+                        </group>
+                        <group>
+                            <field name="contributor_id"/>
+                            <field name="contributor_name"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_ft_quote_announcement" model="ir.actions.act_window">
+        <field name="name">Quotes / Announcements</field>
+        <field name="res_model">ft.quote.announcement</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add a Quote of the Day, an announcement, or an org-wide update.
+            </p>
+            <p>
+                It will show below the app icons on everyone's Homepage.
+            </p>
+        </field>
+    </record>
+
+    <!-- Inside the General PMS app so every user can open it and
+         contribute quotes/announcements. -->
+    <menuitem id="menu_ft_quote_announcement"
+              name="Quotes / Announcements"
+              parent="general.menu_general_root"
+              action="action_ft_quote_announcement"
+              sequence="60"/>
+
+</odoo>
