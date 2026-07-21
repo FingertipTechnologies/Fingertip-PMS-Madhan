@@ -9,6 +9,14 @@
         <field name="groups_id" eval="[(6, 0, [])]"/>
     </record>
 
+    <!-- Project app — open to all users, so that the
+         "Quotes / Announcements" menu placed under it is visible to
+         everyone (the standard Project root menu is otherwise limited
+         to Project User / Project Manager groups). -->
+    <record id="project.menu_main_pm" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [])]"/>
+    </record>
+
     <!-- Training — All users (root menu already has no group restriction,
          so every internal user, including Trainees, already sees it; kept
          explicit here for clarity/auditability). -->
