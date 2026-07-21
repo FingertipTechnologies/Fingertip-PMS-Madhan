@@ -5,10 +5,20 @@
         <field name="name">ft.today.learning.list</field>
         <field name="model">ft.today.learning</field>
         <field name="arch" type="xml">
+            <!-- Fixed widths on the short columns; the description is left free
+                 so it takes the leftover space instead of being squeezed while
+                 another column stretches. It is plain text and left-aligned, so
+                 unlike a numeric column it reads correctly when it absorbs the
+                 slack. Kept last so the long free column ends the row.
+
+                 Shown as "Description" here while the field keeps its own
+                 "What Did You Learn?" label elsewhere — same field, same data,
+                 list heading only. -->
             <list string="Today's Learning">
-                <field name="create_date" string="Date"/>
-                <field name="learning_topic_id"/>
-                <field name="create_uid" string="Trainee"/>
+                <field name="create_date" string="Date" width="170px"/>
+                <field name="learning_topic_id" width="220px"/>
+                <field name="create_uid" string="Trainee" width="170px"/>
+                <field name="description_preview" string="Description"/>
             </list>
         </field>
     </record>
