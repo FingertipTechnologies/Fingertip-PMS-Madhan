@@ -362,12 +362,15 @@ class FtProjectDashboard(models.TransientModel):
         """Bar: estimated / spent / remaining per project.
 
         Estimated = the project's Estimated Time (``allocated_hours``) — the
-                    value shown on the project form. (Summing the task-level
-                    ``estimated`` field instead gives 0 whenever tasks were left
-                    blank, which hides the Estimated/Remaining bars.)
-        Spent     = all-time timesheet hours logged on the project (not
-                    date-filtered, so it stays comparable to Estimated).
-        Remaining = max(Estimated - Spent, 0).
+                    value shown on the project form. This is a whole-project
+                    figure with no per-period breakdown, so it stays the same
+                    across every filter.
+        Spent     = timesheet hours logged on the project *within the selected
+                    period*, so the Spent bars follow the date filter.
+        Remaining = max(Estimated - Spent, 0). Because Estimated is the full
+                    project allocation, when a short period is selected this
+                    reads as "estimate still not burned by this period's work",
+                    not "remaining for the period".
         """
         Project = self.env['project.project']
         AAL = self.env['account.analytic.line']
@@ -380,7 +383,8 @@ class FtProjectDashboard(models.TransientModel):
 
         spent_by_proj = {}
         for g in AAL.read_group(
-                [('project_id', '!=', False)], ['unit_amount:sum'], ['project_id']):
+                self._ts_domain(date_from, date_to), ['unit_amount:sum'],
+                ['project_id']):
             proj = g.get('project_id')
             if proj:
                 spent_by_proj[proj[0]] = g.get('unit_amount') or 0.0
