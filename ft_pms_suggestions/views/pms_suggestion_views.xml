@@ -87,18 +87,7 @@
         </field>
     </record>
 
-    <!-- Everyone with General PMS access can submit/view suggestions. -->
-    <menuitem id="menu_pms_suggestion"
-              name="Suggestions"
-              parent="project.menu_main_pm"
-              action="action_pms_suggestion"
-              sequence="50"/>
-
-    <menuitem id="menu_pms_suggestion_category"
-              name="Suggestion Modules / Areas"
-              parent="project.menu_main_pm"
-              action="action_pms_suggestion_category"
-              groups="base.group_system"
-              sequence="51"/>
+    <!-- The Suggestions menus now live in their own top-level app
+         (see suggestion_app_menu.xml) instead of inside PMS. -->
 
 </odoo>
