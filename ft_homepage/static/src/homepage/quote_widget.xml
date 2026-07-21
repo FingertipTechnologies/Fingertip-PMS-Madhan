@@ -10,45 +10,52 @@
     </t>
 
     <t t-name="ft_homepage.QuoteWidget">
-        <div class="ft_quote_widget" t-if="state.loaded and state.content">
+        <div class="ft_quote_widget" t-if="state.loaded and state.items.length">
+            <t t-foreach="state.items" t-as="item" t-key="item.id">
 
-            <!-- TEXT: decorative quotation marks + marquee scroll effect -->
-            <div t-if="state.content.content_type == 'text'" class="ft_quote_widget__marquee_track">
-                <div class="ft_quote_widget__inner ft_quote_widget__text">
-                    <span class="ft_quote_widget__mark ft_quote_widget__mark--open">&#8220;</span>
-                    <span class="ft_quote_widget__quote_text" t-esc="state.content.text_content"/>
-                    <span class="ft_quote_widget__mark ft_quote_widget__mark--close">&#8221;</span>
-                    <span t-if="state.content.contributor" class="ft_quote_widget__contributor">
-                        — <t t-esc="state.content.contributor"/>
+                <!-- TEXT: decorative quotation marks + marquee scroll effect -->
+                <div t-if="item.content_type == 'text'" class="ft_quote_widget__marquee_track">
+                    <div class="ft_quote_widget__inner ft_quote_widget__text">
+                        <span class="ft_quote_widget__mark ft_quote_widget__mark--open">&#8220;</span>
+                        <span class="ft_quote_widget__quote_text" t-esc="item.text_content"/>
+                        <span class="ft_quote_widget__mark ft_quote_widget__mark--close">&#8221;</span>
+                        <span t-if="item.contributor" class="ft_quote_widget__contributor">
+                            — <t t-esc="item.contributor"/>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- IMAGE (static, not scrolled) -->
+                <div t-if="item.content_type == 'image'" class="ft_quote_widget__media">
+                    <img t-att-src="item.image_url" class="ft_quote_widget__image" alt="Announcement"/>
+                    <span t-if="item.contributor" class="ft_quote_widget__contributor">
+                        — <t t-esc="item.contributor"/>
                     </span>
                 </div>
-            </div>
 
-            <!-- IMAGE (static, not scrolled) -->
-            <div t-if="state.content.content_type == 'image'" class="ft_quote_widget__media">
-                <img t-att-src="state.content.image_url" class="ft_quote_widget__image" alt="Announcement"/>
-                <span t-if="state.content.contributor" class="ft_quote_widget__contributor">
-                    — <t t-esc="state.content.contributor"/>
-                </span>
-            </div>
+                <!-- VIDEO: uploaded file first, else YouTube embed, else
+                     a direct URL; all autoplay muted. -->
+                <div t-if="item.content_type == 'video'" class="ft_quote_widget__media">
+                    <video t-if="item.video_src" class="ft_quote_widget__video" controls="controls"
+                           autoplay="autoplay" muted="muted" playsinline="playsinline" loop="loop">
+                        <source t-att-src="item.video_src"/>
+                    </video>
+                    <iframe t-elif="isYoutube(item)"
+                            class="ft_quote_widget__video"
+                            t-att-src="youtubeEmbedUrl(item)"
+                            title="Announcement video"
+                            allow="autoplay; encrypted-media; fullscreen"
+                            allowfullscreen="allowfullscreen"/>
+                    <video t-else="" class="ft_quote_widget__video" controls="controls"
+                           autoplay="autoplay" muted="muted" playsinline="playsinline">
+                        <source t-att-src="item.video_url"/>
+                    </video>
+                    <span t-if="item.contributor" class="ft_quote_widget__contributor">
+                        — <t t-esc="item.contributor"/>
+                    </span>
+                </div>
 
-            <!-- VIDEO (static, not scrolled) -->
-            <div t-if="state.content.content_type == 'video'" class="ft_quote_widget__media">
-                <iframe t-if="isYoutube"
-                        class="ft_quote_widget__video"
-                        t-att-src="youtubeEmbedUrl"
-                        title="Announcement video"
-                        allow="autoplay; encrypted-media; fullscreen"
-                        allowfullscreen="allowfullscreen"/>
-                <video t-else="" class="ft_quote_widget__video" controls="controls"
-                       autoplay="autoplay" muted="muted" playsinline="playsinline">
-                    <source t-att-src="state.content.video_url"/>
-                </video>
-                <span t-if="state.content.contributor" class="ft_quote_widget__contributor">
-                    — <t t-esc="state.content.contributor"/>
-                </span>
-            </div>
-
+            </t>
         </div>
     </t>
 

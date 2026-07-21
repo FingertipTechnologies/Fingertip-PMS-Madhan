@@ -11,31 +11,32 @@ export class FtQuoteWidget extends Component {
 
     setup() {
         this.orm = useService("orm");
-        this.state = useState({ content: false, loaded: false });
+        this.state = useState({ items: [], loaded: false });
 
         onWillStart(async () => {
             try {
-                this.state.content = await this.orm.call(
+                const items = await this.orm.call(
                     "ft.quote.announcement",
                     "get_homepage_content",
                     []
                 );
+                this.state.items = Array.isArray(items) ? items : [];
             } catch (e) {
                 // Never let the quote widget break the Homepage for any user.
                 console.warn("ft_homepage: could not load quote/announcement", e);
-                this.state.content = false;
+                this.state.items = [];
             }
             this.state.loaded = true;
         });
     }
 
-    get isYoutube() {
-        const url = this.state.content && this.state.content.video_url;
-        return url && (url.includes("youtube.com") || url.includes("youtu.be"));
+    isYoutube(item) {
+        const url = item.video_url;
+        return !!url && (url.includes("youtube.com") || url.includes("youtu.be"));
     }
 
-    get youtubeEmbedUrl() {
-        const url = this.state.content.video_url;
+    youtubeEmbedUrl(item) {
+        const url = item.video_url;
         let videoId = "";
         if (url.includes("youtu.be/")) {
             videoId = url.split("youtu.be/")[1];

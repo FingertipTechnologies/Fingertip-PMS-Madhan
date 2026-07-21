@@ -41,6 +41,13 @@ class FtQuoteAnnouncement(models.Model):
         string="Video URL",
         help="Link to a video (YouTube, Vimeo, or a direct .mp4 URL).",
     )
+    video_file = fields.Binary(
+        string="Upload Video",
+        attachment=True,
+        help="Upload a video file (.mp4/.webm) directly instead of "
+        "providing a URL. If both are set, the uploaded file is used.",
+    )
+    video_filename = fields.Char(string="Video Filename")
 
     contributor_id = fields.Many2one(
         "res.users",
@@ -66,21 +73,24 @@ class FtQuoteAnnouncement(models.Model):
         required=True,
     )
 
-    @api.constrains("content_type", "text_content", "image", "video_url")
+    @api.constrains("content_type", "text_content", "image", "video_url", "video_file")
     def _check_content_matches_type(self):
         for rec in self:
             if rec.content_type == "text" and not rec.text_content:
                 raise ValidationError("Please add the quote/announcement text.")
             if rec.content_type == "image" and not rec.image:
                 raise ValidationError("Please upload an image.")
-            if rec.content_type == "video" and not rec.video_url:
-                raise ValidationError("Please provide a video URL.")
+            if rec.content_type == "video" and not (rec.video_url or rec.video_file):
+                raise ValidationError(
+                    "Please upload a video file or provide a video URL."
+                )
 
     @api.model
     def get_homepage_content(self):
-        """Return the active quote/announcement to show on the Homepage
+        """Return ALL active quotes/announcements to show on the Homepage
         right now (respecting the optional Show From / Show Until window),
-        highest priority (lowest sequence, most recent) first.
+        ordered by priority. E.g. a text Quote of the Day AND a video
+        announcement that are both active are BOTH returned and displayed.
         """
         # sudo(): the homepage widget must work for EVERY logged-in user,
         # regardless of their access rights on this backend model.
@@ -96,25 +106,34 @@ class FtQuoteAnnouncement(models.Model):
             ("date_to", "=", False),
             ("date_to", ">=", today),
         ]
-        record = records.search(domain, limit=1)
-        if not record:
-            return False
-
-        contributor = record.contributor_name or record.contributor_id.name or ""
-        return {
-            "id": record.id,
-            "title": record.title,
-            "kind": record.kind,
-            "content_type": record.content_type,
-            "text_content": record.text_content,
-            # Inline base64 data URI instead of a /web/image URL, so the
-            # image displays for every user without needing read access
-            # to the model at the HTTP image route.
-            "image_url": (
-                "data:image/png;base64,%s" % record.image.decode()
-                if record.content_type == "image" and record.image
-                else False
-            ),
-            "video_url": record.video_url if record.content_type == "video" else False,
-            "contributor": contributor,
-        }
+        items = []
+        for record in records.search(domain):
+            contributor = record.contributor_name or record.contributor_id.name or ""
+            items.append({
+                "id": record.id,
+                "title": record.title,
+                "kind": record.kind,
+                "content_type": record.content_type,
+                "text_content": record.text_content,
+                # Inline base64 data URI instead of a /web/image URL, so
+                # the image displays for every user without needing read
+                # access to the model at the HTTP image route.
+                "image_url": (
+                    "data:image/png;base64,%s" % record.image.decode()
+                    if record.content_type == "image" and record.image
+                    else False
+                ),
+                # Uploaded video file wins over the URL; it is streamed
+                # through our own sudo'd controller so every user can
+                # play it.
+                "video_src": (
+                    "/ft_homepage/video/%s" % record.id
+                    if record.content_type == "video" and record.video_file
+                    else False
+                ),
+                "video_url": (
+                    record.video_url if record.content_type == "video" else False
+                ),
+                "contributor": contributor,
+            })
+        return items

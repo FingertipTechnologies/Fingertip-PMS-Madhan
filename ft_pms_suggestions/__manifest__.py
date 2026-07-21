@@ -26,7 +26,8 @@
         "data/ir_sequence_data.xml",
         "views/pms_suggestion_category_views.xml",
         "views/pms_suggestion_views.xml",
+        "views/suggestion_app_menu.xml",
     ],
     "installable": True,
-    "application": False,
+    "application": True,
 }

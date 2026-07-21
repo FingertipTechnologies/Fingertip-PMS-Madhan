@@ -35,8 +35,12 @@
                             <field name="text_content" invisible="content_type != 'text'"
                                    placeholder="The quote or announcement text..."/>
                             <field name="image" widget="image" invisible="content_type != 'image'"/>
+                            <field name="video_file" widget="binary"
+                                   filename="video_filename"
+                                   invisible="content_type != 'video'"/>
+                            <field name="video_filename" invisible="1"/>
                             <field name="video_url" invisible="content_type != 'video'"
-                                   placeholder="https://youtube.com/... or a .mp4 link"/>
+                                   placeholder="...or paste a YouTube / .mp4 link"/>
                         </group>
                         <group>
                             <field name="contributor_id"/>
@@ -67,20 +71,23 @@
         </field>
     </record>
 
-    <!-- Inside the General PMS app so every user can open it and
-         contribute quotes/announcements. -->
+    <!-- Inside the PMS app; the quote/announcement itself shows on the
+         homepage for everyone, but this management menu is visible only
+         to HR and Admins. -->
     <menuitem id="menu_ft_quote_announcement"
               name="Quotes / Announcements"
               parent="project.menu_main_pm"
               action="action_ft_quote_announcement"
               sequence="60"/>
 
-    <!-- The menu was originally created admin-only (base.group_system).
-         Removing the groups attribute from the menuitem above does NOT
-         clear the stored restriction on upgrade, so reset it explicitly
-         to "all internal users" here. -->
+    <!-- Set explicitly via a record (not the menuitem groups attribute)
+         so the stored restriction in the DB is reliably replaced on
+         every upgrade. -->
     <record id="menu_ft_quote_announcement" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [
+            ref('hr.group_hr_user'),
+            ref('base.group_system'),
+        ])]"/>
     </record>
 
 </odoo>
