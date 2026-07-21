@@ -177,6 +177,8 @@
 
                 <!-- KPI Row 2 -->
                 <div class="ftpd_kpi_grid">
+                    <KpiCard title="'Trainees'" value="kpis.trainees"
+                             icon="'fa-graduation-cap'" color="'#0EA5E9'"/>
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
                              icon="'fa-user-circle'" color="'#EC4899'"/>
                     <!-- Trainees sits beside the other headcount cards, and is
@@ -225,6 +227,33 @@
                                        t-att-value="state.projectSearch"
                                        t-on-input="onProjectSearch"/>
                             </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="onProjectStatus">
+                                    <option value="">All Statuses</option>
+                                    <t t-foreach="projectStatusOptions" t-as="st" t-key="st">
+                                        <option t-att-value="st"
+                                                t-att-selected="state.projectStatus === st">
+                                            <t t-esc="st"/>
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Filter by project start date">
+                                <span class="ftpd_filter_label">Start</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.projectDateFrom"
+                                       t-on-change="onProjectDateFrom"/>
+                                <span>→</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.projectDateTo"
+                                       t-on-change="onProjectDateTo"/>
+                                <button class="ftpd_btn ftpd_filter_clear"
+                                        t-if="state.projectStatus || state.projectDateFrom || state.projectDateTo"
+                                        t-on-click="clearProjectFilters" title="Clear filters">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
                         </t>
                     </DataTable>
                 </div>
@@ -250,6 +279,21 @@
                                 <input type="text" placeholder="Search project…"
                                        t-att-value="state.resourceProjectSearch"
                                        t-on-input="onResourceProjectSearch"/>
+                            </div>
+                            <div class="ftpd_filter" title="Filter by project start date">
+                                <span class="ftpd_filter_label">Start</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.resourceDateFrom"
+                                       t-on-change="onResourceDateFrom"/>
+                                <span>→</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.resourceDateTo"
+                                       t-on-change="onResourceDateTo"/>
+                                <button class="ftpd_btn ftpd_filter_clear"
+                                        t-if="state.resourceDateFrom || state.resourceDateTo"
+                                        t-on-click="clearResourceDates" title="Clear dates">
+                                    <i class="fa fa-times"/>
+                                </button>
                             </div>
                         </t>
                     </DataTable>

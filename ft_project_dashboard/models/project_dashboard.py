@@ -127,6 +127,7 @@ class FtProjectDashboard(models.TransientModel):
             'billable_hours': round(billable, 2),
             'developers': roles['dev'],
             'testers': roles['qa'],
+            'trainees': roles['trainee'],
             'project_managers': roles['pm'],
             # Counted separately from Developers/Testers: trainees are detected
             # by a job position starting with "trainee", so they are never
@@ -347,6 +348,9 @@ class FtProjectDashboard(models.TransientModel):
                 'role': emp.job_id.name if emp.job_id else '',
                 'project': proj.name or '',
                 'status': proj.stage_id.name or '',
+                # Project start date, exposed so the client can date-filter the
+                # resource rows (they are otherwise timesheet-aggregated totals).
+                'start_date': self._iso_date(proj.date_start),
                 'days_left': days_left,
                 'hours_spent': round(hours.get((emp_id, proj_id), 0.0), 2),
                 'estimated': round(est.get((emp_id, proj_id), 0.0), 2),
@@ -424,13 +428,13 @@ class FtProjectDashboard(models.TransientModel):
         }
 
     def _chart_team_composition(self):
-        """Pie: developers / testers / project managers."""
+        """Pie: developers / testers / trainees / project managers."""
         roles = self._role_counts()
         return {
-            'labels': ['Developers', 'Testers', 'Project Managers'],
+            'labels': ['Developers', 'Testers', 'Trainees', 'Project Managers'],
             'datasets': [{
-                'data': [roles['dev'], roles['qa'], roles['pm']],
-                'backgroundColor': ['#4F46E5', '#06B6D4', '#F59E0B'],
+                'data': [roles['dev'], roles['qa'], roles['trainee'], roles['pm']],
+                'backgroundColor': ['#4F46E5', '#06B6D4', '#10B981', '#F59E0B'],
             }],
         }
 

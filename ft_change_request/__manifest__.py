@@ -14,6 +14,7 @@ a list of change requests with an auto-generated request number, date, status
     'website': '',
     'depends': [
         'project',
+        'mail',
     ],
     'data': [
         'security/ir.model.access.csv',

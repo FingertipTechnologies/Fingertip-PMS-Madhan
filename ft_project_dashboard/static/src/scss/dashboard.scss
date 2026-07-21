@@ -244,6 +244,43 @@
             min-width: 180px;
         }
     }
+    // Per-table filter controls (status dropdown + start-date range).
+    .ftpd_filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff;
+        border: 1px solid var(--ftpd-border);
+        border-radius: 8px;
+        padding: 4px 8px;
+        color: var(--ftpd-muted);
+
+        .ftpd_filter_label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .ftpd_filter_select {
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font-size: 13px;
+            color: var(--ftpd-text);
+            cursor: pointer;
+            min-width: 130px;
+        }
+        .ftpd_date {
+            border: 1px solid var(--ftpd-border);
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 12.5px;
+            color: var(--ftpd-text);
+            background: #fff;
+        }
+        .ftpd_filter_clear {
+            padding: 4px 7px;
+            line-height: 1;
+        }
+    }
     .ftpd_table_foot {
         display: flex;
         align-items: center;

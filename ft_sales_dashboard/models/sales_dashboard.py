@@ -65,10 +65,23 @@ class FtSalesDashboard(models.TransientModel):
 
     # ------------------------------------------------------------------
     def _chart_funnel(self, base_domain):
-        """Opportunity count per stage (the sales funnel)."""
+        """Opportunity count per stage (the sales funnel).
+
+        Bands follow the configured CRM stage sequence (Cold -> Discussion ->
+        ... -> Won -> Lost), not the opportunity count, so the funnel reads as
+        the pipeline flow. Stages without a sequence match / the 'Undefined'
+        group sort last.
+        """
         groups = self.env['crm.lead'].read_group(
             base_domain + [('active', '=', True)],
             ['expected_revenue:sum'], ['stage_id'], lazy=False)
+        seq_by_stage = {
+            s.id: s.sequence
+            for s in self.env['crm.stage'].browse(
+                [g['stage_id'][0] for g in groups if g.get('stage_id')])
+        }
+        groups.sort(key=lambda g: seq_by_stage.get(
+            g['stage_id'][0] if g.get('stage_id') else False, 10 ** 6))
         labels = [g['stage_id'][1] if g.get('stage_id') else 'Undefined' for g in groups]
         counts = [g['__count'] for g in groups]
         # Stage id per band (False for the "Undefined" group) so the front-end

@@ -61,8 +61,10 @@ export class FunnelChart extends Component {
             color: colors[i] || PALETTE[i % PALETTE.length],
             stageId: stageIds[i] !== undefined ? stageIds[i] : false,
         }));
-        // A funnel reads widest-to-narrowest top-to-bottom, so order by value.
-        items.sort((a, b) => b.value - a.value);
+        // Order comes from the server in CRM stage-sequence order
+        // (Cold -> Discussion -> ... -> Won -> Lost); keep it as-is rather than
+        // re-sorting by count, so the funnel follows the pipeline flow. The band
+        // taper is rank-based (see widthAt), so the cone stays clean regardless.
 
         const n = items.length;
         // Even rank-based taper from TOP_WIDTH (mouth) to TIP_WIDTH (last stage).

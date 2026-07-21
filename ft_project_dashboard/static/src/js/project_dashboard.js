@@ -75,8 +75,13 @@ export class ProjectDashboard extends Component {
             data: null,
             loading: true,
             projectSearch: "",
+            projectStatus: "",
+            projectDateFrom: null,
+            projectDateTo: null,
             resourceSearch: "",
             resourceProjectSearch: "",
+            resourceDateFrom: null,
+            resourceDateTo: null,
             projectHoursSearch: "",
             deliverySearch: "",
         });
@@ -279,8 +284,10 @@ export class ProjectDashboard extends Component {
     }
 
     // ----------------------------------------------------------------
-    // Table search (client-side). Rows arrive sorted alphabetically from
-    // the server; DataTable re-sorts/paginates on top of the filtered set.
+    // Table search / filters (client-side). Rows arrive sorted from the
+    // server; DataTable re-sorts/paginates on top of the filtered set.
+    // Dates are ISO 'YYYY-MM-DD' strings, which compare chronologically as
+    // plain strings, so a range check is a simple lexicographic comparison.
     // ----------------------------------------------------------------
     get deliveryRows() {
         const q = (this.state.deliverySearch || "").trim().toLowerCase();
@@ -291,26 +298,74 @@ export class ProjectDashboard extends Component {
     onDeliverySearch(ev) {
         this.state.deliverySearch = ev.target.value || "";
     }
+    _inDateRange(iso, from, to) {
+        // Rows without a date are dropped once any bound is active.
+        if (!from && !to) return true;
+        if (!iso) return false;
+        if (from && iso < from) return false;
+        if (to && iso > to) return false;
+        return true;
+    }
+
+    // Distinct project statuses present in the current data, for the
+    // Project Status dropdown ("" = All Statuses).
+    get projectStatusOptions() {
+        const seen = new Set();
+        for (const r of this.tables.project_status || []) {
+            if (r.status) seen.add(r.status);
+        }
+        return Array.from(seen).sort((a, b) => a.localeCompare(b));
+    }
 
     get projectRows() {
         const q = (this.state.projectSearch || "").trim().toLowerCase();
-        const rows = this.tables.project_status || [];
-        if (!q) return rows;
-        return rows.filter((r) => (r.project || "").toLowerCase().includes(q));
+        const status = this.state.projectStatus || "";
+        const from = this.state.projectDateFrom;
+        const to = this.state.projectDateTo;
+        let rows = this.tables.project_status || [];
+        if (q) {
+            rows = rows.filter((r) => (r.project || "").toLowerCase().includes(q));
+        }
+        if (status) {
+            rows = rows.filter((r) => (r.status || "") === status);
+        }
+        if (from || to) {
+            rows = rows.filter((r) => this._inDateRange(r.start_date, from, to));
+        }
+        return rows;
     }
     onProjectSearch(ev) {
         this.state.projectSearch = ev.target.value || "";
+    }
+    onProjectStatus(ev) {
+        this.state.projectStatus = ev.target.value || "";
+    }
+    onProjectDateFrom(ev) {
+        this.state.projectDateFrom = ev.target.value || null;
+    }
+    onProjectDateTo(ev) {
+        this.state.projectDateTo = ev.target.value || null;
+    }
+    clearProjectFilters() {
+        this.state.projectStatus = "";
+        this.state.projectDateFrom = null;
+        this.state.projectDateTo = null;
     }
 
     get resourceRows() {
         const q = (this.state.resourceSearch || "").trim().toLowerCase();
         const pq = (this.state.resourceProjectSearch || "").trim().toLowerCase();
+        const from = this.state.resourceDateFrom;
+        const to = this.state.resourceDateTo;
         let rows = this.tables.resource_status || [];
         if (q) {
             rows = rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
         }
         if (pq) {
             rows = rows.filter((r) => (r.project || "").toLowerCase().includes(pq));
+        }
+        if (from || to) {
+            rows = rows.filter((r) => this._inDateRange(r.start_date, from, to));
         }
         return rows;
     }
@@ -319,6 +374,16 @@ export class ProjectDashboard extends Component {
     }
     onResourceProjectSearch(ev) {
         this.state.resourceProjectSearch = ev.target.value || "";
+    }
+    onResourceDateFrom(ev) {
+        this.state.resourceDateFrom = ev.target.value || null;
+    }
+    onResourceDateTo(ev) {
+        this.state.resourceDateTo = ev.target.value || null;
+    }
+    clearResourceDates() {
+        this.state.resourceDateFrom = null;
+        this.state.resourceDateTo = null;
     }
 
     // ----------------------------------------------------------------
