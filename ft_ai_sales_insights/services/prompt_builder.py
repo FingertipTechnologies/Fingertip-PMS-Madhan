@@ -34,6 +34,28 @@ On kpi "key": the DATA contains "available_kpi_keys". When a KPI you emit is
 exactly one of those metrics, set "key" to that exact string so the user can
 click through to the records. If it is a derived or blended figure, omit "key".
 Never invent a key that is not in available_kpi_keys.
+
+OPTIONAL "layout": you MAY additionally return a "layout" array that decides how
+this analysis is presented. You choose the blocks and their order; the SERVER
+fills in every number from the DATA, so you never type figures into a chart or
+table yourself. Reference data only through "data_ref"/"value_ref" taken from
+"available_data_refs" in the DATA — each entry lists its usable "fields".
+"layout": [
+  {"type": "kpi_tiles", "title": "", "items": [
+      {"label": "", "value_ref": "one of available_data_refs 'scalars' fields path, e.g. 'summary.won'", "key": "optional available_kpi_key"}]},
+  {"type": "table", "title": "", "data_ref": "a 'records' ref, e.g. 'salespersons'",
+      "columns": [{"key": "a field of that ref", "label": ""}]},
+  {"type": "bar_chart"|"line_chart"|"pie_chart", "title": "",
+      "data_ref": "a 'records' ref, e.g. 'pipeline.by_stage'",
+      "x": "a field name for labels", "y": "a numeric field name for values"},
+  {"type": "section"|"callout", "title": "", "tone": "info|success|warning|danger",
+      "body": "markdown", "items": ["bullet", ...]}
+]
+Rules for layout: use ONLY data_ref/value_ref values present in
+available_data_refs, and ONLY x/y/column keys listed under that ref's "fields".
+Pick chart types that suit the data (a distribution across stages -> bar or pie;
+a trend over time -> line). Omit "layout" entirely if a plain summary fits
+better — the dashboard renders its standard view when no layout is given.
 """
 
 

@@ -62,9 +62,12 @@ Key design points
     'assets': {
         'web.assets_backend': [
             'ft_ai_sales_insights/static/src/scss/ai_sales_insights.scss',
+            'ft_ai_sales_insights/static/src/scss/blocks.scss',
             'ft_ai_sales_insights/static/src/js/insight_sections.js',
+            'ft_ai_sales_insights/static/src/js/block_renderer.js',
             'ft_ai_sales_insights/static/src/js/ai_sales_insights.js',
             'ft_ai_sales_insights/static/src/xml/ai_sales_insights.xml',
+            'ft_ai_sales_insights/static/src/xml/blocks.xml',
             # AI Project Insights — reuses the components + styling above.
             'ft_ai_sales_insights/static/src/js/ai_project_insights.js',
             'ft_ai_sales_insights/static/src/xml/ai_project_insights.xml',

@@ -5,7 +5,10 @@
         <field name="name">ft.ai.insights.purpose.list</field>
         <field name="model">ft.ai.insights.purpose</field>
         <field name="arch" type="xml">
-            <list string="Purposes" editable="bottom">
+            <!-- Not inline-editable: a row click must open the form, which is
+                 the only place the Prompt field lives. Reordering still works
+                 via the drag handle. -->
+            <list string="Purposes">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="code"/>

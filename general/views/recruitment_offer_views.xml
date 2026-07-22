@@ -46,7 +46,7 @@
                     </group>
                     <notebook>
                         <page string="Offer Letter" name="letter">
-                            <field name="offer_letter_attachment" widget="many2many_binary"/>
+                            <field name="offer_letter_attachment" widget="many2many_binary_preview"/>
                         </page>
                         <page string="Remarks" name="remarks">
                             <field name="remarks"/>

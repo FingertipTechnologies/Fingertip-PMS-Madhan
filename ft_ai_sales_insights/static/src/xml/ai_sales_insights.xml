@@ -180,6 +180,16 @@
                             </div>
                         </div>
 
+                        <!-- AI-decided layout: the shell above (score + summary)
+                             stays fixed; these blocks are chosen by the AI and
+                             filled with server data. Absent -> the fixed view
+                             below renders exactly as before. -->
+                        <div class="aisi_layout" t-if="layout.length">
+                            <BlockRenderer t-foreach="layout" t-as="block"
+                                           t-key="block_index" block="block"/>
+                        </div>
+
+                        <t t-if="!layout.length">
                         <div class="aisi_kpi_row" t-if="insight.kpis and insight.kpis.length">
                             <InsightKpi t-foreach="insight.kpis" t-as="k" t-key="k_index" kpi="k"/>
                         </div>
@@ -266,6 +276,7 @@
                                 </div>
                             </div>
                         </div>
+                        </t>
                     </t>
 
                     <!-- Fallback: unparsed text -->

@@ -5,7 +5,9 @@ import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { useSetupAction } from "@web/search/action_hook";
 import { browser } from "@web/core/browser/browser";
+import { loadJS } from "@web/core/assets";
 import { InsightKpi, InsightSection } from "./insight_sections";
+import { BlockRenderer } from "./block_renderer";
 
 const MODEL = "ft.ai.sales.insights";
 
@@ -33,7 +35,7 @@ function writeStoredFilters(filters) {
 
 export class AiSalesInsights extends Component {
     static template = "ft_ai_sales_insights.AiSalesInsights";
-    static components = { InsightKpi, InsightSection };
+    static components = { InsightKpi, InsightSection, BlockRenderer };
     static props = ["*"];
 
     setup() {
@@ -86,6 +88,9 @@ export class AiSalesInsights extends Component {
         });
 
         onWillStart(async () => {
+            // Chart.js backs the AI-chosen chart blocks. Loaded once up front so
+            // a chart never mounts before the library is available.
+            await loadJS("/web/static/lib/Chart/Chart.js");
             const opts = await this.orm.call(MODEL, "get_filter_options", []);
             this.state.options = opts;
             // A restored view already has its purpose; don't overwrite it.
@@ -191,6 +196,13 @@ export class AiSalesInsights extends Component {
     // ---- Result getters -------------------------------------------------
     get insight() {
         return this.state.result?.insight || null;
+    }
+
+    // The AI-chosen layout blocks, if any. When empty the template falls back to
+    // the fixed KPI/section/card view, so older purposes render unchanged.
+    get layout() {
+        const blocks = this.insight?.layout;
+        return Array.isArray(blocks) ? blocks : [];
     }
     get meta() {
         return this.state.result?.meta || {};

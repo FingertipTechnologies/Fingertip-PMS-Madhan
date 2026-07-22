@@ -148,7 +148,7 @@
                             </group>
                         </page>
                         <page string="Evidence">
-                            <separator string="Description"/>
+                            <separator string="Paste screenshots/images here (Ctrl + V). To upload files, use the Attachments section below"/>
                             <!-- qa_evidence_html: the standard description editor
                                  (type + paste screenshots), with pasted images
                                  shown small and click-to-preview. -->

@@ -114,7 +114,7 @@
                         </page>
                         <page string="Documents &amp; Links" name="docs">
                             <group>
-                                <field name="resume_attachment" widget="many2many_binary"/>
+                                <field name="resume_attachment" widget="many2many_binary_preview"/>
                                 <field name="linkedin_url"/>
                                 <field name="portfolio_github_url"/>
                             </group>

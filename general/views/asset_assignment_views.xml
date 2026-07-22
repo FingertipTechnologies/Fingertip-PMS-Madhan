@@ -45,7 +45,7 @@
                         </page>
                         <page string="Acknowledgement" name="ack">
                             <field name="acknowledgement_attachment"
-                                   widget="many2many_binary"/>
+                                   widget="many2many_binary_preview"/>
                         </page>
                     </notebook>
                 </sheet>

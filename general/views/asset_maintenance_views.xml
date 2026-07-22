@@ -45,7 +45,7 @@
                             <field name="issue_description"/>
                         </page>
                         <page string="Attachments" name="attach">
-                            <field name="attachment_ids" widget="many2many_binary"/>
+                            <field name="attachment_ids" widget="many2many_binary_preview"/>
                         </page>
                         <page string="Remarks" name="remarks">
                             <field name="remarks"/>

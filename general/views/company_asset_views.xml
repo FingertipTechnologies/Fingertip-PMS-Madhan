@@ -119,7 +119,7 @@
                             </group>
                         </page>
                         <page string="Documents" name="documents">
-                            <field name="attachment_ids" widget="many2many_binary"/>
+                            <field name="attachment_ids" widget="many2many_binary_preview"/>
                             <separator string="Remarks"/>
                             <field name="remarks"/>
                         </page>

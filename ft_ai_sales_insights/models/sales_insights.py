@@ -22,6 +22,10 @@ from odoo.addons.ft_ai_sales_insights.services.data_collector import (
     SalesDataCollector,
 )
 from odoo.addons.ft_ai_sales_insights.services.drilldown import attach_kpi_actions
+from odoo.addons.ft_ai_sales_insights.services.layout_resolver import (
+    enumerate_data_refs,
+    resolve_layout,
+)
 from odoo.addons.ft_ai_sales_insights.services.prompt_builder import PromptBuilder
 from odoo.addons.ft_ai_sales_insights.services.providers.base import AIProviderError
 
@@ -161,6 +165,9 @@ class FtAiSalesInsights(models.TransientModel):
         # Offer the model the metrics it may tag for click-through.
         drilldowns = collector.drilldowns()
         payload["available_kpi_keys"] = sorted(drilldowns)
+        # Tell the model exactly which data it may reference in a layout, and
+        # with which fields, so charts/tables it lays out are always data-backed.
+        payload["available_data_refs"] = enumerate_data_refs(payload)
 
         # 2) Build the prompt from editable master + purpose prompts.
         currency = self.env.company.currency_id.name or ""
@@ -202,6 +209,10 @@ class FtAiSalesInsights(models.TransientModel):
         duration_ms = int((time.monotonic() - started) * 1000)
         structured, raw_text = self._parse_response(result.text)
         structured = attach_kpi_actions(structured, drilldowns)
+        # Fill any AI-chosen layout blocks with the real collected data (and drop
+        # blocks referencing anything missing). No-op for purposes that returned
+        # no layout, so the standard view is unaffected.
+        structured = resolve_layout(structured, payload)
 
         # 4) Audit log.
         log = self.env["ft.ai.insights.log"].sudo().create({
