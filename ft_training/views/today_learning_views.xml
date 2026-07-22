@@ -15,8 +15,8 @@
                  "What Did You Learn?" label elsewhere — same field, same data,
                  list heading only. -->
             <list string="Today's Learning">
-                <field name="create_date" string="Date" width="170px"/>
-                <field name="learning_topic_id" width="220px"/>
+                <field name="create_date" string="Date" width="210px"/>
+                <field name="learning_topic_id" width="400px"/>
                 <field name="create_uid" string="Trainee" width="170px"/>
                 <field name="description_preview" string="Description"/>
             </list>
