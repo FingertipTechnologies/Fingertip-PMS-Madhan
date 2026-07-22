@@ -41,6 +41,8 @@ Implements 3 requirements on top of the Homepage (web_responsive Apps Menu grid)
         "sale",
         "mass_mailing",
         "account",
+        "link_tracker",
+        "website",
     ],
     "data": [
         "security/security.xml",
