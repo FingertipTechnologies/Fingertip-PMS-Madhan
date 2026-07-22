@@ -50,18 +50,8 @@
         <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
     </record>
 
-    <!-- Sales — Sales team only -->
-    <record id="sale.sale_menu_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
-    </record>
-
-    <!-- Email Marketing — Sales + Marketing team only.
-         VERIFY: confirm the mass_mailing root menu external id on this
-         instance (it can be `mass_mailing.mass_mailing_menu_root` or
-         `mass_mailing.menu_email_marketing` depending on version/edition). -->
-    <record id="mass_mailing.mass_mailing_menu_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
-    </record>
+    <!-- Sales and Email Marketing are fully removed for everyone —
+         see the deactivation block at the end of this file. -->
 
     <!-- Scorecard — PMs + Project Coordinators only -->
     <record id="Project_Scorecards.menu_project_scorecard_root" model="ir.ui.menu">
@@ -129,6 +119,38 @@
 
     <!-- Website — removed from the Homepage for ALL users -->
     <record id="website.menu_website_configuration" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- ================================================================
+         Apps removed from the Homepage for EVERYONE (admins included).
+         Deactivating the root menu is the only way to hide an app from
+         admins too — group restrictions don't apply to them since the
+         admin belongs to / implies most groups.
+         ================================================================ -->
+
+    <!-- Discuss -->
+    <record id="mail.menu_root_discuss" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- Calendar -->
+    <record id="calendar.mail_menu_calendar" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- Sales -->
+    <record id="sale.sale_menu_root" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- eLearning -->
+    <record id="website_slides.website_slides_menu_root" model="ir.ui.menu">
+        <field name="active" eval="False"/>
+    </record>
+
+    <!-- Email Marketing -->
+    <record id="mass_mailing.mass_mailing_menu_root" model="ir.ui.menu">
         <field name="active" eval="False"/>
     </record>
 

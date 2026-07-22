@@ -43,6 +43,8 @@ Implements 3 requirements on top of the Homepage (web_responsive Apps Menu grid)
         "account",
         "link_tracker",
         "website",
+        "calendar",
+        "website_slides",
     ],
     "data": [
         "security/security.xml",
