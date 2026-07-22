@@ -28,6 +28,14 @@ class InheritCrmLead(models.Model):
     ], string='Lead Source')
 
     owner_id = fields.Many2one('res.users', string='Owner')
+    # Business Development Representative. Defaults to whoever creates the
+    # opportunity (env.user at creation time == the creator), and stays editable
+    # so it can be reassigned later independently of the audit "Created by".
+    bdr_id = fields.Many2one(
+        'res.users', string='BDR',
+        default=lambda self: self.env.user,
+        tracking=True,
+    )
     technology_id = fields.Many2one('cus.technology', string='Technology')
     profit = fields.Monetary(string='Profit', currency_field='company_currency')
     amount = fields.Monetary(string='Amount', currency_field='company_currency')

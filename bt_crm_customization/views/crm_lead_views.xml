@@ -15,7 +15,8 @@
                 <field name="source_amount" invisible="type != 'opportunity'"/>
                 <field name="date_closed" invisible="type != 'opportunity'"/>
                 <field name="create_uid" invisible="type != 'opportunity'"/>
-                <field name="description_text" invisible="type != 'opportunity'"/>
+                <field name="bdr_id" invisible="type != 'opportunity'"/>
+                <field name="description_text" invisible="type != 'opportunity'"/>       
             </xpath>
 
             <!-- RIGHT column: bring mandatory fields to the top.
@@ -88,6 +89,31 @@
                 <field name="linkedin_url" widget="url" placeholder="e.g. https://www.linkedin.com/company/..."/>
             </xpath>
 
+        </field>
+    </record>
+
+    <!-- BDR column in the opportunity list -->
+    <record id="view_crm_lead_list_bdr" model="ir.ui.view">
+        <field name="name">crm.lead.list.bdr</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="inside">
+                <field name="bdr_id" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- BDR search field + Group By in the opportunity search view -->
+    <record id="view_crm_lead_search_bdr" model="ir.ui.view">
+        <field name="name">crm.lead.search.bdr</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <field name="bdr_id"/>
+                <filter name="group_bdr" string="BDR" context="{'group_by': 'bdr_id'}"/>
+            </xpath>
         </field>
     </record>
 </odoo>
