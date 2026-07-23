@@ -13,10 +13,25 @@ from __future__ import annotations
 
 import logging
 
+from odoo import fields
+
 _logger = logging.getLogger(__name__)
 
 # Cap list-style sections so payloads stay bounded on huge databases.
 TOP_N = 10
+
+# A deal below this win probability (that still carries real value) is treated
+# as at risk — value riding on a low chance of closing.
+LOW_PROBABILITY = 30.0
+# Days without a stage change after which an open deal counts as stale.
+STALE_DAYS = 30
+# Age buckets (days since creation) for the open-pipeline aging view.
+AGING_BUCKETS = [
+    (0, 30, "0-30 days"),
+    (31, 60, "31-60 days"),
+    (61, 90, "61-90 days"),
+    (91, None, "90+ days"),
+]
 
 
 class SalesDataCollector:
@@ -134,11 +149,23 @@ class SalesDataCollector:
             ("quotations", self._quotations),
             ("products", self._products),
             ("lost", self._lost),
+            ("top_opportunities", self._top_opportunities),
+            ("at_risk_deals", self._at_risk_deals),
+            ("aging", self._aging),
+            ("weighted", self._weighted),
             ("activities", self._activities),
             ("kpis", self._kpis),
         ):
+            # Each section runs inside its own savepoint. A section that fails
+            # with a DATABASE error (not just a Python one) leaves the cursor's
+            # transaction aborted, and catching the Python exception does not
+            # clear that — every later query, including the caller's save of the
+            # result record, would then raise "current transaction is aborted".
+            # The savepoint rolls the failed section back so the rest of the
+            # collection, and the request, keep working.
             try:
-                payload[key] = fn()
+                with self.env.cr.savepoint():
+                    payload[key] = fn()
             except Exception as exc:  # pragma: no cover - defensive
                 _logger.warning("AI insights: section '%s' failed: %s", key, exc)
                 payload[key] = {"error": "unavailable"}
@@ -329,6 +356,149 @@ class SalesDataCollector:
             }
             for g in rows
         ]
+
+    def _open_opp_domain(self, extra=None):
+        """Domain for OPEN opportunities (not won, still active).
+
+        The base for every record-level section below, so 'top', 'at risk' and
+        'aging' all draw from exactly the same population.
+        """
+        return self._lead_domain(
+            [("type", "=", "opportunity"), ("active", "=", True),
+             ("stage_id.is_won", "=", False)] + (extra or [])
+        )
+
+    def _top_opportunities(self):
+        """Largest OPEN opportunities, so the model can name real deals.
+
+        The narrative "top_opportunities" card and any table the model lays out
+        both read from here — the collector never ships a figure the user cannot
+        trace back to a record.
+        """
+        Lead = self.env["crm.lead"]
+        recs = Lead.search_read(
+            self._open_opp_domain(),
+            ["name", "partner_id", "user_id", "stage_id",
+             "expected_revenue", "probability", "date_deadline"],
+            order="expected_revenue desc",
+            limit=TOP_N,
+        )
+        out = []
+        for r in recs:
+            rev = r.get("expected_revenue") or 0.0
+            prob = r.get("probability") or 0.0
+            out.append({
+                "name": r.get("name") or "Untitled",
+                "customer": r["partner_id"][1] if r.get("partner_id") else "",
+                "salesperson": r["user_id"][1] if r.get("user_id") else "",
+                "stage": r["stage_id"][1] if r.get("stage_id") else "",
+                "expected_revenue": round(rev, 2),
+                "probability": round(prob, 1),
+                "weighted_value": round(rev * prob / 100.0, 2),
+                "expected_close": str(r["date_deadline"]) if r.get("date_deadline") else "",
+            })
+        return out
+
+    def _at_risk_deals(self):
+        """Open opportunities showing one or more risk signals.
+
+        A deal is flagged when it is past its expected close, has gone stale in
+        its stage, has no next activity (or an overdue one), or carries real
+        value at a low probability. Each signal is spelled out in ``reason`` so
+        the model quotes a concrete cause, never an invented one. Ranked by value
+        and capped so the payload stays bounded.
+        """
+        Lead = self.env["crm.lead"]
+        today = _today(self.env)
+        now = fields.Datetime.now()
+        recs = Lead.search_read(
+            self._open_opp_domain(),
+            ["name", "partner_id", "user_id", "stage_id",
+             "expected_revenue", "probability", "date_deadline",
+             "date_last_stage_update", "activity_date_deadline", "activity_state"],
+        )
+        flagged = []
+        for r in recs:
+            rev = r.get("expected_revenue") or 0.0
+            prob = r.get("probability") or 0.0
+            reasons = []
+
+            deadline = fields.Date.to_date(r["date_deadline"]) if r.get("date_deadline") else None
+            if deadline and deadline < today:
+                reasons.append("Past expected close (%s)" % deadline)
+
+            lsu = fields.Datetime.to_datetime(r["date_last_stage_update"]) if r.get("date_last_stage_update") else None
+            if lsu:
+                days_stale = (now - lsu).days
+                if days_stale >= STALE_DAYS:
+                    reasons.append("No stage movement in %d days" % days_stale)
+
+            if not r.get("activity_date_deadline"):
+                reasons.append("No next activity scheduled")
+            elif r.get("activity_state") == "overdue":
+                reasons.append("Overdue activity")
+
+            if rev > 0 and 0 < prob < LOW_PROBABILITY:
+                reasons.append("High value at low probability (%.0f%%)" % prob)
+
+            if not reasons:
+                continue
+            flagged.append({
+                "name": r.get("name") or "Untitled",
+                "customer": r["partner_id"][1] if r.get("partner_id") else "",
+                "salesperson": r["user_id"][1] if r.get("user_id") else "",
+                "stage": r["stage_id"][1] if r.get("stage_id") else "",
+                "expected_revenue": round(rev, 2),
+                "probability": round(prob, 1),
+                "reason": "; ".join(reasons),
+            })
+        flagged.sort(key=lambda d: d["expected_revenue"], reverse=True)
+        return flagged[:TOP_N]
+
+    def _aging(self):
+        """Open pipeline split into age buckets (days since creation).
+
+        Gives the model a distribution to chart and to reason about stalling:
+        value sitting in the oldest bucket is pipeline going cold.
+        """
+        Lead = self.env["crm.lead"]
+        now = fields.Datetime.now()
+        recs = Lead.search_read(
+            self._open_opp_domain(),
+            ["expected_revenue", "create_date"],
+        )
+        buckets = [{"bucket": label, "count": 0, "value": 0.0}
+                   for _, _, label in AGING_BUCKETS]
+        index = {label: b for b, (_, _, label) in zip(buckets, AGING_BUCKETS)}
+        for r in recs:
+            cd = fields.Datetime.to_datetime(r["create_date"]) if r.get("create_date") else None
+            if not cd:
+                continue
+            days = (now - cd).days
+            for lo, hi, label in AGING_BUCKETS:
+                if days >= lo and (hi is None or days <= hi):
+                    index[label]["count"] += 1
+                    index[label]["value"] += r.get("expected_revenue") or 0.0
+                    break
+        for b in buckets:
+            b["value"] = round(b["value"], 2)
+        return buckets
+
+    def _weighted(self):
+        """Probability-weighted open pipeline (Σ value × probability).
+
+        Uses the stored ``prorated_revenue`` field, so this is one aggregate
+        query rather than a per-record loop. Isolated in its own section so a DB
+        missing that field degrades just this number, not the whole summary.
+        """
+        Lead = self.env["crm.lead"]
+        weighted = self._sum(
+            Lead.read_group(
+                self._open_opp_domain(), ["prorated_revenue:sum"], []
+            ),
+            "prorated_revenue",
+        )
+        return {"weighted_pipeline_value": round(weighted, 2)}
 
     def _activities(self):
         Act = self.env["mail.activity"]

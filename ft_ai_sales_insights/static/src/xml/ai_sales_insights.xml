@@ -189,8 +189,15 @@
                                            t-key="block_index" block="block"/>
                         </div>
 
-                        <t t-if="!layout.length">
-                        <div class="aisi_kpi_row" t-if="insight.kpis and insight.kpis.length">
+                        <!-- KPI tile row only in the fallback view; when a layout
+                             is present it carries its own kpi_tiles block, so
+                             rendering these too would double the tiles. Everything
+                             below (narrative sections, actions, forecast, ...) now
+                             renders in BOTH modes: the AI writes it into the
+                             top-level keys, and the layout only ever holds the
+                             data blocks (charts/tables/tiles) — so the insight
+                             prose is no longer thrown away when a layout exists. -->
+                        <div class="aisi_kpi_row" t-if="!layout.length and insight.kpis and insight.kpis.length">
                             <InsightKpi t-foreach="insight.kpis" t-as="k" t-key="k_index" kpi="k"/>
                         </div>
 
@@ -227,7 +234,7 @@
 
                         <!-- Salesperson performance -->
                         <div class="aisi_card" t-if="insight.salesperson_performance and insight.salesperson_performance.length">
-                            <h4><i class="fa fa-users"/> Salesperson Performance</h4>
+                            <h4><i class="fa fa-users"/> Salesperson Coaching</h4>
                             <table class="aisi_table">
                                 <thead><tr><th>Salesperson</th><th>Highlight</th><th>Coaching</th></tr></thead>
                                 <tbody>
@@ -276,7 +283,6 @@
                                 </div>
                             </div>
                         </div>
-                        </t>
                     </t>
 
                     <!-- Fallback: unparsed text -->

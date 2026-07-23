@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError, UserError
 
@@ -125,6 +127,22 @@ class ProjectTask(models.Model):
         return dom + (extra or [])
 
     @api.model
+    def _ft_local_date(self, value):
+        """A stored UTC value as a calendar date in the reader's timezone.
+
+        Both ``date_end`` and ``date_deadline`` are Datetimes held in UTC, so
+        taking ``.date()`` straight off them would bucket work by the UTC day.
+        For anything finished late in the local evening that is the WRONG day
+        (20:00 UTC is already tomorrow in IST), which would mark on-time work
+        late. Converting first puts both sides on the user's calendar.
+        """
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return fields.Datetime.context_timestamp(self, value).date()
+        return value
+
+    @api.model
     def _ft_on_time_aggregate(self, tasks):
         """Aggregate a recordset of DELIVERED tasks into on-time figures.
 
@@ -132,6 +150,13 @@ class ProjectTask(models.Model):
         denominator and reported separately as ``no_deadline`` — counting them
         as on-time would hand a perfect score to any project that simply never
         sets deadlines.
+
+        On time is judged by CALENDAR DAY, not to the minute. ``date_deadline``
+        is a Datetime, so a deadline entered as a day is stored carrying a
+        time-of-day; comparing the raw timestamps made a task finished at 13:12
+        on its own due date "late" against a 13:00 stamp nobody chose. A
+        deadline of the 23rd means end of the 23rd, so any completion on that
+        date counts as on time.
 
         ``rate`` is None (not 0.0) when nothing measurable was delivered, so the
         UI shows "N/A" instead of a 0% that reads as a failure.
@@ -142,7 +167,7 @@ class ProjectTask(models.Model):
             if not task.date_deadline:
                 continue
             measurable += 1
-            if task.date_end <= task.date_deadline:
+            if self._ft_local_date(task.date_end) <= self._ft_local_date(task.date_deadline):
                 on_time += 1
         return {
             'completed': completed,

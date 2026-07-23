@@ -82,6 +82,10 @@ export class ProjectDashboard extends Component {
             resourceProjectSearch: "",
             resourceDateFrom: null,
             resourceDateTo: null,
+            // Rows recomputed by the server for the resource table's own date
+            // range. Null means "no range set" -> fall back to the rows the
+            // top period filter already delivered.
+            resourceRowsOverride: null,
             projectHoursSearch: "",
             deliverySearch: "",
         });
@@ -214,6 +218,24 @@ export class ProjectDashboard extends Component {
             res_model: "account.analytic.line",
             views: [[false, "list"], [false, "form"]],
             domain,
+            target: "current",
+        });
+    }
+
+    // Generic KPI drill-down: opens the record list the server prepared for
+    // this card, so the list length always equals the number on the card. No-op
+    // for cards with no backing records (sums, N/A) — those pass no action.
+    openKpi(key) {
+        const action = this.kpis.actions && this.kpis.actions[key];
+        if (!action) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: action.name,
+            res_model: action.res_model,
+            views: [[false, "list"], [false, "form"]],
+            domain: action.domain || [],
             target: "current",
         });
     }
@@ -355,17 +377,17 @@ export class ProjectDashboard extends Component {
     get resourceRows() {
         const q = (this.state.resourceSearch || "").trim().toLowerCase();
         const pq = (this.state.resourceProjectSearch || "").trim().toLowerCase();
-        const from = this.state.resourceDateFrom;
-        const to = this.state.resourceDateTo;
-        let rows = this.tables.resource_status || [];
+        // With a date range set the server has already recomputed Hours Spent
+        // for it; without one the top period filter's rows stand. Either way
+        // only the text searches are applied here — dropping rows by date in
+        // the browser would leave the figures answering a different period
+        // than the dates on screen.
+        let rows = this.state.resourceRowsOverride || this.tables.resource_status || [];
         if (q) {
             rows = rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
         }
         if (pq) {
             rows = rows.filter((r) => (r.project || "").toLowerCase().includes(pq));
-        }
-        if (from || to) {
-            rows = rows.filter((r) => this._inDateRange(r.start_date, from, to));
         }
         return rows;
     }
@@ -377,13 +399,36 @@ export class ProjectDashboard extends Component {
     }
     onResourceDateFrom(ev) {
         this.state.resourceDateFrom = ev.target.value || null;
+        this.reloadResourceStatus();
     }
     onResourceDateTo(ev) {
         this.state.resourceDateTo = ev.target.value || null;
+        this.reloadResourceStatus();
     }
     clearResourceDates() {
         this.state.resourceDateFrom = null;
         this.state.resourceDateTo = null;
+        this.state.resourceRowsOverride = null;
+    }
+    /** Refetch the resource rows for this table's own range (both bounds
+     *  optional). Clearing both hands the table back to the top filter. */
+    async reloadResourceStatus() {
+        const from = this.state.resourceDateFrom;
+        const to = this.state.resourceDateTo;
+        if (!from && !to) {
+            this.state.resourceRowsOverride = null;
+            return;
+        }
+        try {
+            this.state.resourceRowsOverride = await this.orm.call(
+                "ft.project.dashboard",
+                "get_resource_status",
+                [from, to]
+            );
+        } catch (e) {
+            // Keep the last good rows rather than blanking the table.
+            console.warn("Resource status reload failed", e);
+        }
     }
 
     // ----------------------------------------------------------------

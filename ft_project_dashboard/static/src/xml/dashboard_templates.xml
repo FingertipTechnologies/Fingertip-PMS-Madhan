@@ -170,19 +170,23 @@
                              icon="'fa-money'" color="'#10B981'"
                              onClick="() => this.openTimesheets(true)"/>
                     <KpiCard title="'Developers'" value="kpis.developers"
-                             icon="'fa-code'" color="'#06B6D4'"/>
+                             icon="'fa-code'" color="'#06B6D4'"
+                             onClick="() => this.openKpi('developers')"/>
                     <KpiCard title="'Testers'" value="kpis.testers"
-                             icon="'fa-bug'" color="'#8B5CF6'"/>
+                             icon="'fa-bug'" color="'#8B5CF6'"
+                             onClick="() => this.openKpi('testers')"/>
                 </div>
 
                 <!-- KPI Row 2 -->
                 <div class="ftpd_kpi_grid">
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
-                             icon="'fa-user-circle'" color="'#EC4899'"/>
+                             icon="'fa-user-circle'" color="'#EC4899'"
+                             onClick="() => this.openKpi('project_managers')"/>
                     <!-- Trainees sits beside the other headcount cards, and is
                          counted on its own — never inside Developers/Testers. -->
                     <KpiCard title="'Trainees'" value="kpis.trainees"
                              icon="'fa-graduation-cap'" color="'#0EA5E9'"
+                             onClick="() => this.openKpi('trainees')"
                              tooltip="'Active employees whose Job Position starts with &quot;Trainee&quot;. Counted separately, not included in Developers or Testers.'"/>
                     <KpiCard title="'Estimated Hours'" value="kpis.hours_estimated" suffix="'h'"
                              icon="'fa-hourglass-half'" color="'#3B82F6'"/>
@@ -199,12 +203,15 @@
                 <div class="ftpd_kpi_grid">
                     <KpiCard title="'On-Time Delivery'" value="kpis.on_time_delivery" suffix="'%'"
                              icon="'fa-check-circle'" color="'#10B981'"
+                             onClick="() => this.openKpi('on_time_delivery')"
                              tooltip="'Delivered tasks that met their deadline, in the selected period. Target: 95% or above. Tasks delivered without a deadline are excluded.'"/>
                     <KpiCard title="'Tasks Delivered'" value="kpis.tasks_delivered"
                              icon="'fa-flag-checkered'" color="'#4F46E5'"
+                             onClick="() => this.openKpi('tasks_delivered')"
                              tooltip="'Tasks that reached a Completed stage in the selected period. Excludes cancelled.'"/>
                     <KpiCard title="'Open &amp; Overdue'" value="kpis.overdue_open_tasks"
                              icon="'fa-exclamation-triangle'" color="'#EF4444'"
+                             onClick="() => this.openKpi('overdue_open_tasks')"
                              tooltip="'Tasks still open whose deadline has passed. A snapshot of now, not filtered by the selected period.'"/>
                     <KpiCard title="'Available Resources'" value="kpis.available_resources"
                              icon="'fa-user-plus'" color="'#14B8A6'"
