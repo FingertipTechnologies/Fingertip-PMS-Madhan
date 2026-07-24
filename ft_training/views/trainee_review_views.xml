@@ -5,20 +5,28 @@
         <field name="name">ft.trainee.review.list</field>
         <field name="model">ft.trainee.review</field>
         <field name="arch" type="xml">
-            <!-- Widths are sized to each column's own content rather than shared
-                 flat. The score columns are right-aligned numbers, so a header
-                 wider than its box (Self Dependency) pushed its value up against
-                 the Date column and the two read as one. Self Dependency gets
-                 room for its label; Date gets room for a full datetime. -->
+            <!-- Each score column is sized to its own header and nothing more.
+                 The scores are left-aligned (see training_lists.css), so a
+                 column wider than its label leaves the digit stranded far from
+                 the next header and the eye stops pairing the two. Widths here
+                 are the header text plus cell padding: enough that no label
+                 wraps, tight enough that the value stays under it.
+
+                 Description carries no width on purpose — it is the only
+                 free-text column, so it absorbs whatever the fixed columns
+                 leave instead of being boxed to a guess. Text renders truncated
+                 to one line in a list, so row heights stay uniform and the
+                 score columns keep reading straight down. -->
             <list string="Reviews" class="o_ft_review_list">
-                <field name="trainee_id" width="180px"/>
-                <field name="attitude" width="110px"/>
-                <field name="communication" width="130px"/>
-                <field name="understanding" width="130px"/>
-                <field name="technical" width="110px"/>
-                <field name="problem_solving" width="140px"/>
-                <field name="self_dependency" width="160px"/>
-                <field name="create_date" string="Date" width="180px"/>
+                <field name="trainee_id" width="160px"/>
+                <field name="attitude" width="90px"/>
+                <field name="communication" width="125px"/>
+                <field name="understanding" width="125px"/>
+                <field name="technical" width="95px"/>
+                <field name="problem_solving" width="130px"/>
+                <field name="self_dependency" width="140px"/>
+                <field name="create_date" string="Date" width="160px"/>
+                <field name="description" optional="show"/>
             </list>
         </field>
     </record>
