@@ -88,6 +88,12 @@ export class ProjectDashboard extends Component {
             resourceRowsOverride: null,
             projectHoursSearch: "",
             deliverySearch: "",
+            deliveryDateFrom: null,
+            deliveryDateTo: null,
+            // Same contract as resourceRowsOverride: rows the server recomputed
+            // for this table's own range, or null for the all-time rows that
+            // came with the dashboard payload.
+            deliveryRowsOverride: null,
         });
 
         onWillStart(async () => {
@@ -313,12 +319,48 @@ export class ProjectDashboard extends Component {
     // ----------------------------------------------------------------
     get deliveryRows() {
         const q = (this.state.deliverySearch || "").trim().toLowerCase();
-        const rows = this.tables.delivery || [];
+        // With a range set the server has recomputed Delivered / On Time / Late
+        // for it; without one these are the all-time rows. Either way the top
+        // period filter does not reach this table.
+        const rows = this.state.deliveryRowsOverride || this.tables.delivery || [];
         if (!q) return rows;
         return rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
     }
     onDeliverySearch(ev) {
         this.state.deliverySearch = ev.target.value || "";
+    }
+    onDeliveryDateFrom(ev) {
+        this.state.deliveryDateFrom = ev.target.value || null;
+        this.reloadDeliveryByResource();
+    }
+    onDeliveryDateTo(ev) {
+        this.state.deliveryDateTo = ev.target.value || null;
+        this.reloadDeliveryByResource();
+    }
+    clearDeliveryDates() {
+        this.state.deliveryDateFrom = null;
+        this.state.deliveryDateTo = null;
+        this.state.deliveryRowsOverride = null;
+    }
+    /** Refetch the delivery rows for this table's own range (both bounds
+     *  optional). Clearing both returns the table to all-time. */
+    async reloadDeliveryByResource() {
+        const from = this.state.deliveryDateFrom;
+        const to = this.state.deliveryDateTo;
+        if (!from && !to) {
+            this.state.deliveryRowsOverride = null;
+            return;
+        }
+        try {
+            this.state.deliveryRowsOverride = await this.orm.call(
+                "ft.project.dashboard",
+                "get_delivery_by_resource",
+                [from, to]
+            );
+        } catch (e) {
+            // Keep the last good rows rather than blanking the table.
+            console.warn("Delivery by resource reload failed", e);
+        }
     }
     _inDateRange(iso, from, to) {
         // Rows without a date are dropped once any bound is active.

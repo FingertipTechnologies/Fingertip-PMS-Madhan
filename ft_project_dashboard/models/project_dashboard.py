@@ -96,13 +96,21 @@ class FtProjectDashboard(models.TransientModel):
         """Return all KPI values and chart datasets for the dashboard.
 
         :param date_from/date_to: 'YYYY-MM-DD' strings (inclusive) or False.
+
+        Resource Status and On-Time Delivery by Resource are deliberately NOT
+        given the period: both are per-person standing views that carry their
+        own Start/End pickers, and answering to two date filters at once made
+        the numbers unreadable — a range typed into the table was silently
+        intersected with whatever the top bar was on. They load all-time and
+        change only through their own pickers (get_resource_status /
+        get_delivery_by_resource).
         """
         return {
             'kpis': self._compute_kpis(date_from, date_to),
             'tables': {
                 'project_status': self._table_project_status(date_from, date_to),
-                'resource_status': self._table_resource_status(date_from, date_to),
-                'delivery': self._table_delivery(date_from, date_to),
+                'resource_status': self._table_resource_status(),
+                'delivery': self._table_delivery(),
             },
             'charts': {
                 'project_hours': self._chart_project_hours(date_from, date_to),
@@ -123,6 +131,20 @@ class FtProjectDashboard(models.TransientModel):
         server-side is the only way those columns can answer the dates picked.
         """
         return self._table_resource_status(date_from or None, date_to or None)
+
+    @api.model
+    def get_delivery_by_resource(self, date_from=None, date_to=None):
+        """Just the On-Time Delivery by Resource rows, for its own date range.
+
+        Same reasoning as ``get_resource_status``: Delivered / On Time / Late are
+        aggregates, not per-row dates, so the browser has nothing it could filter
+        them by. The range has to reach the delivery domain, which means the
+        server recomputes. With both bounds empty this is the all-time table.
+
+        Open & Overdue stays a snapshot of now whatever the range says — a task
+        that is late today is late regardless of the window being looked at.
+        """
+        return self._table_delivery(date_from or None, date_to or None)
 
     # ------------------------------------------------------------------
     # KPI cards
@@ -286,7 +308,7 @@ class FtProjectDashboard(models.TransientModel):
             })
         return rows
 
-    def _table_delivery(self, date_from, date_to):
+    def _table_delivery(self, date_from=None, date_to=None):
         """One row per person: how much they delivered and how much was on time.
 
         Covers TLs and Developers (and everyone else) in one table, with the
@@ -433,9 +455,23 @@ class FtProjectDashboard(models.TransientModel):
             # and silently dropping it made Hours Spent disagree with the
             # timesheets. The project window only decides pairs with nothing
             # booked, where an estimate carries no date of its own to judge by.
-            if not hours.get((emp_id, proj_id)) and not self._overlaps_period(
-                    proj.date_start, proj.date, date_from, date_to):
-                continue
+            if not hours.get((emp_id, proj_id)):
+                # A date range was asked for, so nothing logged in it means the
+                # person was not on this project then — drop the row rather than
+                # print a line of zeros. Someone who had not joined yet, or was
+                # on something else entirely, otherwise filled the table with
+                # rows that answered "no" to the question being asked.
+                # Project dates cannot stand in for this: most projects here
+                # carry no start or end date at all, and _overlaps_period counts
+                # an undated project as overlapping everything.
+                if date_from or date_to:
+                    continue
+                # No range: the all-time view keeps assigned-but-unlogged pairs,
+                # so a resource who simply has not booked time yet still reads
+                # as being on the project.
+                if not self._overlaps_period(
+                        proj.date_start, proj.date, date_from, date_to):
+                    continue
             days_left = (proj.date - today).days if proj.date else None
             rows.append({
                 'employee': emp.name or '',

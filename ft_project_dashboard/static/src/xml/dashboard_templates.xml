@@ -285,8 +285,8 @@
                                        t-att-value="state.resourceProjectSearch"
                                        t-on-input="onResourceProjectSearch"/>
                             </div>
-                            <div class="ftpd_filter" title="Filter by project start date">
-                                <span class="ftpd_filter_label">Start</span>
+                            <div class="ftpd_filter" title="Filter by timesheet date">
+                                <span class="ftpd_filter_label">Logged</span>
                                 <input type="date" class="ftpd_date"
                                        t-att-value="state.resourceDateFrom"
                                        t-on-change="onResourceDateFrom"/>
@@ -312,7 +312,7 @@
                                rows="deliveryRows"
                                groupKey="'employee'"
                                groupLabel="'resources'"
-                               emptyText="'Nothing delivered in this period.'"
+                               emptyText="'No delivery activity found.'"
                                defaultSort="{ key: 'employee', dir: 'asc' }">
                         <t t-set-slot="tools">
                             <div class="ftpd_search">
@@ -320,6 +320,21 @@
                                 <input type="text" placeholder="Search resource…"
                                        t-att-value="state.deliverySearch"
                                        t-on-input="onDeliverySearch"/>
+                            </div>
+                            <div class="ftpd_filter" title="Filter by delivery date">
+                                <span class="ftpd_filter_label">Delivered</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.deliveryDateFrom"
+                                       t-on-change="onDeliveryDateFrom"/>
+                                <span>→</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.deliveryDateTo"
+                                       t-on-change="onDeliveryDateTo"/>
+                                <button class="ftpd_btn ftpd_filter_clear"
+                                        t-if="state.deliveryDateFrom || state.deliveryDateTo"
+                                        t-on-click="clearDeliveryDates" title="Clear dates">
+                                    <i class="fa fa-times"/>
+                                </button>
                             </div>
                         </t>
                     </DataTable>
