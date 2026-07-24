@@ -40,7 +40,7 @@ class FtQuoteAnnouncement(models.Model):
             ("text", "Text"),
             ("image", "Image"),
             ("video", "Video"),
-            ("social", "Social Media Post (LinkedIn / Facebook)"),
+            ("social", "HTML (LinkedIn / Facebook embed)"),
         ],
         string="Content Type",
         required=True,
