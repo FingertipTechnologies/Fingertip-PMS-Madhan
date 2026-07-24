@@ -45,7 +45,7 @@
                             <field name="video_url" invisible="content_type != 'video'"
                                    placeholder="...or paste a YouTube / .mp4 link"/>
                             <field name="social_url" invisible="content_type != 'social'"
-                                   placeholder="Paste a public LinkedIn or Facebook post URL"/>
+                                   placeholder="Best: paste the whole &lt;iframe&gt; embed code from the post's ••• menu → Embed. A plain LinkedIn/Facebook post URL also works."/>
                         </group>
                         <group>
                             <field name="contributor_id"/>

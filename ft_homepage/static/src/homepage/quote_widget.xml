@@ -55,20 +55,16 @@
                     </span>
                 </div>
 
-                <!-- SOCIAL MEDIA POST: embedded LinkedIn/Facebook post, or a
-                     plain link as a fallback if the URL isn't recognized. -->
+                <!-- SOCIAL MEDIA POST: the server already validated and
+                     resolved the pasted URL/embed-code into a safe iframe
+                     src (see ft.quote.announcement._ft_resolve_social_embed)
+                     — this just renders it, no client-side URL parsing. -->
                 <div t-if="item.content_type == 'social'" class="ft_quote_widget__media">
-                    <iframe t-if="isLinkedin(item)"
-                            class="ft_quote_widget__social ft_quote_widget__social--linkedin"
-                            t-att-src="linkedinEmbedUrl(item)"
-                            title="LinkedIn post" allowfullscreen="allowfullscreen"/>
-                    <iframe t-elif="isFacebook(item)"
-                            class="ft_quote_widget__social ft_quote_widget__social--facebook"
-                            t-att-src="facebookEmbedUrl(item)"
-                            title="Facebook post" allowfullscreen="allowfullscreen"/>
-                    <a t-else="" t-att-href="item.social_url" target="_blank" rel="noopener noreferrer">
-                        View post
-                    </a>
+                    <iframe t-if="item.social_embed_src"
+                            t-att-src="item.social_embed_src"
+                            t-attf-class="ft_quote_widget__social ft_quote_widget__social--{{item.social_platform}}"
+                            t-attf-title="{{item.social_platform}} post"
+                            allowfullscreen="allowfullscreen"/>
                     <span t-if="item.contributor" class="ft_quote_widget__contributor">
                         — <t t-esc="item.contributor"/>
                     </span>
