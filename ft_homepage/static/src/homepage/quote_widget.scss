@@ -98,6 +98,16 @@
             height: 520px; // approximate; actual height varies with post length
         }
     }
+
+    &__social_link {
+        display: inline-block;
+        padding: 8px 14px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--o-brand-primary, #714B67);
+    }
 }
 
 @keyframes ft-quote-marquee {

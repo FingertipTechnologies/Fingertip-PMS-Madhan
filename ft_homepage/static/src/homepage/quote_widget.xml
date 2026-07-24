@@ -65,6 +65,11 @@
                             t-attf-class="ft_quote_widget__social ft_quote_widget__social--{{item.social_platform}}"
                             t-attf-title="{{item.social_platform}} post"
                             allowfullscreen="allowfullscreen"/>
+                    <a t-elif="item.social_link" t-att-href="item.social_link"
+                       target="_blank" rel="noopener noreferrer"
+                       class="ft_quote_widget__social_link">
+                        View post ↗
+                    </a>
                     <span t-if="item.contributor" class="ft_quote_widget__contributor">
                         — <t t-esc="item.contributor"/>
                     </span>

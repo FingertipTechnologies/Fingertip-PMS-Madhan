@@ -136,7 +136,26 @@ class FtQuoteAnnouncement(models.Model):
         host = parsed.netloc.lower()
 
         if host in _SOCIAL_EMBED_HOSTS["linkedin"]:
-            return src, "linkedin"
+            # Already an embeddable URL (from a pasted <iframe> or an /embed/
+            # link)? Use it directly.
+            if "/embed/" in parsed.path:
+                return src, "linkedin"
+            # A plain LinkedIn post/feed URL CANNOT be iframed — post pages
+            # send X-Frame-Options: DENY, so the iframe just renders blank /
+            # broken. Rebuild the embeddable /embed/feed/update/ URL from the
+            # numeric activity (or legacy share) id carried in the link, e.g.
+            #   .../posts/..-activity-7123456789012345678-AbCd/  or
+            #   .../feed/update/urn:li:activity:7123456789012345678
+            id_match = re.search(r"(?:activity|share)[:\-](\d+)", src)
+            if id_match:
+                kind = "share" if ("share" in src and "activity" not in src) else "activity"
+                return (
+                    "https://www.linkedin.com/embed/feed/update/urn:li:%s:%s"
+                    % (kind, id_match.group(1)),
+                    "linkedin",
+                )
+            # A LinkedIn link with no usable id can't be embedded.
+            return False, False
 
         if host in _SOCIAL_EMBED_HOSTS["facebook"]:
             # Facebook's Post Plugin needs the ORIGINAL post URL wrapped in
@@ -265,6 +284,16 @@ class FtQuoteAnnouncement(models.Model):
                 ),
                 "social_embed_src": social_src,
                 "social_platform": social_platform,
+                # Fallback link shown when the post can't be embedded (e.g. the
+                # user pasted a profile/company page instead of a single post).
+                # Only expose a plain https link, never a raw <iframe> snippet.
+                "social_link": (
+                    record.social_url.strip()
+                    if record.content_type == "social"
+                    and record.social_url
+                    and record.social_url.strip().startswith("https://")
+                    else False
+                ),
                 "contributor": contributor,
             })
         return items
