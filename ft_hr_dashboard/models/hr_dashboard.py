@@ -20,10 +20,10 @@ class FtHrDashboard(models.TransientModel):
 
     @api.model
     def get_dashboard_data(self, date_from=None, date_to=None):
-        Candidate = self.env['recruitment.candidate']
-        Interview = self.env['recruitment.interview']
-        Position = self.env['recruitment.job.position']
-        Asset = self.env['company.asset']
+        Candidate = self.env['recruitment.candidate'].sudo()
+        Interview = self.env['recruitment.interview'].sudo()
+        Position = self.env['recruitment.job.position'].sudo()
+        Asset = self.env['company.asset'].sudo()
 
         created = self._created(date_from, date_to)
         iv_dom = self._created(date_from, date_to, field='interview_date')
