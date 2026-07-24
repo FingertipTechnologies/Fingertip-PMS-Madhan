@@ -30,8 +30,11 @@
         <field name="active" eval="False"/>
     </record>
     <!-- FT Helpdesk — helpdesk roles + PMs. NOT for sales/marketing
-         (they only see it if they're also given a helpdesk role). -->
+         (they only see it if they're also given a helpdesk role).
+         active=True re-shows it in case a previous run of
+         ft_app_menu_cleanup (which used to list "Helpdesk") had hidden it. -->
     <record id="ft_helpdesk_core.menu_ft_helpdesk_root" model="ir.ui.menu">
+        <field name="active" eval="True"/>
         <field name="groups_id" eval="[
             (6, 0, [
                 ref('ft_helpdesk_core.group_ft_helpdesk_agent'),
@@ -40,8 +43,10 @@
         ]"/>
     </record>
 
-    <!-- Employees — common / all -->
+    <!-- Employees — common / all. active=True re-shows it in case a previous
+         run of ft_app_menu_cleanup (which used to list "Employees") hid it. -->
     <record id="hr.menu_hr_root" model="ir.ui.menu">
+        <field name="active" eval="True"/>
         <field name="groups_id" eval="[(6, 0, [])]"/>
     </record>
 
@@ -88,6 +93,13 @@
                 ref('sales_team.group_sale_salesman'),
             ])
         ]"/>
+    </record>
+
+    <!-- Invoicing: hide the standard Odoo "Dashboard" (Accounting/Invoicing
+         dashboard kanban). The department Finance Dashboard is added inside
+         Invoicing instead by ft_dashboard_menu_reorg. -->
+    <record id="account.menu_board_journal_1" model="ir.ui.menu">
+        <field name="active" eval="False"/>
     </record>
 
     <!-- QA Techstar Test App — hide for everyone (already covered inside

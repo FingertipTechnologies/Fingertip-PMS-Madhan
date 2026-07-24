@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Recruitment — now a section under the General app -->
+    <!-- Recruitment — moved to the Employees (HR) app -->
     <menuitem id="menu_recruitment_root"
               name="Recruitment Management"
-              parent="menu_general_root"
+              parent="hr.menu_hr_root"
               sequence="30"
               groups="group_recruitment_user"/>
 

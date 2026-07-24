@@ -9,6 +9,14 @@ class IrUiMenu(models.Model):
     # instead of external ID, since the exact XML ID for these stock
     # Odoo apps can differ between versions/editions, and a name search
     # simply finds nothing (no error) if the app isn't installed at all.
+    #
+    # NOTE: 'Employees', 'Helpdesk' and 'Link Tracker' are intentionally NOT
+    # in this list. They are role-restricted (not hidden from everyone) by
+    # ft_homepage/data/menu_access_data.xml — PMs must see Employees + FT
+    # Helpdesk, and Sales/Admin see Link Tracker. Hiding them here (active =
+    # False) would override those grants and hide them for those roles too.
+    # Also, both the old (helpdesk_mgmt) and new (ft_helpdesk_core) apps are
+    # named "Helpdesk", so a name match cannot tell them apart.
     _FT_APPS_TO_REMOVE = [
         'Discuss',
         'Calendar',
@@ -16,10 +24,7 @@ class IrUiMenu(models.Model):
         'Website',
         'eLearning',
         'Email Marketing',
-        'Helpdesk',
         'Timesheets',
-        'Employees',
-        'Link Tracker',
     ]
 
     @api.model

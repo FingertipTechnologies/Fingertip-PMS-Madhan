@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from odoo import api, fields, models
-from odoo.exceptions import ValidationError
+from odoo import _, api, fields, models
+from odoo.exceptions import AccessError, ValidationError
 
 
 class FtQuoteAnnouncement(models.Model):
@@ -16,7 +16,9 @@ class FtQuoteAnnouncement(models.Model):
         "'Org Announcement - Holiday List'.",
     )
     sequence = fields.Integer(default=10)
-    active = fields.Boolean(default=True)
+    # Entries start INACTIVE: anyone may add one, but it only appears on the
+    # Homepage once HR / an Admin activates it (see create/write below).
+    active = fields.Boolean(default=False)
 
     content_type = fields.Selection(
         [
@@ -84,6 +86,34 @@ class FtQuoteAnnouncement(models.Model):
                 raise ValidationError(
                     "Please upload a video file or provide a video URL."
                 )
+
+    def _ft_user_can_activate(self):
+        """Only HR users, Admins (and system/sudo calls) may publish
+        (activate/deactivate) a quote or announcement."""
+        return (
+            self.env.su
+            or self.env.user.has_group("hr.group_hr_user")
+            or self.env.user.has_group("base.group_system")
+        )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # Anyone can add an entry, but non-HR/Admin users cannot create it
+        # already-active — it must be activated by HR/Admin afterwards.
+        if not self._ft_user_can_activate():
+            for vals in vals_list:
+                vals["active"] = False
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if "active" in vals and not self._ft_user_can_activate():
+            raise AccessError(
+                _(
+                    "Only HR or an Administrator can activate or deactivate a "
+                    "quote / announcement."
+                )
+            )
+        return super().write(vals)
 
     @api.model
     def get_homepage_content(self):

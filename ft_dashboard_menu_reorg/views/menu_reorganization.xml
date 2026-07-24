@@ -8,7 +8,10 @@
         <record id="ft_project_dashboard.menu_ft_project_dashboard_root" model="ir.ui.menu">
             <field name="name">Dashboard</field>
             <field name="parent_id" ref="project.menu_main_pm"/>
-            <field name="sequence">1</field>
+            <!-- Negative so "Dashboard" is first even in apps whose first
+                 menu already sits at sequence 0 (e.g. CRM > Customers).
+                 Odoo orders menus by "sequence, id". -->
+            <field name="sequence">-1</field>
         </record>
 
         <!-- ============================================= -->
@@ -17,7 +20,10 @@
         <record id="ft_sales_dashboard.menu_sales_dashboard_in_dashboards" model="ir.ui.menu">
             <field name="name">Dashboard</field>
             <field name="parent_id" ref="crm.crm_menu_root"/>
-            <field name="sequence">1</field>
+            <!-- Negative so "Dashboard" is first even in apps whose first
+                 menu already sits at sequence 0 (e.g. CRM > Customers).
+                 Odoo orders menus by "sequence, id". -->
+            <field name="sequence">-1</field>
         </record>
 
         <!-- ============================================= -->
@@ -26,7 +32,10 @@
         <record id="ft_marketing_dashboard.menu_marketing_dashboard_in_dashboards" model="ir.ui.menu">
             <field name="name">Dashboard</field>
             <field name="parent_id" ref="marketing_content.menu_marketing_root"/>
-            <field name="sequence">1</field>
+            <!-- Negative so "Dashboard" is first even in apps whose first
+                 menu already sits at sequence 0 (e.g. CRM > Customers).
+                 Odoo orders menus by "sequence, id". -->
+            <field name="sequence">-1</field>
         </record>
 
         <!-- ============================================= -->
@@ -35,7 +44,10 @@
         <record id="ft_hr_dashboard.menu_hr_dashboard_in_dashboards" model="ir.ui.menu">
             <field name="name">Dashboard</field>
             <field name="parent_id" ref="general.menu_general_root"/>
-            <field name="sequence">1</field>
+            <!-- Negative so "Dashboard" is first even in apps whose first
+                 menu already sits at sequence 0 (e.g. CRM > Customers).
+                 Odoo orders menus by "sequence, id". -->
+            <field name="sequence">-1</field>
         </record>
 
         <!-- ============================================= -->
@@ -44,7 +56,10 @@
         <record id="ft_finance_dashboard.menu_finance_dashboard_in_dashboards" model="ir.ui.menu">
             <field name="name">Dashboard</field>
             <field name="parent_id" ref="account.menu_finance"/>
-            <field name="sequence">1</field>
+            <!-- Negative so "Dashboard" is first even in apps whose first
+                 menu already sits at sequence 0 (e.g. CRM > Customers).
+                 Odoo orders menus by "sequence, id". -->
+            <field name="sequence">-1</field>
         </record>
 
     </data>

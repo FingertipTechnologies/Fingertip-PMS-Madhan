@@ -23,10 +23,13 @@ that means:
 * Website
 * eLearning
 * Email Marketing
-* Helpdesk (both helpdesk apps)
 * Timesheets
-* Employees
-* Link Tracker
+
+Employees, Helpdesk and Link Tracker are NOT hidden here — they are
+role-restricted (visible to the relevant roles only) by
+ft_homepage/data/menu_access_data.xml. Hiding them for everyone here would
+override those role grants (e.g. it would hide Employees/Helpdesk from
+Project Managers, who must see them).
 
 Matching is done by the app's display name (rather than a hardcoded
 external ID) so this keeps working even if the exact root-menu XML ID

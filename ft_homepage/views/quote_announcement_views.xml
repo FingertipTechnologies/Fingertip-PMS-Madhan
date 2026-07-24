@@ -13,7 +13,10 @@
                 <field name="contributor_id"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
-                <field name="active" widget="boolean_toggle"/>
+                <!-- Only HR / Admin may activate (the "active" toggle). Other
+                     users can add entries but cannot publish them. -->
+                <field name="active" widget="boolean_toggle"
+                       groups="hr.group_hr_user,base.group_system"/>
             </list>
         </field>
     </record>
@@ -48,7 +51,9 @@
                             <field name="date_from"/>
                             <field name="date_to"/>
                             <field name="sequence"/>
-                            <field name="active"/>
+                            <!-- Only HR / Admin may activate/publish an entry. -->
+                            <field name="active"
+                                   groups="hr.group_hr_user,base.group_system"/>
                         </group>
                     </group>
                 </sheet>
@@ -71,22 +76,22 @@
         </field>
     </record>
 
-    <!-- Inside the PMS app; the quote/announcement itself shows on the
-         homepage for everyone, but this management menu is visible only
-         to HR and Admins. -->
+    <!-- Inside the General app. Visible to ALL internal users so anyone can
+         add a quote/announcement entry; only HR / Admin can activate
+         (publish) it — enforced by the gated "active" field above and by the
+         create/write guards on the model. -->
     <menuitem id="menu_ft_quote_announcement"
               name="Quotes / Announcements"
-              parent="project.menu_main_pm"
+              parent="general.menu_general_root"
               action="action_ft_quote_announcement"
               sequence="60"/>
 
     <!-- Set explicitly via a record (not the menuitem groups attribute)
          so the stored restriction in the DB is reliably replaced on
-         every upgrade. -->
+         every upgrade. All internal users may reach it (to add entries). -->
     <record id="menu_ft_quote_announcement" model="ir.ui.menu">
         <field name="groups_id" eval="[(6, 0, [
-            ref('hr.group_hr_user'),
-            ref('base.group_system'),
+            ref('base.group_user'),
         ])]"/>
     </record>
 
