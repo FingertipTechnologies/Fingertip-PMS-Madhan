@@ -12,6 +12,10 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
+            <!-- Originally shipped groups="base.group_system" (Admin only)
+                 in ft_project_dashboard — replaced here to match PMS's own
+                 access (currently open to all internal users). -->
+            <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
         </record>
 
         <!-- ============================================= -->
@@ -24,6 +28,10 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
+            <!-- Originally shipped groups="base.group_system" (Admin only)
+                 in ft_sales_dashboard — replaced here to match CRM's own
+                 access (Sales team). -->
+            <field name="groups_id" eval="[(6, 0, [ref('sales_team.group_sale_salesman')])]"/>
         </record>
 
         <!-- ============================================= -->
@@ -36,6 +44,10 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
+            <!-- Originally shipped groups="base.group_system" (Admin only)
+                 in ft_marketing_dashboard — replaced here to match
+                 Marketing's own access (the "Marketing" role group). -->
+            <field name="groups_id" eval="[(6, 0, [ref('Project_Scorecards.group_scorecard_marketing')])]"/>
         </record>
 
         <!-- ============================================= -->
@@ -48,6 +60,10 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
+            <!-- Originally shipped groups="base.group_system" (Admin only)
+                 in ft_hr_dashboard — replaced here to match General's own
+                 access (currently open to all internal users). -->
+            <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
         </record>
 
         <!-- ============================================= -->
@@ -60,6 +76,13 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
+            <!-- Originally shipped groups="base.group_system" (Admin only)
+                 in ft_finance_dashboard — replaced here to match
+                 Invoicing's own access (Admin + Sales). -->
+            <field name="groups_id" eval="[(6, 0, [
+                ref('base.group_system'),
+                ref('sales_team.group_sale_salesman'),
+            ])]"/>
         </record>
 
     </data>

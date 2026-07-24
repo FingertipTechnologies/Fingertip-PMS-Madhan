@@ -25,6 +25,7 @@ class FtQuoteAnnouncement(models.Model):
             ("text", "Text"),
             ("image", "Image"),
             ("video", "Video"),
+            ("social", "Social Media Post (LinkedIn / Facebook)"),
         ],
         string="Content Type",
         required=True,
@@ -51,6 +52,13 @@ class FtQuoteAnnouncement(models.Model):
     )
     video_filename = fields.Char(string="Video Filename")
 
+    # Social media content — a public LinkedIn or Facebook post URL,
+    # rendered as an embedded post on the Homepage.
+    social_url = fields.Char(
+        string="Post URL",
+        help="Paste a public LinkedIn or Facebook post link.",
+    )
+
     contributor_id = fields.Many2one(
         "res.users",
         string="Contributed By",
@@ -75,7 +83,10 @@ class FtQuoteAnnouncement(models.Model):
         required=True,
     )
 
-    @api.constrains("content_type", "text_content", "image", "video_url", "video_file")
+    @api.constrains(
+        "content_type", "text_content", "image", "video_url", "video_file",
+        "social_url",
+    )
     def _check_content_matches_type(self):
         for rec in self:
             if rec.content_type == "text" and not rec.text_content:
@@ -85,6 +96,10 @@ class FtQuoteAnnouncement(models.Model):
             if rec.content_type == "video" and not (rec.video_url or rec.video_file):
                 raise ValidationError(
                     "Please upload a video file or provide a video URL."
+                )
+            if rec.content_type == "social" and not rec.social_url:
+                raise ValidationError(
+                    "Please paste a LinkedIn or Facebook post URL."
                 )
 
     def _ft_user_can_activate(self):
@@ -163,6 +178,9 @@ class FtQuoteAnnouncement(models.Model):
                 ),
                 "video_url": (
                     record.video_url if record.content_type == "video" else False
+                ),
+                "social_url": (
+                    record.social_url if record.content_type == "social" else False
                 ),
                 "contributor": contributor,
             })

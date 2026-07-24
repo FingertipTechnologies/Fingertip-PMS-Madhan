@@ -44,6 +44,8 @@
                             <field name="video_filename" invisible="1"/>
                             <field name="video_url" invisible="content_type != 'video'"
                                    placeholder="...or paste a YouTube / .mp4 link"/>
+                            <field name="social_url" invisible="content_type != 'social'"
+                                   placeholder="Paste a public LinkedIn or Facebook post URL"/>
                         </group>
                         <group>
                             <field name="contributor_id"/>

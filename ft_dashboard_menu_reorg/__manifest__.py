@@ -16,9 +16,30 @@ each one instead appears inside the app it belongs to:
 * HR Dashboard        -> General (general.menu_general_root)
 * Finance Dashboard   -> Invoicing (account.menu_finance)
 
-This module makes no changes to the original dashboard modules themselves;
-it only overrides the `parent_id`, `name` and `sequence` of their existing
-menu records, so it can be installed/uninstalled independently.
+This module makes no changes to the original dashboard modules' Python/data
+files; it only overrides the `parent_id`, `name`, `sequence` and `groups_id`
+of their existing menu records, plus ADDS (never removes) read-only model
+access for each dashboard's data model, so it can be installed/uninstalled
+independently.
+
+IMPORTANT — access widening: each dashboard originally shipped hardcoded to
+`groups="base.group_system"` (Administrator only), on BOTH the menu and the
+underlying model (see each dashboard module's own ir.model.access.csv). Left
+as-is, moving them "first" in their app would have no effect for anyone but
+literal Administrators. This module opens each dashboard's menu (clears its
+groups_id) and grants READ-only model access to whoever can already see the
+app it now lives in, matching that app's own access matrix in
+ft_homepage/data/menu_access_data.xml:
+
+* Project Dashboard  -> base.group_user (PMS is open to all)
+* Sales Dashboard     -> sales_team.group_sale_salesman (CRM)
+* Marketing Dashboard -> Project_Scorecards.group_scorecard_marketing
+* HR Dashboard        -> base.group_user (General is open to all)
+* Finance Dashboard   -> base.group_system + sales_team.group_sale_salesman
+                         (Invoicing)
+
+The original admin-only access rules are left in place (untouched) in each
+dashboard module; this only ADDS a broader read grant on top.
 """,
     'author': 'Fingertip',
     'website': '',
@@ -35,6 +56,7 @@ menu records, so it can be installed/uninstalled independently.
         'account',
     ],
     'data': [
+        'security/ir.model.access.csv',
         'views/menu_reorganization.xml',
     ],
     'installable': True,

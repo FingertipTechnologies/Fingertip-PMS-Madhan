@@ -55,6 +55,25 @@
                     </span>
                 </div>
 
+                <!-- SOCIAL MEDIA POST: embedded LinkedIn/Facebook post, or a
+                     plain link as a fallback if the URL isn't recognized. -->
+                <div t-if="item.content_type == 'social'" class="ft_quote_widget__media">
+                    <iframe t-if="isLinkedin(item)"
+                            class="ft_quote_widget__social ft_quote_widget__social--linkedin"
+                            t-att-src="linkedinEmbedUrl(item)"
+                            title="LinkedIn post" allowfullscreen="allowfullscreen"/>
+                    <iframe t-elif="isFacebook(item)"
+                            class="ft_quote_widget__social ft_quote_widget__social--facebook"
+                            t-att-src="facebookEmbedUrl(item)"
+                            title="Facebook post" allowfullscreen="allowfullscreen"/>
+                    <a t-else="" t-att-href="item.social_url" target="_blank" rel="noopener noreferrer">
+                        View post
+                    </a>
+                    <span t-if="item.contributor" class="ft_quote_widget__contributor">
+                        — <t t-esc="item.contributor"/>
+                    </span>
+                </div>
+
             </t>
         </div>
     </t>

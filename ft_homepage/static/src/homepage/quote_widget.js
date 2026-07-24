@@ -48,6 +48,33 @@ export class FtQuoteWidget extends Component {
         // autoplay when muted (mute=1). loop needs the playlist param.
         return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
     }
+
+    isLinkedin(item) {
+        const url = item.social_url;
+        return !!url && url.includes("linkedin.com") && !!this.linkedinEmbedUrl(item);
+    }
+
+    isFacebook(item) {
+        const url = item.social_url;
+        return !!url && (url.includes("facebook.com") || url.includes("fb.com"));
+    }
+
+    linkedinEmbedUrl(item) {
+        const url = item.social_url || "";
+        // A shared post URL (…/posts/…-activity-<id>-…/) or a feed/update
+        // URL (…/feed/update/urn:li:activity:<id>) both carry a numeric
+        // activity id; older links use "share" instead of "activity".
+        const match = url.match(/activity[:-](\d+)/) || url.match(/share[:-](\d+)/);
+        if (!match) {
+            return "";
+        }
+        const kind = url.includes("share") && !url.includes("activity") ? "share" : "activity";
+        return `https://www.linkedin.com/embed/feed/update/urn:li:${kind}:${match[1]}`;
+    }
+
+    facebookEmbedUrl(item) {
+        return `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(item.social_url)}&show_text=true&width=500`;
+    }
 }
 
 // Register the widget as a child component of web_responsive's AppsMenu so
