@@ -32,6 +32,19 @@ class ProjectTask(models.Model):
              "Counted from the day this feature was installed onwards, so tasks "
              "reopened before then read 0.",
     )
+    ft_completion_date = fields.Datetime(
+        string='Completion Date',
+        compute='_compute_ft_completion_date',
+        store=True,
+        index=True,
+        readonly=True,
+        help="When this task was delivered — the single date every delivery "
+             "metric is measured against. Falls back to the last stage change "
+             "when Odoo's own date_end is missing, which happens to any task "
+             "that entered a stage before that stage was marked Folded (Odoo "
+             "clears date_end when the target stage is not folded). Empty while "
+             "the task is open.",
+    )
     module_id = fields.Many2one('cus.module',string="Module",required=True)
     wc_id = fields.Char(string='Wc Id')
     task_type = fields.Selection([
@@ -85,6 +98,33 @@ class ProjectTask(models.Model):
                     "Task title must be at least %s characters long."
                 ) % TASK_TITLE_MIN_LEN)
 
+    @api.depends('date_end', 'date_last_stage_update', 'stage_id.fold')
+    def _compute_ft_completion_date(self):
+        """The delivery date, with a fallback for a missing ``date_end``.
+
+        Odoo stamps ``date_end`` in ``update_date_end()`` only when ``stage_id``
+        is written, and writes False whenever the target stage is not folded. So
+        a task that entered Completed while that stage was still unfolded — the
+        flag being ticked afterwards — sits in a folded stage forever with an
+        empty date_end. Filtering delivery on date_end dropped exactly those
+        tasks: not counted as delivered, and not counted as open either, because
+        their stage IS folded. Silently invisible in both directions.
+
+        ``date_last_stage_update`` is written by the same core code path on every
+        stage change, so for those tasks it holds the moment they were completed.
+        It is the fallback, not the primary: a reopened-then-reclosed task can
+        have a later stage change than its date_end, and date_end is the more
+        precise answer whenever it exists.
+
+        Stored so it can be searched and date-ranged, and so that upgrading this
+        module backfills every historical task in one recompute.
+        """
+        for task in self:
+            task.ft_completion_date = (
+                (task.date_end or task.date_last_stage_update)
+                if task.stage_id.fold else False
+            )
+
     # ------------------------------------------------------------------
     # On-Time Delivery
     #
@@ -97,10 +137,14 @@ class ProjectTask(models.Model):
     def _ft_delivery_domain(self, extra=None, date_from=None, date_to=None):
         """Domain for DELIVERED tasks.
 
-        Delivered = sits in a folded stage (Completed) and carries a date_end.
-        Odoo stamps date_end automatically on entering a folded stage and clears
-        it on leaving, so it is the completion date; a task reopened and closed
-        again counts by its latest completion.
+        Delivered = sits in a folded stage (Completed) and carries a completion
+        date. A task reopened and closed again counts by its latest completion.
+
+        Completion is read from ``ft_completion_date``, NOT raw ``date_end``:
+        Odoo leaves date_end empty on any task that entered a stage before that
+        stage was marked Folded, and filtering on it made those tasks vanish from
+        the delivered count while their folded stage also kept them out of the
+        open count. See ``_compute_ft_completion_date``.
 
         Keyed off the STAGE, not `state`. Stages do not set state in Odoo 18
         (see the note in views/project_task_views.xml), so counting state
@@ -111,26 +155,26 @@ class ProjectTask(models.Model):
         '1_canceled' deliberately, so it is safe as an exclusion even though it
         is unreliable as an inclusion.
 
-        The date range filters on date_end — i.e. what was DELIVERED in the
-        period, not what was created in it.
+        The date range filters on the completion date — i.e. what was DELIVERED
+        in the period, not what was created in it.
         """
         dom = [
             ('stage_id.fold', '=', True),
             ('state', '!=', '1_canceled'),
-            ('date_end', '!=', False),
+            ('ft_completion_date', '!=', False),
         ]
         if date_from:
-            dom.append(('date_end', '>=', str(date_from)))
+            dom.append(('ft_completion_date', '>=', str(date_from)))
         if date_to:
-            # date_end is a Datetime; span the whole closing day.
-            dom.append(('date_end', '<=', str(date_to) + ' 23:59:59'))
+            # ft_completion_date is a Datetime; span the whole closing day.
+            dom.append(('ft_completion_date', '<=', str(date_to) + ' 23:59:59'))
         return dom + (extra or [])
 
     @api.model
     def _ft_local_date(self, value):
         """A stored UTC value as a calendar date in the reader's timezone.
 
-        Both ``date_end`` and ``date_deadline`` are Datetimes held in UTC, so
+        Both the completion date and ``date_deadline`` are Datetimes held in UTC, so
         taking ``.date()`` straight off them would bucket work by the UTC day.
         For anything finished late in the local evening that is the WRONG day
         (20:00 UTC is already tomorrow in IST), which would mark on-time work
@@ -167,7 +211,7 @@ class ProjectTask(models.Model):
             if not task.date_deadline:
                 continue
             measurable += 1
-            if self._ft_local_date(task.date_end) <= self._ft_local_date(task.date_deadline):
+            if self._ft_local_date(task.ft_completion_date) <= self._ft_local_date(task.date_deadline):
                 on_time += 1
         return {
             'completed': completed,

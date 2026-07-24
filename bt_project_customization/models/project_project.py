@@ -184,7 +184,7 @@ class InheritProjectProject(models.Model):
              "least once.",
     )
 
-    @api.depends('task_ids.date_end', 'task_ids.date_deadline',
+    @api.depends('task_ids.ft_completion_date', 'task_ids.date_deadline',
                  'task_ids.stage_id.fold', 'task_ids.state',
                  'task_ids.estimated', 'task_ids.effective_hours',
                  'task_ids.ft_reopen_count')
