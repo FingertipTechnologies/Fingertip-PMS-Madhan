@@ -36,16 +36,10 @@
         <field name="view_id" ref="view_recruitment_dashboard_form"/>
     </record>
 
-    <!-- groups is mandatory here: the action targets board.board, so Odoo's
-         menu ACL check passes for every user and the parent menu's group
-         restriction alone does not hide it. Without this, any user reaching
-         the board triggers the embedded recruitment reports and gets an
-         access error on recruitment.candidate. -->
     <menuitem id="menu_recruitment_dashboard"
               name="Dashboard"
               parent="menu_recruitment_root"
               action="action_recruitment_dashboard"
-              sequence="5"
-              groups="group_recruitment_user"/>
+              sequence="5"/>
 
 </odoo>

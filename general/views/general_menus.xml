@@ -3,15 +3,12 @@
 
     <!-- ============================================================
          SINGLE TOP-LEVEL APP: General
-         Asset and Expense live under this. Recruitment was moved to the
-         Employees (HR) app, so group_recruitment_user is intentionally not
-         listed here - otherwise a recruitment-only user sees a General app
-         with no sections they can open.
+         All three modules (Asset, Expense, Recruitment) live under this.
          ============================================================ -->
     <menuitem id="menu_general_root"
               name="General"
               sequence="50"
               web_icon="general,static/description/icon.png"
-              groups="group_asset_user,group_expense_user"/>
+              groups="group_asset_user,group_expense_user,group_recruitment_user"/>
 
 </odoo>

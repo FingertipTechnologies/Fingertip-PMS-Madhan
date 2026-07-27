@@ -58,7 +58,10 @@ class FtHrDashboard(models.TransientModel):
         }
 
     def _chart_candidates_by_status(self, created):
-        Candidate = self.env['recruitment.candidate']
+        # sudo() to match get_dashboard_data: the KPI queries above already run
+        # sudo, so without it here any user lacking Recruitment User/Manager
+        # gets an access error on recruitment.candidate.
+        Candidate = self.env['recruitment.candidate'].sudo()
         sel = dict(Candidate.fields_get(['candidate_status'])['candidate_status']['selection'])
         groups = Candidate.read_group(created, [], ['candidate_status'], lazy=False)
         labels = [sel.get(g.get('candidate_status'), g.get('candidate_status') or 'Undefined') for g in groups]
@@ -73,7 +76,8 @@ class FtHrDashboard(models.TransientModel):
         }
 
     def _chart_interviews_by_status(self, iv_dom):
-        Interview = self.env['recruitment.interview']
+        # sudo() for the same reason as _chart_candidates_by_status above.
+        Interview = self.env['recruitment.interview'].sudo()
         sel = dict(Interview.fields_get(['status'])['status']['selection'])
         groups = Interview.read_group(iv_dom, [], ['status'], lazy=False)
         labels = [sel.get(g.get('status'), g.get('status') or 'Undefined') for g in groups]
