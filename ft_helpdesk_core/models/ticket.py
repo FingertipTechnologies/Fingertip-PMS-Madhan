@@ -18,11 +18,15 @@ TICKET_STATES = [
     ('cancelled', 'Cancelled'),
 ]
 
+# Labels use the customer-facing P1..P4 scheme. The stored keys are unchanged
+# ('3' is still the most severe) so ordering, existing records and every
+# domain filtering on '3'/'2' keep working. Note the numbering runs opposite
+# to the keys: P1 is the most severe and maps to '3'.
 PRIORITY_SELECTION = [
-    ('0', 'Low'),
-    ('1', 'Normal'),
-    ('2', 'High'),
-    ('3', 'Urgent'),
+    ('0', 'P4 – Low'),
+    ('1', 'P3 – Medium'),
+    ('2', 'P2 – High'),
+    ('3', 'P1 – Critical'),
 ]
 
 CHANNEL_SELECTION = [

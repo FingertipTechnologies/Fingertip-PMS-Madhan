@@ -95,10 +95,10 @@
                                                 <label for="priority" class="form-label fw-medium">Priority</label>
                                                 <select name="priority" id="priority"
                                                         class="form-select">
-                                                    <option value="1" selected="selected">Normal</option>
-                                                    <option value="0">Low</option>
-                                                    <option value="2">High</option>
-                                                    <option value="3">Urgent</option>
+                                                    <option value="3">P1 – Critical</option>
+                                                    <option value="2">P2 – High</option>
+                                                    <option value="1" selected="selected">P3 – Medium</option>
+                                                    <option value="0">P4 – Low</option>
                                                 </select>
                                             </div>
                                             <!-- Portal user with exactly one project: show as read-only default -->

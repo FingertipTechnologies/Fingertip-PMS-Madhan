@@ -17,10 +17,10 @@ class SLAPolicy(models.Model):
         help='Apply this SLA to tickets of this team. Leave empty for all teams.',
     )
     priority = fields.Selection([
-        ('0', 'Low'),
-        ('1', 'Normal'),
-        ('2', 'High'),
-        ('3', 'Urgent'),
+        ('0', 'P4 – Low'),
+        ('1', 'P3 – Medium'),
+        ('2', 'P2 – High'),
+        ('3', 'P1 – Critical'),
     ], string='Minimum Priority',
         help='Apply to tickets with this priority or higher.',
     )

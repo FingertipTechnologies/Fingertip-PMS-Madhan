@@ -16,7 +16,7 @@ class HelpdeskPortal(CustomerPortal):
     def portal_my_home_redirect(self, **kw):
         user = request.env.user
         if user.has_group('base.group_portal'):
-            return request.redirect('/my/support')
+            return request.redirect('/my/support/projects')
         # Internal users: show normal home page
         return super().portal_my_home(**kw)
     # ------------------------------------------------------------------

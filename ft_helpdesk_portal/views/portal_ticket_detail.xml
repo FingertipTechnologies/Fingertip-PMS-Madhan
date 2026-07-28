@@ -273,10 +273,10 @@
                                             <tr>
                                                 <td class="text-muted small py-2 px-4">Priority</td>
                                                 <td class="py-2 px-4">
-                                                    <t t-if="ticket.priority == '0'">Low</t>
-                                                    <t t-if="ticket.priority == '1'">Normal</t>
-                                                    <t t-if="ticket.priority == '2'"><span class="text-warning fw-medium">High</span></t>
-                                                    <t t-if="ticket.priority == '3'"><span class="text-danger fw-bold">Urgent</span></t>
+                                                    <t t-if="ticket.priority == '0'">P4 – Low</t>
+                                                    <t t-if="ticket.priority == '1'">P3 – Medium</t>
+                                                    <t t-if="ticket.priority == '2'"><span class="text-warning fw-medium">P2 – High</span></t>
+                                                    <t t-if="ticket.priority == '3'"><span class="text-danger fw-bold">P1 – Critical</span></t>
                                                 </td>
                                             </tr>
                                             <tr>

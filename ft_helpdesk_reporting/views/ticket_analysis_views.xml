@@ -65,9 +65,9 @@
                 <separator/>
 
                 <!-- Priority filters -->
-                <filter name="filter_priority_urgent" string="Urgent"
+                <filter name="filter_priority_urgent" string="P1 – Critical"
                         domain="[('priority', '=', '3')]"/>
-                <filter name="filter_priority_high" string="High"
+                <filter name="filter_priority_high" string="P2 – High"
                         domain="[('priority', '=', '2')]"/>
                 <separator/>
 

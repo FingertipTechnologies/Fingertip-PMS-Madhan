@@ -16,10 +16,10 @@ TICKET_STATES = [
 ]
 
 PRIORITY_SELECTION = [
-    ('0', 'Low'),
-    ('1', 'Normal'),
-    ('2', 'High'),
-    ('3', 'Urgent'),
+    ('0', 'P4 – Low'),
+    ('1', 'P3 – Medium'),
+    ('2', 'P2 – High'),
+    ('3', 'P1 – Critical'),
 ]
 
 

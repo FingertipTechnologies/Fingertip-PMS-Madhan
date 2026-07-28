@@ -77,13 +77,13 @@ class HelpdeskPortal(CustomerPortal):
         }
 
     # =============================
-    # Redirect portal users to /my/support
+    # Redirect portal users to /my/support/projects
     # =============================
 
     @http.route(['/my', '/my/home'], type='http', auth='user', website=True)
     def portal_my_home(self, **kw):
         if request.env.user.has_group('base.group_portal'):
-            return request.redirect('/my/support')
+            return request.redirect('/my/support/projects')
         return super().portal_my_home(**kw)
 
     # =============================
@@ -723,14 +723,33 @@ class HelpdeskPortal(CustomerPortal):
         return fields_data
 
 
-class HelpdeskLoginRedirect(Home):
-    """Redirect portal users to /my/support after login."""
+PORTAL_LANDING = '/my/support/projects'
 
-    @http.route('/web/login', type='http', auth='none')
-    def web_login(self, redirect=None, **kw):
-        response = super().web_login(redirect=redirect, **kw)
-        if not redirect and request.params.get('login_success'):
-            user = request.env.user
+# Default post-login targets we take over for portal users. Odoo sends a
+# non-internal user to /web/login_successful, which lands them on Odoo's stock
+# /my portal home; /my and /my/home are the same page reached directly.
+_GENERIC_LANDINGS = {'/my', '/my/home', '/web/login_successful'}
+
+
+class HelpdeskLoginRedirect(Home):
+    """Land portal users on the support projects page after login."""
+
+    def _login_redirect(self, uid, redirect=None):
+        """Override the single chokepoint every login path funnels through.
+
+        Overriding web_login alone was not enough: it only acted when no
+        ``redirect`` parameter was supplied, so a request carrying
+        ?redirect=/my still dropped the user on Odoo's default portal home.
+
+        Only fully-authenticated sessions are touched. During a partial (MFA)
+        session request.session.uid is unset and the base implementation must
+        run so the user reaches the MFA form instead of the portal.
+
+        A genuine deep link - e.g. bouncing through login to reach a specific
+        ticket - is preserved; only the generic landings are replaced.
+        """
+        if request.session.uid and (not redirect or redirect in _GENERIC_LANDINGS):
+            user = request.env['res.users'].sudo().browse(uid)
             if user.has_group('base.group_portal'):
-                return request.redirect('/my/support')
-        return response
+                return PORTAL_LANDING
+        return super()._login_redirect(uid, redirect=redirect)

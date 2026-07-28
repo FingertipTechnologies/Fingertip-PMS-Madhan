@@ -125,8 +125,8 @@
                 <filter string="Open (Active)" name="active_tickets"
                         domain="[('state', 'not in', ('closed', 'cancelled'))]"/>
                 <separator/>
-                <filter string="Urgent" name="priority_urgent" domain="[('priority', '=', '3')]"/>
-                <filter string="High Priority" name="priority_high" domain="[('priority', 'in', ('2', '3'))]"/>
+                <filter string="P1 – Critical" name="priority_urgent" domain="[('priority', '=', '3')]"/>
+                <filter string="P1 + P2" name="priority_high" domain="[('priority', 'in', ('2', '3'))]"/>
                 <filter string="Overdue" name="overdue" domain="[('is_overdue', '=', True)]"/>
                 <separator/>
                 <filter string="Created Today" name="created_today"

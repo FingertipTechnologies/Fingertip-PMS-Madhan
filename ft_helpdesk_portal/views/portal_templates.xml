@@ -86,6 +86,14 @@
                             <i class="fa fa-sign-out me-1"/> Logout
                         </a>
                     </div>
+                    <!-- Welcome header: kept here (the shared shell) rather than
+                         only on portal_support_landing, so every tab shows it.
+                         Portal users now land straight on /my/support/projects
+                         and would otherwise never see it. -->
+                    <div class="ft-page-header text-center text-white rounded-3 p-4 mb-4">
+                        <i class="fa fa-headphones fa-2x mb-2" style="opacity: 0.85;"/>
+                        <h2 class="fw-bold mb-1">Welcome to Your Support Portal</h2>
+                    </div>
                     <!-- Navigation Tabs -->
                     <ul class="nav nav-tabs ft-support-tabs mb-4" role="tablist">
                         <li class="nav-item" role="presentation">
@@ -565,10 +573,10 @@
 
     <template id="ticket_priority_badge" name="Ticket Priority Badge">
         <span t-if="priority == '3'" class="badge rounded-pill text-bg-danger">
-            <i class="fa fa-arrow-up"/> Urgent
+            <i class="fa fa-arrow-up"/> P1 – Critical
         </span>
         <span t-if="priority == '2'" class="badge rounded-pill text-bg-warning">
-            <i class="fa fa-arrow-up"/> High
+            <i class="fa fa-arrow-up"/> P2 – High
         </span>
     </template>
 
