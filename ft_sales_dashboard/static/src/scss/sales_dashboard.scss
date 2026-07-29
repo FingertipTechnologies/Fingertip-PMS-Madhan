@@ -126,6 +126,159 @@
         .btsd_chart_canvas_wrap { position: relative; height: 320px; }
     }
 
+    // Month board — six month columns, each a proportional bar plus the deals
+    // behind it. Bars share one scale so the months compare honestly.
+    .btsd_board {
+        .btsd_board_head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .btsd_board_summary { text-align: right; white-space: nowrap; }
+        .btsd_board_total { font-size: 20px; font-weight: 800; line-height: 1.1; }
+        .btsd_board_sub { color: var(--btsd-muted); font-size: 11.5px; }
+
+        .btsd_board_grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            align-items: start;
+            @media (max-width: 1200px) { grid-template-columns: repeat(3, 1fr); }
+            @media (max-width: 700px)  { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .btsd_month {
+            border: 1px solid var(--btsd-border);
+            border-radius: 12px;
+            padding: 10px 10px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s, transform .15s;
+            &:hover {
+                border-color: rgba(79, 70, 229, 0.45);
+                box-shadow: 0 4px 14px rgba(0, 0, 0, .07);
+                transform: translateY(-1px);
+            }
+            &--empty { opacity: .55; cursor: default; &:hover { transform: none; box-shadow: none; } }
+        }
+
+        // Fixed-height rail so every bar is measured against the same baseline.
+        .btsd_month_barwrap {
+            height: 110px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+        .btsd_month_bar {
+            width: 62%;
+            border-radius: 6px 6px 2px 2px;
+            min-height: 3px;
+        }
+
+        .btsd_month_amount { font-size: 13px; font-weight: 700; }
+        .btsd_month_label  { font-size: 12px; font-weight: 600; margin-top: 2px; }
+        .btsd_month_year   { color: var(--btsd-muted); font-weight: 500; }
+        .btsd_month_count  { color: var(--btsd-muted); font-size: 11px; }
+
+        .btsd_month_list {
+            margin-top: 10px;
+            border-top: 1px dashed var(--btsd-border);
+            padding-top: 8px;
+            text-align: left;
+        }
+        .btsd_lead {
+            padding: 6px 6px;
+            border-radius: 8px;
+            cursor: pointer;
+            &:hover { background: rgba(79, 70, 229, 0.07); }
+            + .btsd_lead { margin-top: 2px; }
+        }
+        .btsd_lead_name {
+            font-size: 11.5px;
+            font-weight: 600;
+            // Long opportunity names must not stretch the column.
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .btsd_lead_meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            font-size: 10.5px;
+            color: var(--btsd-muted);
+            span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            &--faint { opacity: .75; }
+        }
+        .btsd_lead_amt { font-weight: 700; color: inherit; white-space: nowrap; }
+        .btsd_lead_more {
+            font-size: 10.5px;
+            color: var(--btsd-muted);
+            padding: 4px 6px;
+            font-style: italic;
+        }
+
+        .btsd_board_toggle {
+            margin-top: 12px;
+            width: 100%;
+            background: transparent;
+            border: 1px dashed var(--btsd-border);
+            border-radius: 10px;
+            padding: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--btsd-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            &:hover { color: inherit; border-color: rgba(79, 70, 229, 0.45); }
+        }
+    }
+
+    // Executive-wise report table. Scrolls inside its own card rather than
+    // widening the dashboard, so a long salesperson list cannot push the page
+    // into horizontal scroll.
+    .btsd_table_wrap {
+        overflow-x: auto;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    .btsd_table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+
+        th, td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--btsd-border);
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--btsd-card);
+            color: var(--btsd-muted);
+            font-weight: 600;
+            font-size: 11.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            z-index: 1;
+        }
+        td { font-weight: 500; }
+        .btsd_td--num { text-align: right; font-variant-numeric: tabular-nums; }
+        tbody tr:last-child td { border-bottom: 0; }
+        .btsd_tr--clickable {
+            cursor: pointer;
+            &:hover { background: rgba(79, 70, 229, 0.06); }
+        }
+    }
+
     // Inverted funnel (Sales Funnel) — tapering trapezoids forming a cone,
     // with the 01/02/… stage number in a left gutter and a closing tip.
     .btsd_funnel {

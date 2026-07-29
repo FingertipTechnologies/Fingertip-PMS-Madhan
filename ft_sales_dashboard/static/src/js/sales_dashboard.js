@@ -9,6 +9,36 @@ import { loadJS } from "@web/core/assets";
 import { KpiCard } from "./kpi_card";
 import { ChartCard } from "./chart_card";
 import { FunnelChart } from "./funnel_chart";
+import { TableCard } from "./table_card";
+import { MonthBoard } from "./month_board";
+
+// Each month board and the domain a click on one of its months should open.
+// Keeps the drill-down in step with what the server counted for that board.
+const BOARD_DOMAINS = {
+    pipeline_next_months: {
+        name: "Pipeline",
+        domain: [["active", "=", true], ["stage_id.is_won", "=", false]],
+    },
+    closed_last_months: {
+        name: "Won Opportunities",
+        domain: [["active", "=", true], ["stage_id.is_won", "=", true]],
+    },
+    lost_last_months: {
+        name: "Lost Opportunities",
+        domain: [["active", "=", false]],
+        activeTest: false,
+    },
+};
+
+// Columns for the executive-wise report. Declared once here rather than inline
+// in the template so the table stays a data-driven component.
+const EXEC_COLUMNS = [
+    { key: "name", label: "Sales Executive", type: "text" },
+    { key: "count", label: "Opportunities", type: "number" },
+    { key: "amount", label: "Expected Revenue", type: "money" },
+    { key: "won", label: "Sales Closed", type: "number" },
+    { key: "conversion", label: "Conversion Ratio", type: "percent" },
+];
 
 const PERIODS = [
     { id: "today", label: "Today" },
@@ -49,13 +79,14 @@ function writeStoredFilter(filter) {
 
 export class SalesDashboard extends Component {
     static template = "ft_sales_dashboard.SalesDashboard";
-    static components = { KpiCard, ChartCard, FunnelChart };
+    static components = { KpiCard, ChartCard, FunnelChart, TableCard, MonthBoard };
     static props = ["*"];
 
     setup() {
         this.orm = useService("orm");
         this.action = useService("action");
         this.periods = PERIODS;
+        this.execColumns = EXEC_COLUMNS;
 
         // props.state covers the breadcrumb; sessionStorage covers browser Back
         // (which rebuilds the action fresh). Either way we land on the period
@@ -176,34 +207,82 @@ export class SalesDashboard extends Component {
         });
     }
 
-    // Selected period, mirroring _date_domain on the server so a drill-down
-    // opens exactly the records its KPI counted.
-    _periodDomain() {
+    // Drill-downs mirror _date_domain on the server, including WHICH date field
+    // each figure is measured on — otherwise a drill-down opens a different set
+    // of records from the one the KPI counted.
+
+    // Pipeline figures are measured on Expected Closing (a Date, so no time
+    // component: comparing a Date against "...23:59:59" matches nothing).
+    _deadlineDomain() {
         const domain = [];
         if (this.state.dateFrom) {
-            domain.push(["create_date", ">=", this.state.dateFrom + " 00:00:00"]);
+            domain.push(["date_deadline", ">=", this.state.dateFrom]);
         }
         if (this.state.dateTo) {
-            domain.push(["create_date", "<=", this.state.dateTo + " 23:59:59"]);
+            domain.push(["date_deadline", "<=", this.state.dateTo]);
+        }
+        return domain;
+    }
+
+    // Outcome figures are measured on Closed Date (a Datetime).
+    _closedDomain() {
+        const domain = [];
+        if (this.state.dateFrom) {
+            domain.push(["date_closed", ">=", this.state.dateFrom + " 00:00:00"]);
+        }
+        if (this.state.dateTo) {
+            domain.push(["date_closed", "<=", this.state.dateTo + " 23:59:59"]);
         }
         return domain;
     }
 
     openOpportunities() {
         this._openLeads(
-            [["type", "=", "opportunity"], ...this._periodDomain()],
+            [["type", "=", "opportunity"], ...this._deadlineDomain()],
             "Opportunities"
         );
     }
+
+    openPipeline() {
+        this._openLeads(
+            [
+                ["type", "=", "opportunity"],
+                ["active", "=", true],
+                ["stage_id.is_won", "=", false],
+                ...this._deadlineDomain(),
+            ],
+            "Open Pipeline"
+        );
+    }
+
     openWon() {
         this._openLeads(
             [
                 ["type", "=", "opportunity"],
+                ["active", "=", true],
                 ["stage_id.is_won", "=", true],
-                ...this._periodDomain(),
+                ...this._closedDomain(),
             ],
             "Won Opportunities"
         );
+    }
+
+    openLost() {
+        // Lost records are archived, so the action must opt into inactive ones
+        // or the list comes back empty.
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: "Lost Opportunities",
+            res_model: "crm.lead",
+            views: [[false, "list"], [false, "form"]],
+            domain: [
+                ["type", "=", "opportunity"],
+                ["active", "=", false],
+                ...this._closedDomain(),
+            ],
+            context: { active_test: false },
+            target: "current",
+        });
     }
 
     // Click a funnel stage -> open exactly the opportunities it counts:
@@ -214,9 +293,63 @@ export class SalesDashboard extends Component {
             ["type", "=", "opportunity"],
             ["active", "=", true],
             ["stage_id", "=", stage.stageId || false],
-            ...this._periodDomain(),
+            ...this._deadlineDomain(),
         ];
         this._openLeads(domain, stage.label || "Opportunities");
+    }
+
+    // Click an executive row -> their opportunities for the same period.
+    openExecutive(row) {
+        this._openLeads(
+            [
+                ["type", "=", "opportunity"],
+                ["user_id", "=", row.user_id || false],
+                ...this._deadlineDomain(),
+            ],
+            row.name || "Opportunities"
+        );
+    }
+
+    // Click a month card -> that month's opportunities for that board. The
+    // board's own date field is used (Expected Closing for pipeline, Closed
+    // Date for won/lost), so the list matches the number on the card.
+    openBoardMonth(boardKey, month) {
+        const spec = BOARD_DOMAINS[boardKey];
+        const board = this.boards[boardKey] || {};
+        const field = board.date_field || "date_deadline";
+        // month.key is YYYY-MM; bound with a half-open range so the last day of
+        // the month is included whether the field is a Date or a Datetime.
+        const [y, m] = month.key.split("-").map(Number);
+        const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: `${spec.name} — ${month.label}`,
+            res_model: "crm.lead",
+            views: [[false, "list"], [false, "form"]],
+            domain: [
+                ["type", "=", "opportunity"],
+                ...spec.domain,
+                [field, ">=", `${month.key}-01`],
+                [field, "<", next],
+            ],
+            context: spec.activeTest === false ? { active_test: false } : {},
+            target: "current",
+        });
+    }
+
+    // Click an opportunity inside a month card -> open that record.
+    openLead(lead) {
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: lead.name,
+            res_model: "crm.lead",
+            res_id: lead.id,
+            views: [[false, "form"]],
+            // Lost leads are archived; without this the form refuses to open.
+            context: { active_test: false },
+            target: "current",
+        });
     }
 
     get kpis() {
@@ -224,6 +357,12 @@ export class SalesDashboard extends Component {
     }
     get charts() {
         return this.state.data?.charts || {};
+    }
+    get boards() {
+        return this.state.data?.boards || {};
+    }
+    get executives() {
+        return this.state.data?.executives || [];
     }
 }
 

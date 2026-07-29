@@ -47,17 +47,28 @@ export class FunnelChart extends Component {
         return `polygon(${tl}% 0, ${tr}% 0, ${br}% 100%, ${bl}% 100%)`;
     }
 
+    // The funnel now carries Expected Revenue, not a count, so the raw number
+    // would render as e.g. "16350000". Indian grouping, no decimals: lakh-scale
+    // pipeline figures do not need paise, and the band is narrow.
+    _money(v) {
+        return "₹ " + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    }
+
     get view() {
         const data = this.props.data || {};
         const labels = data.labels || [];
         const stageIds = data.stage_ids || [];
+        const counts = data.counts || [];
         const ds = (data.datasets && data.datasets[0]) || {};
         const values = ds.data || [];
         const colors = ds.backgroundColor || [];
 
         const items = labels.map((label, i) => ({
             label,
-            value: values[i] || 0,
+            // Revenue is what the band measures; the opportunity count rides
+            // along so a stage worth a lot on one deal is not read as volume.
+            value: this._money(values[i]),
+            count: counts[i] || 0,
             color: colors[i] || PALETTE[i % PALETTE.length],
             stageId: stageIds[i] !== undefined ? stageIds[i] : false,
         }));
