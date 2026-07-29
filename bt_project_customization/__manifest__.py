@@ -13,6 +13,11 @@
         'views/project_task_views.xml',
         'views/module_views.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'bt_project_customization/static/src/js/task_stage_confirm.js',
+        ],
+    },
     'installable': True,
     'application': False,
     'license': 'LGPL-3',

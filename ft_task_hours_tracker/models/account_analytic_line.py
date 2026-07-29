@@ -5,6 +5,35 @@ from odoo.exceptions import UserError
 class AccountAnalyticLine(models.Model):
     _inherit = 'account.analytic.line'
 
+    def _ft_check_task_not_completed(self, task):
+        """Refuse time entry on a task sitting in a Completed (folded) stage.
+
+        Time logged after delivery is what makes rework invisible: the hours
+        land on a task that already counts as finished, so the extra effort
+        never shows up as a reopen and the Rework Rate stays flattering. Making
+        the person move the task back to Working first is what turns that
+        second round of work into a counted reopen.
+
+        Keyed off ``stage_id.fold`` rather than ``state``, for the same reason
+        the delivery metrics are: stages in this database do not set state, so
+        checking state would let almost everything through.
+
+        Superuser is exempt so imports, migrations and scheduled jobs are not
+        blocked; a plain administrator is NOT, because admins log time too and
+        exempting them would leave the rule unenforced for the people most
+        likely to bypass it.
+        """
+        if self.env.su or not task or not task.stage_id.fold:
+            return
+        raise UserError(_(
+            'This task is completed — timesheets cannot be logged on it.\n\n'
+            'Task: %s\n'
+            'Stage: %s\n\n'
+            'If more work is needed, move the task back to Working first. '
+            'Reopening it that way is recorded as rework and counts towards '
+            "the project's Rework Rate."
+        ) % (task.name, task.stage_id.name))
+
     def _get_task_time_limit(self):
         return float(
             self.env['ir.config_parameter'].sudo().get_param(
@@ -67,6 +96,11 @@ class AccountAnalyticLine(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            # Runs before the billable-project guard below: a completed task
+            # takes no more time whether or not its project is billable.
+            if vals.get('task_id'):
+                self._ft_check_task_not_completed(
+                    self.env['project.task'].browse(vals['task_id']))
             project_id = vals.get('project_id')
             if not project_id:
                 continue
@@ -95,6 +129,12 @@ class AccountAnalyticLine(models.Model):
 
     def write(self, vals):
         for line in self:
+            # Editing the hours on a completed task, or moving a line onto one,
+            # would get round the create-time guard.
+            if 'unit_amount' in vals or 'task_id' in vals:
+                self._ft_check_task_not_completed(
+                    self.env['project.task'].browse(vals['task_id'])
+                    if 'task_id' in vals else line.task_id)
             project = (
                 self.env['project.project'].browse(vals['project_id'])
                 if 'project_id' in vals

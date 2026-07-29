@@ -36,6 +36,50 @@ class ProjectTask(models.Model):
         string='Is Billable Project',
         store=False,
     )
+    ft_billing_status = fields.Selection(
+        [('non_billed', 'Non Billed'), ('billed', 'Billed')],
+        string='Billing Status',
+        default='non_billed',
+        required=True,
+        tracking=True,
+        help='Whether the work on this task has been billed to the customer. '
+             'New tasks start as Non Billed.',
+    )
+    # Billable Hours follows Actual Hours until somebody edits it, and then
+    # stops. Without that stickiness the override would be pointless: the next
+    # timesheet line logged against the task would silently reset the figure
+    # back to Actual Hours and the correction would be lost.
+    #
+    # The manual value is kept in its own column rather than read back off this
+    # field, because a compute that reads the field it is computing recurses.
+    ft_billable_hours = fields.Float(
+        string='Billable Hours',
+        compute='_compute_ft_billable_hours',
+        inverse='_inverse_ft_billable_hours',
+        store=True,
+        readonly=False,
+        help='Hours that can be billed. Defaults to Actual Hours; edit it to '
+             'override, after which it no longer follows Actual Hours.',
+    )
+    ft_billable_hours_manual = fields.Boolean(
+        string='Billable Hours Overridden',
+        default=False,
+        copy=False,
+        help='Technical: set once Billable Hours has been edited by hand.',
+    )
+    ft_billable_hours_override = fields.Float(
+        string='Billable Hours (manual value)',
+        copy=False,
+        help='Technical: the hand-entered Billable Hours, preserved so later '
+             'timesheet entries cannot overwrite it.',
+    )
+    ft_non_billable_hours = fields.Float(
+        string='Non Billable Hours',
+        compute='_compute_ft_non_billable_hours',
+        store=True,
+        readonly=True,
+        help='Actual Hours minus Billable Hours.',
+    )
     # store=False (computed live, like the project-level fields) so historical
     # tasks always reflect the employee's CURRENT job position. Stored values
     # would freeze at whatever was first computed and never refresh.
@@ -147,6 +191,38 @@ class ProjectTask(models.Model):
             task.ft_pm_hours_exceeded = time_limit > 0 and totals['pm'] > time_limit
             task.ft_ba_hours_exceeded = time_limit > 0 and totals['ba'] > time_limit
             task.ft_trainee_hours_exceeded = time_limit > 0 and totals['trainee'] > time_limit
+
+    @api.depends('ft_total_hours_taken', 'ft_billable_hours_manual',
+                 'ft_billable_hours_override')
+    def _compute_ft_billable_hours(self):
+        """Track Actual Hours, unless the figure has been overridden by hand.
+
+        Every branch assigns: a stored compute that leaves a record untouched
+        raises "compute method failed to assign".
+        """
+        for task in self:
+            task.ft_billable_hours = (
+                task.ft_billable_hours_override if task.ft_billable_hours_manual
+                else task.ft_total_hours_taken
+            )
+
+    def _inverse_ft_billable_hours(self):
+        """Remember a hand-entered figure and stop following Actual Hours."""
+        for task in self:
+            task.ft_billable_hours_override = task.ft_billable_hours
+            task.ft_billable_hours_manual = True
+
+    @api.depends('ft_total_hours_taken', 'ft_billable_hours')
+    def _compute_ft_non_billable_hours(self):
+        """Whatever of the logged time is not being billed.
+
+        Left as a plain subtraction, so entering Billable Hours above Actual
+        Hours shows as a negative rather than being quietly clamped to zero and
+        hiding the mistake.
+        """
+        for task in self:
+            task.ft_non_billable_hours = (
+                task.ft_total_hours_taken - task.ft_billable_hours)
 
     @api.depends('effective_hours')
     def _compute_ft_total_hours_taken(self):

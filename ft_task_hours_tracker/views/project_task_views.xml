@@ -18,6 +18,17 @@
                        string="Actual Hours"
                        widget="float_time"
                        readonly="1"/>
+                <field name="ft_billable_hours"
+                       string="Billable Hours"
+                       widget="float_time"/>
+                <field name="ft_non_billable_hours"
+                       string="Non Billable Hours"
+                       widget="float_time"
+                       readonly="1"/>
+                <!-- Technical companions to Billable Hours: they record that the
+                     figure was overridden so later timesheets cannot reset it. -->
+                <field name="ft_billable_hours_manual" invisible="1"/>
+                <field name="ft_billable_hours_override" invisible="1"/>
                 <field name="ft_dev_hours_exceeded" invisible="1"/>
                 <field name="ft_qa_hours_exceeded" invisible="1"/>
                 <field name="ft_pm_hours_exceeded" invisible="1"/>
@@ -98,6 +109,15 @@
             </xpath>
             <xpath expr="//field[@name='estimated']" position="after">
                 <field name="sprint_id" position="move"/>
+            </xpath>
+
+            <!-- Billing Status goes above Estimated in the right-hand column.
+                 It previously sat after the deadline wrapper div, which put it
+                 among that block's own label/div pairs and left it rendering
+                 without a label. Anchored on a plain field, the group pairs it
+                 with its label normally. -->
+            <xpath expr="//field[@name='estimated']" position="before">
+                <field name="ft_billing_status"/>
             </xpath>
 
         </field>

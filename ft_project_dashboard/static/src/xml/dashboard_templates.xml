@@ -158,11 +158,26 @@
 
             <div t-else="" class="ftpd_content">
 
-                <!-- KPI Row 1 -->
-                <div class="ftpd_kpi_grid">
+                <!-- One continuous KPI grid. Splitting these into three fixed
+                     rows left whichever row was not an exact multiple of the
+                     column count with an orphan card and a wide empty gap, so
+                     the cards flow as a single grid instead. Order still puts
+                     the four delivery cards together on the last row. -->
+                <section class="ftpd_section">
+                    <h2 class="ftpd_section_title">Project Summary</h2>
+                    <div class="ftpd_kpi_grid">
                     <KpiCard title="'Active Projects'" value="kpis.active_projects"
                              icon="'fa-folder-open'" color="'#4F46E5'"
-                             onClick="() => this.openActiveProjects()"/>
+                             onClick="() => this.openKpi('active_projects')"
+                             tooltip="'Projects not in the General, Hold or Closed stage. Equals Implementation Projects plus AMC Projects.'"/>
+                    <KpiCard title="'Implementation Projects'" value="kpis.implementation_projects"
+                             icon="'fa-cogs'" color="'#8B5CF6'"
+                             onClick="() => this.openKpi('implementation_projects')"
+                             tooltip="'Active projects still being delivered — excludes the AMC stage as well as General, Hold and Closed.'"/>
+                    <KpiCard title="'AMC Projects'" value="kpis.amc_projects"
+                             icon="'fa-refresh'" color="'#14B8A6'"
+                             onClick="() => this.openKpi('amc_projects')"
+                             tooltip="'Active projects in the AMC stage (annual maintenance contract).'"/>
                     <KpiCard title="'Hours Spent'" value="kpis.hours_spent" suffix="'h'"
                              icon="'fa-clock-o'" color="'#F59E0B'"
                              onClick="() => this.openTimesheets(false)"/>
@@ -175,10 +190,6 @@
                     <KpiCard title="'Testers'" value="kpis.testers"
                              icon="'fa-bug'" color="'#8B5CF6'"
                              onClick="() => this.openKpi('testers')"/>
-                </div>
-
-                <!-- KPI Row 2 -->
-                <div class="ftpd_kpi_grid">
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
                              icon="'fa-user-circle'" color="'#EC4899'"
                              onClick="() => this.openKpi('project_managers')"/>
@@ -195,12 +206,11 @@
                     <KpiCard title="'Resource Need'" value="kpis.resource_need"
                              icon="'fa-users'" color="'#EF4444'"
                              tooltip="'No capacity/planning model installed yet.'"/>
-                </div>
-
-                <!-- KPI Row 3: delivery. Open &amp; Overdue sits beside the
-                     percentage on purpose — the percentage only counts work that
-                     finished, so late work still open is invisible to it. -->
-                <div class="ftpd_kpi_grid">
+                    <!-- Delivery cards. Open &amp; Overdue sits beside the
+                         percentage on purpose — the percentage only counts work
+                         that finished, so late work still open is invisible to
+                         it. With 16 cards over 4 columns these four land on the
+                         last row together. -->
                     <KpiCard title="'On-Time Delivery'" value="kpis.on_time_delivery" suffix="'%'"
                              icon="'fa-check-circle'" color="'#10B981'"
                              onClick="() => this.openKpi('on_time_delivery')"
@@ -216,11 +226,313 @@
                     <KpiCard title="'Available Resources'" value="kpis.available_resources"
                              icon="'fa-user-plus'" color="'#14B8A6'"
                              tooltip="'No capacity/planning model installed yet.'"/>
-                </div>
+                    </div>
+                </section>
 
-                <!-- Full-width table: Project Status -->
+                <!-- Hours Utilisation: the Dev / QA / PM Hours fields off the
+                     task form itself, summed across every task including
+                     archived ones. Ignores the date filter at the top on
+                     purpose. Read-only by design: no onClick, so the cards
+                     render unclickable. -->
+                <section class="ftpd_section">
+                    <div class="ftpd_section_head">
+                        <h2 class="ftpd_section_title">Hours Utilisation</h2>
+                        <div class="ftpd_section_tools">
+                            <div class="ftpd_filter" title="Only time booked inside this range is counted">
+                                <span class="ftpd_filter_label">From</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.hoursDateFrom"
+                                       t-on-change="(ev) => this.onHoursFilter('hoursDateFrom', ev)"/>
+                                <span class="ftpd_filter_label">To</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.hoursDateTo"
+                                       t-on-change="(ev) => this.onHoursFilter('hoursDateTo', ev)"/>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onHoursFilter('hoursProjectId', ev)">
+                                    <option value="">All Projects</option>
+                                    <t t-foreach="state.hoursOptions.projects" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id"
+                                                t-att-selected="isHoursFilterSelected(p.id, state.hoursProjectId)"
+                                                t-esc="p.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onHoursFilter('hoursStageId', ev)">
+                                    <option value="">All Stages</option>
+                                    <t t-foreach="state.hoursOptions.stages" t-as="s" t-key="s.id">
+                                        <option t-att-value="s.id"
+                                                t-att-selected="isHoursFilterSelected(s.id, state.hoursStageId)"
+                                                t-esc="s.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Hours booked by this project manager">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onHoursFilter('hoursPmId', ev)">
+                                    <option value="">All PMs</option>
+                                    <t t-foreach="state.hoursOptions.project_managers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.hoursPmId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Hours booked by this developer">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onHoursFilter('hoursDevId', ev)">
+                                    <option value="">All Developers</option>
+                                    <t t-foreach="state.hoursOptions.developers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.hoursDevId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <button class="ftpd_filter_clear" t-if="hasHoursFilter"
+                                    t-on-click="clearHoursFilters">Clear</button>
+                            <span class="ftpd_filter_label" t-if="state.hoursLoading">…</span>
+                        </div>
+                    </div>
+                    <div class="ftpd_kpi_grid">
+                        <KpiCard title="'Developer Hours'" value="hours.dev_hours" suffix="'h'"
+                                 icon="'fa-code'" color="'#06B6D4'"
+                                 tooltip="'Sum of the Dev Hours field on every task. Not affected by the date filter.'"/>
+                        <KpiCard title="'PM Hours'" value="hours.pm_hours" suffix="'h'"
+                                 icon="'fa-user-circle'" color="'#EC4899'"
+                                 tooltip="'Sum of the PM Hours field on every task. Not affected by the date filter.'"/>
+                        <KpiCard title="'QA Hours'" value="hours.qa_hours" suffix="'h'"
+                                 icon="'fa-bug'" color="'#8B5CF6'"
+                                 tooltip="'Sum of the QA Hours field on every task. Not affected by the date filter.'"/>
+                        <KpiCard title="'BA Hours'" value="hours.ba_hours" suffix="'h'"
+                                 icon="'fa-clipboard'" color="'#0EA5E9'"
+                                 tooltip="'Sum of the BA Hours field on every task. Not affected by the date filter.'"/>
+                    </div>
+                    <!-- Activity split, kept on its own row. Role row above
+                         holds 4 and this holds 4, so both fill the grid exactly.
+                         These use the task's Actual Hours, not the role split. -->
+                    <div class="ftpd_kpi_grid">
+                        <KpiCard title="'Standup Hours'" value="hours.standup_hours" suffix="'h'"
+                                 icon="'fa-users'" color="'#F59E0B'"
+                                 tooltip="'Actual Hours booked on every task in the Fingertip Standup project.'"/>
+                        <KpiCard title="'Meeting Hours'" value="hours.meeting_hours" suffix="'h'"
+                                 icon="'fa-calendar'" color="'#4F46E5'"
+                                 tooltip="'Actual Hours on tasks whose Task Type is Internal Call or External Call.'"/>
+                        <KpiCard title="'Internal Meeting Hours'" value="hours.internal_meeting_hours" suffix="'h'"
+                                 icon="'fa-comments'" color="'#10B981'"
+                                 tooltip="'Actual Hours on tasks whose Task Type is Internal Call.'"/>
+                        <KpiCard title="'External Meeting Hours'" value="hours.external_meeting_hours" suffix="'h'"
+                                 icon="'fa-phone'" color="'#EF4444'"
+                                 tooltip="'Actual Hours on tasks whose Task Type is External Call.'"/>
+                    </div>
+                </section>
+
+                <!-- Tasks Summary: same filter shape as Hours Utilisation, but
+                     counting tasks. Each card anchors on its own date — created
+                     on create date, due on deadline, completed on completion
+                     date — so one range answers each question correctly. -->
+                <section class="ftpd_section">
+                    <div class="ftpd_section_head">
+                        <h2 class="ftpd_section_title">Tasks Summary</h2>
+                        <div class="ftpd_section_tools">
+                            <div class="ftpd_filter" title="Created / due / completed inside this range">
+                                <span class="ftpd_filter_label">From</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.tasksDateFrom"
+                                       t-on-change="(ev) => this.onTasksFilter('tasksDateFrom', ev)"/>
+                                <span class="ftpd_filter_label">To</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.tasksDateTo"
+                                       t-on-change="(ev) => this.onTasksFilter('tasksDateTo', ev)"/>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTasksFilter('tasksProjectId', ev)">
+                                    <option value="">All Projects</option>
+                                    <t t-foreach="state.hoursOptions.projects" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id"
+                                                t-att-selected="isHoursFilterSelected(p.id, state.tasksProjectId)"
+                                                t-esc="p.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTasksFilter('tasksStageId', ev)">
+                                    <option value="">All Stages</option>
+                                    <t t-foreach="state.hoursOptions.stages" t-as="s" t-key="s.id">
+                                        <option t-att-value="s.id"
+                                                t-att-selected="isHoursFilterSelected(s.id, state.tasksStageId)"
+                                                t-esc="s.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Tasks in projects this person manages">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTasksFilter('tasksPmId', ev)">
+                                    <option value="">All PMs</option>
+                                    <t t-foreach="state.hoursOptions.project_managers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.tasksPmId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Tasks this person is assigned to">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTasksFilter('tasksDevId', ev)">
+                                    <option value="">All Developers</option>
+                                    <t t-foreach="state.hoursOptions.developers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.tasksDevId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <button class="ftpd_filter_clear" t-if="hasTasksFilter"
+                                    t-on-click="clearTasksFilters">Clear</button>
+                            <span class="ftpd_filter_label" t-if="state.tasksLoading">…</span>
+                        </div>
+                    </div>
+                    <div class="ftpd_kpi_grid">
+                        <KpiCard title="'Tasks Created'" value="tasks.tasks_created"
+                                 onClick="() => this.openTaskKpi('tasks_created')"
+                                 icon="'fa-plus-square'" color="'#4F46E5'"
+                                 tooltip="'Tasks whose creation date falls in the selected range.'"/>
+                        <KpiCard title="'Tasks Due'" value="tasks.tasks_due"
+                                 onClick="() => this.openTaskKpi('tasks_due')"
+                                 icon="'fa-calendar-check-o'" color="'#F59E0B'"
+                                 tooltip="'Tasks with a Deadline falling in the selected range.'"/>
+                        <KpiCard title="'Completed Tasks'" value="tasks.tasks_completed"
+                                 onClick="() => this.openTaskKpi('tasks_completed')"
+                                 icon="'fa-check-circle'" color="'#10B981'"
+                                 tooltip="'Tasks completed in the range — in a folded stage with a completion date, excluding cancelled.'"/>
+                        <KpiCard title="'Open Tasks'" value="tasks.tasks_open"
+                                 onClick="() => this.openTaskKpi('tasks_open')"
+                                 icon="'fa-folder-open'" color="'#06B6D4'"
+                                 tooltip="'Tasks not in a folded stage. A snapshot of now, not filtered by the date range.'"/>
+                        <KpiCard title="'Estimated Tasks'" value="tasks.tasks_estimated"
+                                 onClick="() => this.openTaskKpi('tasks_estimated')"
+                                 icon="'fa-hourglass-half'" color="'#3B82F6'"
+                                 tooltip="'Tasks created in the range that carry an Estimated time. Estimated + Not Estimated = Tasks Created.'"/>
+                        <KpiCard title="'Not Estimated'" value="tasks.tasks_not_estimated"
+                                 onClick="() => this.openTaskKpi('tasks_not_estimated')"
+                                 icon="'fa-hourglass-o'" color="'#EC4899'"
+                                 tooltip="'Tasks created in the range with no Estimated time set.'"/>
+                        <KpiCard title="'Completed on Timeline'" value="tasks.tasks_on_timeline"
+                                 onClick="() => this.openTaskKpi('tasks_on_timeline')"
+                                 icon="'fa-thumbs-o-up'" color="'#14B8A6'"
+                                 tooltip="'Completed tasks that met their deadline, judged by calendar day. Tasks completed without a deadline cannot be judged and are excluded.'"/>
+                        <KpiCard title="'Missed Timeline'" value="tasks.tasks_missed_timeline"
+                                 onClick="() => this.openTaskKpi('tasks_missed_timeline')"
+                                 icon="'fa-exclamation-triangle'" color="'#EF4444'"
+                                 tooltip="'Completed tasks that finished after their deadline.'"/>
+                    </div>
+                </section>
+
+                <!-- Task Hours Summary: hour totals read off the task records
+                     themselves, so it can report Estimated / Billable / Billed
+                     alongside Actual. Scoped like Tasks Summary (tasks CREATED
+                     in the range), NOT like Hours Utilisation (time booked in
+                     the range) — the two answer different questions. Read-only
+                     by design: no onClick anywhere in this section. -->
+                <section class="ftpd_section">
+                    <div class="ftpd_section_head">
+                        <h2 class="ftpd_section_title">Task Hours Summary</h2>
+                        <div class="ftpd_section_tools">
+                            <div class="ftpd_filter" title="Tasks created inside this range">
+                                <span class="ftpd_filter_label">From</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.taskHoursDateFrom"
+                                       t-on-change="(ev) => this.onTaskHoursFilter('taskHoursDateFrom', ev)"/>
+                                <span class="ftpd_filter_label">To</span>
+                                <input type="date" class="ftpd_date"
+                                       t-att-value="state.taskHoursDateTo"
+                                       t-on-change="(ev) => this.onTaskHoursFilter('taskHoursDateTo', ev)"/>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTaskHoursFilter('taskHoursProjectId', ev)">
+                                    <option value="">All Projects</option>
+                                    <t t-foreach="state.hoursOptions.projects" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id"
+                                                t-att-selected="isHoursFilterSelected(p.id, state.taskHoursProjectId)"
+                                                t-esc="p.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTaskHoursFilter('taskHoursStageId', ev)">
+                                    <option value="">All Stages</option>
+                                    <t t-foreach="state.hoursOptions.stages" t-as="s" t-key="s.id">
+                                        <option t-att-value="s.id"
+                                                t-att-selected="isHoursFilterSelected(s.id, state.taskHoursStageId)"
+                                                t-esc="s.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Tasks in projects this person manages">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTaskHoursFilter('taskHoursPmId', ev)">
+                                    <option value="">All PMs</option>
+                                    <t t-foreach="state.hoursOptions.project_managers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.taskHoursPmId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="ftpd_filter" title="Tasks this person is assigned to">
+                                <select class="ftpd_filter_select"
+                                        t-on-change="(ev) => this.onTaskHoursFilter('taskHoursDevId', ev)">
+                                    <option value="">All Developers</option>
+                                    <t t-foreach="state.hoursOptions.developers" t-as="e" t-key="e.id">
+                                        <option t-att-value="e.id"
+                                                t-att-selected="isHoursFilterSelected(e.id, state.taskHoursDevId)"
+                                                t-esc="e.name"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <button class="ftpd_filter_clear" t-if="hasTaskHoursFilter"
+                                    t-on-click="clearTaskHoursFilters">Clear</button>
+                            <span class="ftpd_filter_label" t-if="state.taskHoursLoading">…</span>
+                        </div>
+                    </div>
+                    <div class="ftpd_kpi_grid">
+                        <KpiCard title="'Meeting Hours'" value="taskHours.th_meeting_hours" suffix="'h'"
+                                 icon="'fa-calendar'" color="'#4F46E5'"
+                                 tooltip="'Actual Hours on tasks typed Internal Call or External Call.'"/>
+                        <KpiCard title="'Internal Meeting Hours'" value="taskHours.th_internal_meeting_hours" suffix="'h'"
+                                 icon="'fa-comments'" color="'#10B981'"
+                                 tooltip="'Actual Hours on tasks typed Internal Call.'"/>
+                        <KpiCard title="'External Meeting Hours'" value="taskHours.th_external_meeting_hours" suffix="'h'"
+                                 icon="'fa-phone'" color="'#EF4444'"
+                                 tooltip="'Actual Hours on tasks typed External Call.'"/>
+                        <KpiCard title="'Estimated Hours'" value="taskHours.th_estimated_hours" suffix="'h'"
+                                 icon="'fa-hourglass-half'" color="'#3B82F6'"
+                                 tooltip="'Sum of the Estimated field across the selected tasks.'"/>
+                        <KpiCard title="'Actual Hours'" value="taskHours.th_actual_hours" suffix="'h'"
+                                 icon="'fa-clock-o'" color="'#F59E0B'"
+                                 tooltip="'Sum of Actual Hours across the selected tasks.'"/>
+                        <KpiCard title="'Billable Hours'" value="taskHours.th_billable_hours" suffix="'h'"
+                                 icon="'fa-money'" color="'#14B8A6'"
+                                 tooltip="'Sum of the Billable Hours field. Defaults to Actual Hours until overridden on a task.'"/>
+                        <KpiCard title="'Non Billable Hours'" value="taskHours.th_non_billable_hours" suffix="'h'"
+                                 icon="'fa-ban'" color="'#EC4899'"
+                                 tooltip="'Sum of Actual Hours minus Billable Hours across the selected tasks.'"/>
+                        <KpiCard title="'Billed Hours'" value="taskHours.th_billed_hours" suffix="'h'"
+                                 icon="'fa-check-square-o'" color="'#8B5CF6'"
+                                 tooltip="'Billable Hours on tasks whose Billing Status is Billed — hours actually invoiced, not merely invoiceable.'"/>
+                    </div>
+                </section>
+
+                <!-- Full-width table: per-project delivery performance. -->
                 <div class="ftpd_chart_row">
-                    <DataTable title="'Project Status'"
+                    <DataTable title="'Project Performance'"
                                columns="projectColumns"
                                rows="projectRows"
                                emptyText="'No projects found.'"
@@ -304,10 +616,11 @@
                     </DataTable>
                 </div>
 
-                <!-- Full-width table: On-Time Delivery per person. Role holds the
-                     employee's job title, so TLs and Developers read separately. -->
+                <!-- Full-width table: the three PM KPIs per person, plus DWD.
+                     Role holds the employee's job title, so TLs and Developers
+                     read separately. -->
                 <div class="ftpd_chart_row">
-                    <DataTable title="'On-Time Delivery by Resource'"
+                    <DataTable title="'Resource Performance'"
                                columns="deliveryColumns"
                                rows="deliveryRows"
                                groupKey="'employee'"

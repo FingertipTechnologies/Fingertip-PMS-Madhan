@@ -94,6 +94,37 @@ export class ProjectDashboard extends Component {
             // for this table's own range, or null for the all-time rows that
             // came with the dashboard payload.
             deliveryRowsOverride: null,
+            // Hours Utilisation has its own filters, independent of the period
+            // bar at the top. hoursOverride null means "no filter applied" ->
+            // show the unfiltered totals that came with the payload.
+            hoursDateFrom: null,
+            hoursDateTo: null,
+            hoursProjectId: "",
+            hoursStageId: "",
+            hoursPmId: "",
+            hoursDevId: "",
+            hoursOverride: null,
+            hoursLoading: false,
+            hoursOptions: { projects: [], stages: [], project_managers: [], developers: [] },
+            // Tasks Summary carries the same filter shape as Hours Utilisation
+            // but its own values, so the two sections can be sliced apart.
+            tasksDateFrom: null,
+            tasksDateTo: null,
+            tasksProjectId: "",
+            tasksStageId: "",
+            tasksPmId: "",
+            tasksDevId: "",
+            tasksOverride: null,
+            tasksLoading: false,
+            // Task Hours Summary — same filter shape again, own values.
+            taskHoursDateFrom: null,
+            taskHoursDateTo: null,
+            taskHoursProjectId: "",
+            taskHoursStageId: "",
+            taskHoursPmId: "",
+            taskHoursDevId: "",
+            taskHoursOverride: null,
+            taskHoursLoading: false,
         });
 
         onWillStart(async () => {
@@ -110,6 +141,15 @@ export class ProjectDashboard extends Component {
             // year now, not the year it was when the range was first picked.
             this._applyPeriod(restored?.period || DEFAULT_PERIOD);
             await this.loadData();
+            // Filter choices are independent of the period, so they are fetched
+            // once. A failure here only costs empty dropdowns, never the board.
+            try {
+                this.state.hoursOptions = await this.orm.call(
+                    "ft.project.dashboard", "get_hours_filter_options", []
+                );
+            } catch (e) {
+                console.warn("Hours filter options failed to load", e);
+            }
         });
     }
 
@@ -195,24 +235,6 @@ export class ProjectDashboard extends Component {
     // ----------------------------------------------------------------
     // Drill-downs
     // ----------------------------------------------------------------
-    _openProjects(domain, name) {
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            name: name || "Projects",
-            res_model: "project.project",
-            views: [[false, "list"], [false, "form"]],
-            domain: domain || [],
-            target: "current",
-        });
-    }
-
-    openActiveProjects() {
-        this._openProjects(
-            [["active", "=", true], ["status", "not in", ["closed"]]],
-            "Active Projects"
-        );
-    }
-
     openTimesheets(billableOnly) {
         const domain = [["project_id", "!=", false]];
         if (this.state.dateFrom) domain.push(["date", ">=", this.state.dateFrom]);
@@ -233,6 +255,27 @@ export class ProjectDashboard extends Component {
     // for cards with no backing records (sums, N/A) — those pass no action.
     openKpi(key) {
         const action = this.kpis.actions && this.kpis.actions[key];
+        if (!action) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: action.name,
+            res_model: action.res_model,
+            views: [[false, "list"], [false, "form"]],
+            domain: action.domain || [],
+            target: "current",
+        });
+    }
+
+    /** Drill-down for a Tasks Summary card.
+     *
+     *  Reads from `tasks` rather than `kpis` so a filtered section opens the
+     *  filtered list: when a filter is active the actions come back with the
+     *  refetched figures, so the list always matches the number clicked.
+     */
+    openTaskKpi(key) {
+        const action = this.tasks.actions && this.tasks.actions[key];
         if (!action) {
             return;
         }
@@ -275,6 +318,9 @@ export class ProjectDashboard extends Component {
     // Column definitions for the two full-width tables. DataTable handles
     // sorting / pagination / rows-per-page / scroll from these.
     // ----------------------------------------------------------------
+    // Project Performance. Existing columns kept; DE / OTD / RWR / DWD added,
+    // same four measures as Resource Performance but per project. Delivered
+    // rides along as the denominator behind the three percentages.
     get projectColumns() {
         return [
             { key: "project", label: "Project Name" },
@@ -284,6 +330,11 @@ export class ProjectDashboard extends Component {
             { key: "end_date", label: "End Date", date: true },
             { key: "estimated", label: "Estimated Hrs", numeric: true },
             { key: "actual", label: "Actual Hrs", numeric: true },
+            { key: "delivered", label: "Delivered", numeric: true },
+            { key: "de_rate", label: "DE (%)", numeric: true },
+            { key: "otd_rate", label: "OTD (%)", numeric: true },
+            { key: "rwr_rate", label: "RWR (%)", numeric: true },
+            { key: "dwd", label: "DWD", numeric: true },
         ];
     }
     get resourceColumns() {
@@ -298,6 +349,16 @@ export class ProjectDashboard extends Component {
         ];
     }
 
+    // Resource Performance: the original counts kept, with the three PM KPIs
+    // added alongside them.
+    //   DE  (%) = Estimated / Actual                target 90-110%
+    //   OTD (%) = On time / Delivered w/ deadline   target >= 95%
+    //   RWR (%) = Reopened / Delivered              target <= 10%
+    //   DWD     = Delivered Without Deadline — the tasks OTD could not judge
+    //
+    // Every original column is kept. On-Time % and OTD (%) carry the same
+    // number, as do No Deadline and DWD — both pairs are shown because both
+    // labels were asked for.
     get deliveryColumns() {
         return [
             { key: "employee", label: "Resource Name", group: true, cls: "ftpd_res_name" },
@@ -307,6 +368,10 @@ export class ProjectDashboard extends Component {
             { key: "late", label: "Late", numeric: true },
             { key: "on_time_rate", label: "On-Time %", numeric: true },
             { key: "no_deadline", label: "No Deadline", numeric: true },
+            { key: "de_rate", label: "DE (%)", numeric: true },
+            { key: "otd_rate", label: "OTD (%)", numeric: true },
+            { key: "rwr_rate", label: "RWR (%)", numeric: true },
+            { key: "dwd", label: "DWD", numeric: true },
             { key: "overdue_open", label: "Open & Overdue", numeric: true },
         ];
     }
@@ -319,8 +384,8 @@ export class ProjectDashboard extends Component {
     // ----------------------------------------------------------------
     get deliveryRows() {
         const q = (this.state.deliverySearch || "").trim().toLowerCase();
-        // With a range set the server has recomputed Delivered / On Time / Late
-        // for it; without one these are the all-time rows. Either way the top
+        // With a range set the server has recomputed DE / OTD / RWR / DWD for
+        // it; without one these are the all-time rows. Either way the top
         // period filter does not reach this table.
         const rows = this.state.deliveryRowsOverride || this.tables.delivery || [];
         if (!q) return rows;
@@ -470,6 +535,137 @@ export class ProjectDashboard extends Component {
         } catch (e) {
             // Keep the last good rows rather than blanking the table.
             console.warn("Resource status reload failed", e);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Hours Utilisation — its own filters, recomputed server-side.
+    // ----------------------------------------------------------------
+    /** Cards read from here: the filtered figures when a filter is set,
+     *  otherwise the unfiltered ones that shipped with the dashboard. */
+    get hours() {
+        return this.state.hoursOverride || this.kpis;
+    }
+
+    /** Compare a dropdown option id with the stored filter value.
+     *
+     *  Lives here rather than inline in the template because Owl resolves bare
+     *  identifiers against the component, so JS globals like String() are not
+     *  callable from a template expression. Option ids arrive as numbers and
+     *  select values as strings, hence the coercion.
+     */
+    isHoursFilterSelected(optionId, current) {
+        return String(optionId) === String(current);
+    }
+
+    get hasHoursFilter() {
+        return this._hasFilter("hours");
+    }
+
+    get hasTasksFilter() {
+        return this._hasFilter("tasks");
+    }
+
+    get hasTaskHoursFilter() {
+        return this._hasFilter("taskHours");
+    }
+
+    get taskHours() {
+        return this.state.taskHoursOverride || this.kpis;
+    }
+
+    /** Cards read from here: the filtered figures when a filter is set,
+     *  otherwise the unfiltered ones that shipped with the dashboard. */
+    get tasks() {
+        return this.state.tasksOverride || this.kpis;
+    }
+
+    // Both filter bars share a shape (from/to + project/stage/pm/dev), so the
+    // plumbing is written once and keyed by prefix rather than twice.
+    _filterFields(prefix) {
+        return [`${prefix}DateFrom`, `${prefix}DateTo`, `${prefix}ProjectId`,
+                `${prefix}StageId`, `${prefix}PmId`, `${prefix}DevId`];
+    }
+
+    _hasFilter(prefix) {
+        return this._filterFields(prefix).some((f) => !!this.state[f]);
+    }
+
+    _filterPayload(prefix) {
+        const s = this.state;
+        return {
+            date_from: s[`${prefix}DateFrom`],
+            date_to: s[`${prefix}DateTo`],
+            project_id: s[`${prefix}ProjectId`],
+            stage_id: s[`${prefix}StageId`],
+            pm_id: s[`${prefix}PmId`],
+            dev_id: s[`${prefix}DevId`],
+        };
+    }
+
+    onHoursFilter(field, ev) {
+        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
+        this.reloadHoursUtilisation();
+    }
+
+    onTasksFilter(field, ev) {
+        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
+        this.reloadTasksSummary();
+    }
+
+    onTaskHoursFilter(field, ev) {
+        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
+        this.reloadTaskHoursSummary();
+    }
+
+    clearHoursFilters() {
+        this._clearFilters("hours");
+    }
+
+    clearTaskHoursFilters() {
+        this._clearFilters("taskHours");
+    }
+
+    async reloadTaskHoursSummary() {
+        await this._reloadSection("taskHours", "get_task_hours_summary");
+    }
+
+    clearTasksFilters() {
+        this._clearFilters("tasks");
+    }
+
+    _clearFilters(prefix) {
+        for (const f of this._filterFields(prefix)) {
+            this.state[f] = f.endsWith("Id") ? "" : null;
+        }
+        this.state[`${prefix}Override`] = null;
+    }
+
+    async reloadHoursUtilisation() {
+        await this._reloadSection("hours", "get_hours_utilisation");
+    }
+
+    async reloadTasksSummary() {
+        await this._reloadSection("tasks", "get_tasks_summary");
+    }
+
+    /** Refetch one section for its own filters. No filter set hands the
+     *  section back to the unfiltered payload rather than calling the server. */
+    async _reloadSection(prefix, method) {
+        if (!this._hasFilter(prefix)) {
+            this.state[`${prefix}Override`] = null;
+            return;
+        }
+        this.state[`${prefix}Loading`] = true;
+        try {
+            this.state[`${prefix}Override`] = await this.orm.call(
+                "ft.project.dashboard", method, [this._filterPayload(prefix)]
+            );
+        } catch (e) {
+            // Keep the last good figures rather than blanking the cards.
+            console.warn(`${prefix} section reload failed`, e);
+        } finally {
+            this.state[`${prefix}Loading`] = false;
         }
     }
 

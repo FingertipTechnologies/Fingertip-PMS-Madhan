@@ -19,9 +19,27 @@ ROLE_BUCKETS = {
     'business analyst': 'ba',
 }
 
-# Project statuses considered "active" (i.e. not finished). 'closed' is the only
-# terminal status in bt_project_customization; everything else is in-flight.
-CLOSED_STATUSES = ('closed',)
+# Project stages that do not represent active delivery work: "General" is the
+# intake bucket, "Hold" is paused and "Closed" is finished. Everything else is
+# in-flight and counts towards Active Projects.
+#
+# Matched by stage NAME rather than id because project.project.stage rows are
+# created per database, so the ids differ between staging and production. The
+# older `status` selection on bt_project_customization is NOT used here: it is
+# NULL on every project, which made the previous `status not in ('closed',)`
+# filter a no-op that counted closed projects as active.
+INACTIVE_STAGE_NAMES = ('General', 'Hold', 'Closed')
+
+# Stage holding projects under an annual maintenance contract.
+AMC_STAGE_NAME = 'AMC'
+
+# Project whose task time is reported as Standup Hours. Matched by name for the
+# same reason stages are: the project id differs between databases.
+STANDUP_PROJECT_NAME = 'Fingertip Standup'
+
+# task_type values (bt_project_customization) that count as meetings.
+INTERNAL_MEETING_TYPE = 'internal_call'
+EXTERNAL_MEETING_TYPE = 'external_call'
 
 # A consistent, professional palette reused across charts.
 PALETTE = [
@@ -69,6 +87,370 @@ class FtProjectDashboard(models.TransientModel):
         """Count active employees per role bucket via their job position."""
         return {k: len(v) for k, v in self._role_employee_ids().items()}
 
+    def _stage_ids_named(self, names):
+        """Resolve project stage names to ids.
+
+        Domains are built on ids rather than on ``stage_id.name`` because the
+        stage name is a translated (jsonb) column, and comparing it inside a
+        domain is both slower and language-dependent. Archived stages are
+        included: a project can still sit in one.
+        """
+        return self.env['project.project.stage'].with_context(
+            active_test=False).search([('name', 'in', list(names))]).ids
+
+    def _active_project_domain(self):
+        """Projects counted as active: not General, not Hold, not Closed.
+
+        ``not in`` on a many2one also matches rows with no stage set, so a
+        project that has never been staged still counts as active rather than
+        silently disappearing from the figure.
+        """
+        return [
+            ('active', '=', True),
+            ('stage_id', 'not in', self._stage_ids_named(INACTIVE_STAGE_NAMES)),
+        ]
+
+    def _amc_project_domain(self):
+        """Projects sitting in the AMC stage."""
+        return [
+            ('active', '=', True),
+            ('stage_id', 'in', self._stage_ids_named((AMC_STAGE_NAME,))),
+        ]
+
+    def _implementation_project_domain(self):
+        """Active projects still being implemented: Active Projects minus AMC.
+
+        AMC is ongoing maintenance rather than delivery work, so it is reported
+        on its own card and excluded here. This keeps the two cards additive:
+        Active Projects == Implementation Projects + AMC Projects.
+        """
+        return [
+            ('active', '=', True),
+            ('stage_id', 'not in',
+             self._stage_ids_named(INACTIVE_STAGE_NAMES + (AMC_STAGE_NAME,))),
+        ]
+
+    def _hours_filter_domain(self, filters=None):
+        """Timesheet-line domain behind the Hours Utilisation section.
+
+        Every figure in that section is built from this one domain, so the
+        cards can never disagree with each other about what is being counted.
+        With no filters it is simply "every line attached to a task", which is
+        exactly what the task form's Dev/QA/PM/BA Hours fields sum.
+        """
+        filters = filters or {}
+        domain = [('task_id', '!=', False)]
+        if filters.get('date_from'):
+            domain.append(('date', '>=', filters['date_from']))
+        if filters.get('date_to'):
+            domain.append(('date', '<=', filters['date_to']))
+        if filters.get('project_id'):
+            domain.append(('project_id', '=', int(filters['project_id'])))
+        if filters.get('stage_id'):
+            domain.append(('project_id.stage_id', '=', int(filters['stage_id'])))
+        # PM and Dev both mean "the person who booked the time", so they are
+        # OR-ed. AND-ing two employee filters could only ever match nothing,
+        # since a line has exactly one employee.
+        people = [int(x) for x in (filters.get('pm_id'), filters.get('dev_id')) if x]
+        if people:
+            domain.append(('employee_id', 'in', people))
+        return domain
+
+    def _role_hours(self, domain):
+        """Dev / QA / PM / BA hours for the given timesheet-line domain.
+
+        Aggregated from the lines rather than read off ``ft_dev_hours`` and
+        friends because those task fields are whole-task totals with no date
+        dimension — they cannot answer "Developer Hours in July". Grouping the
+        lines by employee and bucketing by job position reproduces exactly what
+        those fields compute (verified equal to the task-field sum when no
+        filter is applied), while staying sliceable by date, project and person.
+
+        Archived employees are included: their past hours still show on the
+        task form, so dropping them would make the cards disagree with it.
+        """
+        AAL = self.env['account.analytic.line']
+        groups = AAL.read_group(domain, ['unit_amount:sum'], ['employee_id'])
+
+        emp_ids = [g['employee_id'][0] for g in groups if g.get('employee_id')]
+        # sudo: hr.job is readable only by HR officers, but every project user
+        # still needs their hours bucketed.
+        bucket_by_emp = {}
+        for emp in self.env['hr.employee'].sudo().with_context(
+                active_test=False).search_read([('id', 'in', emp_ids)], ['job_id']):
+            job = emp.get('job_id')
+            name = (job[1] if job else '').strip().lower()
+            bucket_by_emp[emp['id']] = (
+                'trainee' if name.startswith('trainee')
+                else ROLE_BUCKETS.get(name, 'other')
+            )
+
+        totals = dict.fromkeys(('dev', 'qa', 'pm', 'ba', 'trainee', 'other'), 0.0)
+        for group in groups:
+            emp = group.get('employee_id')
+            if not emp:
+                continue
+            totals[bucket_by_emp.get(emp[0], 'other')] += group.get('unit_amount') or 0.0
+        return totals
+
+    def _activity_hours(self, domain):
+        """Standup and meeting hours for the given timesheet-line domain.
+
+        Built from the same lines as the role split so both halves of the
+        section always answer the same question. Meeting Hours is internal +
+        external, keeping the three meeting figures additive.
+
+        Standup and Meeting can overlap: a task in the Standup project that is
+        also typed as a call counts in both. They are two views of the same
+        time, not a partition.
+        """
+        AAL = self.env['account.analytic.line']
+
+        def total(extra):
+            return sum(
+                group['unit_amount']
+                for group in AAL.read_group(domain + extra, ['unit_amount:sum'], [])
+                if group.get('unit_amount')
+            )
+
+        internal = total([('task_id.task_type', '=', INTERNAL_MEETING_TYPE)])
+        external = total([('task_id.task_type', '=', EXTERNAL_MEETING_TYPE)])
+        return {
+            'standup': total([('project_id.name', '=', STANDUP_PROJECT_NAME)]),
+            'internal_meeting': internal,
+            'external_meeting': external,
+            'meeting': internal + external,
+        }
+
+    def _hours_utilisation_values(self, filters=None):
+        """The eight Hours Utilisation figures for a set of filters."""
+        domain = self._hours_filter_domain(filters)
+        role = self._role_hours(domain)
+        activity = self._activity_hours(domain)
+        return {
+            'dev_hours': round(role['dev'], 2),
+            'pm_hours': round(role['pm'], 2),
+            'qa_hours': round(role['qa'], 2),
+            'ba_hours': round(role['ba'], 2),
+            'standup_hours': round(activity['standup'], 2),
+            'meeting_hours': round(activity['meeting'], 2),
+            'internal_meeting_hours': round(activity['internal_meeting'], 2),
+            'external_meeting_hours': round(activity['external_meeting'], 2),
+        }
+
+    @api.model
+    def get_hours_utilisation(self, filters=None):
+        """Recompute just the Hours Utilisation cards for its own filters.
+
+        The section carries filters the top period bar knows nothing about, so
+        the numbers have to be rebuilt server-side — the browser holds totals,
+        and no amount of client-side filtering can turn a total into a subset.
+        """
+        return self._hours_utilisation_values(filters)
+
+    # ------------------------------------------------------------------
+    # Tasks Summary
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _date_leaves(field, date_from, date_to):
+        """Range leaves for a Datetime field bounded by two calendar dates.
+
+        ``create_date`` and ``date_deadline`` are both Datetimes, so an upper
+        bound of the bare date would cut the closing day off at midnight and
+        drop everything recorded during it.
+        """
+        leaves = []
+        if date_from:
+            leaves.append((field, '>=', str(date_from) + ' 00:00:00'))
+        if date_to:
+            leaves.append((field, '<=', str(date_to) + ' 23:59:59'))
+        return leaves
+
+    def _task_scope_domain(self, filters=None):
+        """The non-date part of the Tasks Summary filters.
+
+        Kept apart from the dates because each card anchors on a different
+        date — created on ``create_date``, due on ``date_deadline``, completed
+        on the completion date — while project / stage / people apply to all of
+        them identically.
+
+        PM and Dev match different fields here (project manager vs assignee), so
+        unlike the Hours filters they AND together and stay meaningful.
+        """
+        filters = filters or {}
+        domain = []
+        if filters.get('project_id'):
+            domain.append(('project_id', '=', int(filters['project_id'])))
+        if filters.get('stage_id'):
+            domain.append(('project_id.stage_id', '=', int(filters['stage_id'])))
+
+        # The dropdowns carry hr.employee ids but tasks reference res.users, so
+        # each pick has to be resolved through the employee's linked user. An
+        # employee with no user matches nothing rather than being ignored —
+        # silently dropping the filter would show totals that look unfiltered.
+        Employee = self.env['hr.employee'].sudo()
+        if filters.get('dev_id'):
+            user = Employee.browse(int(filters['dev_id'])).user_id
+            domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
+        if filters.get('pm_id'):
+            user = Employee.browse(int(filters['pm_id'])).user_id
+            domain.append(('project_id.user_id', '=', user.id) if user else ('id', '=', 0))
+        return domain
+
+    def _tasks_summary_values(self, filters=None):
+        """The eight Tasks Summary figures for a set of filters.
+
+        Completed / on-timeline / missed all come from project.task's own
+        delivery helpers — the single definition of "delivered" and "on time"
+        for the whole PMS — so these cards can never disagree with the On-Time
+        Delivery card in Project Summary.
+        """
+        filters = filters or {}
+        Task = self.env['project.task']
+        scope = self._task_scope_domain(filters)
+        date_from, date_to = filters.get('date_from'), filters.get('date_to')
+
+        created = scope + self._date_leaves('create_date', date_from, date_to)
+        due = scope + [('date_deadline', '!=', False)] + self._date_leaves(
+            'date_deadline', date_from, date_to)
+
+        # Delivered tasks are fetched once and split here rather than asking for
+        # counts and then re-searching for the drill-downs: the list a card
+        # opens is then literally the recordset its number was taken from.
+        delivered = Task.search(Task._ft_delivery_domain(scope, date_from, date_to))
+        split = Task._ft_on_time_split(delivered)
+
+        # A snapshot of now, like Open & Overdue: a task open today is open
+        # whatever window is being looked at.
+        open_domain = Task._ft_open_domain(scope)
+        # Estimation is reported over the tasks CREATED in the window, so the
+        # two add back up to Tasks Created.
+        estimated = created + [('estimated', '>', 0)]
+        not_estimated = created + [('estimated', '<=', 0)]
+
+        counts = {
+            'tasks_created': Task.search_count(created),
+            'tasks_due': Task.search_count(due),
+            'tasks_completed': len(delivered),
+            'tasks_open': Task.search_count(open_domain),
+            'tasks_estimated': Task.search_count(estimated),
+            'tasks_not_estimated': Task.search_count(not_estimated),
+            'tasks_on_timeline': len(split['on_time']),
+            'tasks_missed_timeline': len(split['late']),
+        }
+
+        def action(name, domain):
+            return {'res_model': 'project.task', 'name': name,
+                    'domain': self._jsonify_domain(domain)}
+
+        counts['actions'] = {
+            'tasks_created': action('Tasks Created', created),
+            'tasks_due': action('Tasks Due', due),
+            'tasks_completed': action('Completed Tasks', [('id', 'in', delivered.ids)]),
+            'tasks_open': action('Open Tasks', open_domain),
+            'tasks_estimated': action('Estimated Tasks', estimated),
+            'tasks_not_estimated': action('Not Estimated', not_estimated),
+            # By id: on time is a calendar-day comparison done in Python, so
+            # there is no domain that could express it.
+            'tasks_on_timeline': action('Completed on Timeline',
+                                        [('id', 'in', split['on_time'])]),
+            'tasks_missed_timeline': action('Missed Timeline',
+                                            [('id', 'in', split['late'])]),
+        }
+        return counts
+
+    @api.model
+    def get_tasks_summary(self, filters=None):
+        """Recompute just the Tasks Summary cards for its own filters."""
+        return self._tasks_summary_values(filters)
+
+    def _task_hours_summary_values(self, filters=None):
+        """Hour totals read off the task records themselves.
+
+        Every figure here is a stored column on project.task, so each is one
+        SQL sum. This is deliberately task-centric: it answers "what do these
+        tasks add up to", which is why it can report Estimated, Billable and
+        Billed alongside Actual — none of which exist on a timesheet line.
+
+        Scope matches Tasks Summary (tasks CREATED in the window, plus the
+        project / stage / people filters) rather than Hours Utilisation's
+        "time booked in the window". The two sections answer different
+        questions and will not tally when a date filter is on.
+        """
+        filters = filters or {}
+        Task = self.env['project.task']
+        base = self._task_scope_domain(filters) + self._date_leaves(
+            'create_date', filters.get('date_from'), filters.get('date_to'))
+
+        def total(field, extra=None):
+            return sum(
+                group[field]
+                for group in Task.read_group(base + (extra or []), [field + ':sum'], [])
+                if group.get(field)
+            )
+
+        internal = total('ft_total_hours_taken',
+                         [('task_type', '=', INTERNAL_MEETING_TYPE)])
+        external = total('ft_total_hours_taken',
+                         [('task_type', '=', EXTERNAL_MEETING_TYPE)])
+        return {
+            'th_meeting_hours': round(internal + external, 2),
+            'th_internal_meeting_hours': round(internal, 2),
+            'th_external_meeting_hours': round(external, 2),
+            'th_estimated_hours': round(total('estimated'), 2),
+            'th_actual_hours': round(total('ft_total_hours_taken'), 2),
+            'th_billable_hours': round(total('ft_billable_hours'), 2),
+            'th_non_billable_hours': round(total('ft_non_billable_hours'), 2),
+            # Billable hours on tasks marked Billed — the hours actually
+            # invoiced, not merely invoiceable.
+            'th_billed_hours': round(
+                total('ft_billable_hours', [('ft_billing_status', '=', 'billed')]), 2),
+        }
+
+    @api.model
+    def get_task_hours_summary(self, filters=None):
+        """Recompute just the Task Hours Summary cards for its own filters."""
+        return self._task_hours_summary_values(filters)
+
+    @api.model
+    def get_hours_filter_options(self):
+        """Dropdown contents for the Hours Utilisation filter bar.
+
+        Only projects that actually carry task time are offered: a picker
+        listing every project ever created would mostly be options that can
+        only ever produce zero.
+        """
+        AAL = self.env['account.analytic.line']
+        project_groups = AAL.read_group(
+            [('task_id', '!=', False), ('project_id', '!=', False)],
+            ['unit_amount:sum'], ['project_id'])
+        projects = sorted(
+            ({'id': g['project_id'][0], 'name': g['project_id'][1]}
+             for g in project_groups if g.get('project_id')),
+            key=lambda p: (p['name'] or '').lower())
+
+        stages = [
+            {'id': s.id, 'name': s.name}
+            for s in self.env['project.project.stage'].search([], order='sequence, name')
+        ]
+
+        role_ids = self._role_employee_ids()
+        Employee = self.env['hr.employee'].sudo()
+
+        def people(bucket):
+            return [
+                {'id': e.id, 'name': e.name}
+                for e in Employee.browse(role_ids[bucket]).sorted(
+                    lambda e: (e.name or '').lower())
+            ]
+
+        return {
+            'projects': projects,
+            'stages': stages,
+            'project_managers': people('pm'),
+            'developers': people('dev'),
+        }
+
     @staticmethod
     def _jsonify_domain(domain):
         """Make a domain safe to send to the client.
@@ -97,7 +479,7 @@ class FtProjectDashboard(models.TransientModel):
 
         :param date_from/date_to: 'YYYY-MM-DD' strings (inclusive) or False.
 
-        Resource Status and On-Time Delivery by Resource are deliberately NOT
+        Resource Status and Resource Performance are deliberately NOT
         given the period: both are per-person standing views that carry their
         own Start/End pickers, and answering to two date filters at once made
         the numbers unreadable — a range typed into the table was silently
@@ -134,7 +516,7 @@ class FtProjectDashboard(models.TransientModel):
 
     @api.model
     def get_delivery_by_resource(self, date_from=None, date_to=None):
-        """Just the On-Time Delivery by Resource rows, for its own date range.
+        """Just the Resource Performance rows, for its own date range.
 
         Same reasoning as ``get_resource_status``: Delivered / On Time / Late are
         aggregates, not per-row dates, so the browser has nothing it could filter
@@ -154,9 +536,12 @@ class FtProjectDashboard(models.TransientModel):
         AAL = self.env['account.analytic.line']
         Task = self.env['project.task']
 
-        active_projects = Project.search_count([
-            ('active', '=', True), ('status', 'not in', CLOSED_STATUSES),
-        ])
+        active_project_domain = self._active_project_domain()
+        amc_project_domain = self._amc_project_domain()
+        implementation_project_domain = self._implementation_project_domain()
+        active_projects = Project.search_count(active_project_domain)
+        amc_projects = Project.search_count(amc_project_domain)
+        implementation_projects = Project.search_count(implementation_project_domain)
 
         ts_domain = self._ts_domain(date_from, date_to)
         spent = sum(g['unit_amount'] for g in AAL.read_group(
@@ -173,6 +558,17 @@ class FtProjectDashboard(models.TransientModel):
         role_ids = self._role_employee_ids()
         roles = {k: len(v) for k, v in role_ids.items()}
 
+        # Hours Utilisation first paint: unfiltered totals. The section has its
+        # own filter bar and refetches through get_hours_utilisation, so it is
+        # deliberately NOT tied to the period filter at the top.
+        hours_utilisation = self._hours_utilisation_values()
+        tasks_summary = self._tasks_summary_values()
+        # Lifted out before the spread below: the payload has one shared
+        # `actions` map, so leaving this key in place would collide with it and
+        # the Tasks Summary cards would open nothing on first paint.
+        task_actions = tasks_summary.pop('actions', {})
+        task_hours_summary = self._task_hours_summary_values()
+
         # On-time delivery for the selected period. The maths lives on
         # project.task so this and the project.project fields can never disagree
         # about what "delivered" or "on time" means.
@@ -187,6 +583,22 @@ class FtProjectDashboard(models.TransientModel):
         }
         delivery_domain = Task._ft_delivery_domain(date_from=date_from, date_to=date_to)
         actions = {
+            # Served from the same domains as the counts above, so the list the
+            # card opens always holds exactly the number the card shows.
+            'active_projects': {
+                'res_model': 'project.project', 'name': 'Active Projects',
+                'domain': active_project_domain,
+            },
+            'amc_projects': {
+                'res_model': 'project.project', 'name': 'AMC Projects',
+                'domain': amc_project_domain,
+            },
+            'implementation_projects': {
+                'res_model': 'project.project', 'name': 'Implementation Projects',
+                'domain': implementation_project_domain,
+            },
+            # Hours Utilisation cards are read-only totals with no drill-down,
+            # so they intentionally contribute no action here.
             'developers': emp_action(role_ids['dev'], 'Developers'),
             'testers': emp_action(role_ids['qa'], 'Testers'),
             'trainees': emp_action(role_ids['trainee'], 'Trainees'),
@@ -205,11 +617,20 @@ class FtProjectDashboard(models.TransientModel):
                 'res_model': 'project.task', 'name': 'Open & Overdue',
                 'domain': self._jsonify_domain(Task._ft_overdue_open_domain()),
             },
+            # Tasks Summary drill-downs, built by _tasks_summary_values.
+            **task_actions,
         }
 
         return {
             'active_projects': active_projects,
+            'implementation_projects': implementation_projects,
+            'amc_projects': amc_projects,
             'hours_spent': round(spent, 2),
+            # Hours Utilisation and Tasks Summary (unfiltered first paint —
+            # both sections refetch through their own filter bars).
+            **hours_utilisation,
+            **tasks_summary,
+            **task_hours_summary,
             'billable_hours': round(billable, 2),
             'developers': roles['dev'],
             'testers': roles['qa'],
@@ -291,10 +712,25 @@ class FtProjectDashboard(models.TransientModel):
             if g.get('project_id'):
                 act_by_proj[g['project_id'][0]] = g.get('unit_amount') or 0.0
 
+        shown = Project.search([('active', '=', True)], order='name').filtered(
+            lambda p: self._overlaps_period(
+                p.date_start, p.date, date_from, date_to))
+
+        # DE / OTD / RWR / DWD for every shown project in ONE search, from the
+        # same helper project.project's own ft_* fields use. Those fields are
+        # all-time, though, while this table is period-scoped — so the range is
+        # passed through here instead of reading them, keeping these columns
+        # consistent with the Actual Hrs beside them.
+        stats_by_project = Task._ft_on_time_stats_by_project(
+            shown.ids, date_from, date_to)
+        # A project that delivered nothing in the period reads like an empty
+        # recordset rather than a zero: rates come back None so the UI shows
+        # "N/A" instead of a 0% that looks like failure.
+        no_delivery = Task._ft_delivery_kpis(Task.browse())
+
         rows = []
-        for p in Project.search([('active', '=', True)], order='name'):
-            if not self._overlaps_period(p.date_start, p.date, date_from, date_to):
-                continue
+        for p in shown:
+            stats = stats_by_project.get(p.id) or no_delivery
             rows.append({
                 'project': p.name or '',
                 # Show the standard Kanban stage (the status bar on the project
@@ -305,6 +741,14 @@ class FtProjectDashboard(models.TransientModel):
                 'end_date': self._iso_date(p.date),
                 'estimated': round(est_by_proj.get(p.id, 0.0), 2),
                 'actual': round(act_by_proj.get(p.id, 0.0), 2),
+                # Same four measures as Resource Performance, per project.
+                'de_rate': stats['efficiency_rate'],
+                'otd_rate': stats['rate'],
+                'rwr_rate': stats['rework_rate'],
+                'dwd': stats['no_deadline'],
+                # Kept alongside so a percentage drawn from two tasks is not
+                # read as if it came from two hundred.
+                'delivered': stats['completed'],
             })
         return rows
 
@@ -373,7 +817,11 @@ class FtProjectDashboard(models.TransientModel):
             emp = emp_by_id.get(emp_id)
             if not emp:
                 continue
-            stats = Task._ft_on_time_aggregate(
+            # _ft_delivery_kpis rather than _ft_on_time_aggregate: it returns
+            # the efficiency and rework figures too, from the same recordset, so
+            # DE / OTD / RWR on a row are all measured over exactly the same
+            # delivered tasks.
+            stats = Task._ft_delivery_kpis(
                 delivered_by_emp.get(emp_id, Task.browse()))
             rows.append({
                 'employee': emp.name or '',
@@ -384,6 +832,18 @@ class FtProjectDashboard(models.TransientModel):
                 'no_deadline': stats['no_deadline'],
                 'on_time_rate': stats['rate'],
                 'overdue_open': overdue_by_emp.get(emp_id, 0),
+                # Resource Performance columns.
+                # DE  — (Estimated / Actual) x 100, target 90-110%.
+                # OTD — (On time / Delivered with a deadline) x 100, target >=95%.
+                # RWR — (Reopened / Delivered) x 100, target <=10%.
+                # DWD — Delivered Without Deadline: tasks that carried no
+                #       deadline and so could not be judged on time at all.
+                #       It is the count OTD had to ignore, which is what makes
+                #       a high OTD trustworthy or not.
+                'de_rate': stats['efficiency_rate'],
+                'otd_rate': stats['rate'],
+                'rwr_rate': stats['rework_rate'],
+                'dwd': stats['no_deadline'],
             })
         rows.sort(key=lambda r: r['employee'].lower())
         return rows

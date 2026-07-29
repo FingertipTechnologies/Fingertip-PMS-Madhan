@@ -205,22 +205,40 @@ class ProjectTask(models.Model):
         ``rate`` is None (not 0.0) when nothing measurable was delivered, so the
         UI shows "N/A" instead of a 0% that reads as a failure.
         """
+        split = self._ft_on_time_split(tasks)
+        on_time = len(split['on_time'])
+        late = len(split['late'])
         completed = len(tasks)
-        measurable = on_time = 0
-        for task in tasks:
-            if not task.date_deadline:
-                continue
-            measurable += 1
-            if self._ft_local_date(task.ft_completion_date) <= self._ft_local_date(task.date_deadline):
-                on_time += 1
+        measurable = on_time + late
         return {
             'completed': completed,
             'measurable': measurable,
             'no_deadline': completed - measurable,
             'on_time': on_time,
-            'late': measurable - on_time,
+            'late': late,
             'rate': round(on_time / measurable * 100, 2) if measurable else None,
         }
+
+    @api.model
+    def _ft_on_time_split(self, tasks):
+        """DELIVERED tasks split into on-time and late ids.
+
+        The judgement itself, factored out of ``_ft_on_time_aggregate`` so a
+        dashboard card can open exactly the tasks behind its number. Counting
+        and listing therefore run the same comparison — a drill-down cannot
+        show a different set from the figure that was clicked.
+
+        Tasks with no deadline appear in neither list: they cannot be judged.
+        """
+        on_time, late = [], []
+        for task in tasks:
+            if not task.date_deadline:
+                continue
+            if self._ft_local_date(task.ft_completion_date) <= self._ft_local_date(task.date_deadline):
+                on_time.append(task.id)
+            else:
+                late.append(task.id)
+        return {'on_time': on_time, 'late': late}
 
     @api.model
     def _ft_efficiency_aggregate(self, tasks):
