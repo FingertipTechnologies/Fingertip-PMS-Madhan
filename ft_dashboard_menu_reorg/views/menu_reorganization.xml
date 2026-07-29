@@ -60,10 +60,14 @@
                  menu already sits at sequence 0 (e.g. CRM > Customers).
                  Odoo orders menus by "sequence, id". -->
             <field name="sequence">-1</field>
-            <!-- Originally shipped groups="base.group_system" (Admin only)
-                 in ft_hr_dashboard — replaced here to match General's own
-                 access (currently open to all internal users). -->
-            <field name="groups_id" eval="[(6, 0, [ref('base.group_user')])]"/>
+            <!-- Administrators and HR only. This override is what actually
+                 decides visibility: it loads after ft_hr_dashboard, so the
+                 groups= on the menuitem there is replaced by whatever is set
+                 here. Keep the two in step - ft_hr_dashboard declares the same
+                 pair. hr.group_hr_manager is omitted because it implies
+                 hr.group_hr_user. -->
+            <field name="groups_id"
+                   eval="[(6, 0, [ref('base.group_system'), ref('hr.group_hr_user')])]"/>
         </record>
 
         <!-- ============================================= -->

@@ -1,4 +1,5 @@
-from odoo import api, models
+from odoo import _, api, models
+from odoo.exceptions import AccessError
 
 PALETTE = [
     '#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#EF4444',
@@ -19,7 +20,27 @@ class FtHrDashboard(models.TransientModel):
         return dom
 
     @api.model
+    def _check_hr_dashboard_access(self):
+        """Restrict the dashboard to Administrators and HR.
+
+        Hiding the menu is not enough: get_dashboard_data is @api.model, so any
+        logged-in user could call it over RPC regardless of what they can see.
+        The queries below run sudo(), so without this gate the HR figures would
+        be readable by anyone. Kept in step with the groups= on the menu in
+        views/hr_dashboard_views.xml.
+        """
+        if self.env.su:
+            return
+        user = self.env.user
+        if user.has_group('base.group_system') or user.has_group('hr.group_hr_user'):
+            return
+        raise AccessError(
+            _("The HR Dashboard is available to Administrators and HR only.")
+        )
+
+    @api.model
     def get_dashboard_data(self, date_from=None, date_to=None):
+        self._check_hr_dashboard_access()
         Candidate = self.env['recruitment.candidate'].sudo()
         Interview = self.env['recruitment.interview'].sudo()
         Position = self.env['recruitment.job.position'].sudo()

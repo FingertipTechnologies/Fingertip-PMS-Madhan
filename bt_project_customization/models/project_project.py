@@ -8,6 +8,20 @@ PM_JOB_NAMES = ('project manager', 'project coordinator', 'project cordinator')
 class InheritProjectProject(models.Model):
     _inherit = 'project.project'
 
+    # The project-level counterpart of the task's `estimated` field: the sum of
+    # every task's Estimated hours, the way Actual Hours (effective_hours) is the
+    # sum of every timesheet. Stored so the project list can sort and group on it.
+    # `tasks`, not `task_ids`: core filters task_ids to is_closed = False, which
+    # would silently drop the estimate of every finished task.
+    estimated = fields.Float(
+        string='Estimated Time',
+        compute='_compute_estimated',
+        store=True,
+        readonly=True,
+        help='Sum of the Estimated hours of every task in this project, '
+             'closed tasks included.',
+    )
+
     architect_id = fields.Many2one('res.users', string='Architect')
     ba_id = fields.Many2one('res.users', string='BA')
     pm_id = fields.Many2one('res.users', string='PM')
@@ -183,6 +197,11 @@ class InheritProjectProject(models.Model):
         help="Delivered tasks that were moved back out of a Completed stage at "
              "least once.",
     )
+
+    @api.depends('tasks.estimated')
+    def _compute_estimated(self):
+        for project in self:
+            project.estimated = round(sum(project.tasks.mapped('estimated')), 2)
 
     @api.depends('task_ids.ft_completion_date', 'task_ids.date_deadline',
                  'task_ids.stage_id.fold', 'task_ids.state',
