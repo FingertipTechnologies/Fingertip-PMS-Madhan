@@ -444,7 +444,14 @@
                     </div>
                 </section>
 
-                <!-- Full-width table: per-project delivery performance. -->
+                <!-- Full-width table: per-project delivery performance.
+                     Closed / AMC / General projects are hidden by default — the
+                     table measures how delivery is going, and those three have
+                     none to measure. One toggle each beside the search box, not
+                     one for all three, so reviewing AMC renewals does not drag
+                     every Closed project onto the screen too. The count on each
+                     label says what it is holding back, so a short table never
+                     looks like a bug. -->
                 <div class="ftpd_chart_row">
                     <DataTable title="'Project Performance'"
                                columns="projectColumns"
@@ -458,6 +465,22 @@
                                        t-att-value="state.projectSearch"
                                        t-on-input="onProjectSearch"/>
                             </div>
+                            <!-- Reads as "Show  [ ] Closed  [ ] AMC  [ ] General".
+                                 Without the lead-in a bare "Closed" checkbox
+                                 could as easily mean hide as show. -->
+                            <span class="ftpd_toggle_lead">Show</span>
+                            <t t-foreach="projectStageToggles" t-as="tg" t-key="tg.group">
+                                <label class="ftpd_table_toggle"
+                                       t-attf-title="Show projects in the {{ tg.label }} stage, hidden by default">
+                                    <input type="checkbox"
+                                           t-att-checked="state.projectShowStage[tg.group]"
+                                           t-on-change="(ev) => this.onProjectShowStage(tg.group, ev)"/>
+                                    <span><t t-esc="tg.label"/></span>
+                                    <span class="ftpd_toggle_count" t-if="tg.count">
+                                        <t t-esc="tg.count"/>
+                                    </span>
+                                </label>
+                            </t>
                         </t>
                     </DataTable>
                 </div>

@@ -342,6 +342,63 @@
             min-width: 180px;
         }
     }
+    // Lead-in for the group of row-filter toggles ("Show  [ ] Closed ...").
+    // Sits outside the boxes so it does not read as one of the options.
+    .ftpd_toggle_lead {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        color: var(--ftpd-muted);
+        // Cancels the tools strip's 10px gap on the right so the label sits
+        // against its first checkbox rather than floating between controls.
+        margin-right: -4px;
+    }
+
+    // Boolean row filter sitting beside a table's search box. Matches
+    // .ftpd_search's height and border so the two read as one control strip.
+    // Several of these sit side by side, so the padding is tighter than
+    // .ftpd_search's and the label is kept to a single word.
+    .ftpd_table_toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        background: #fff;
+        border: 1px solid var(--ftpd-border);
+        border-radius: 8px;
+        padding: 6px 9px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ftpd-muted);
+        cursor: pointer;
+        user-select: none;
+
+        &:hover { color: var(--ftpd-text); }
+
+        input {
+            margin: 0;
+            cursor: pointer;
+            // Same indigo the KPI cards default to; there is no --ftpd-primary.
+            accent-color: #4F46E5;
+        }
+        // How many rows the toggle is holding back. Reads as a count badge, not
+        // a status colour — it is neutral information, not a warning.
+        .ftpd_toggle_count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            padding: 0 6px;
+            border-radius: 10px;
+            background: var(--ftpd-border);
+            color: var(--ftpd-text);
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 18px;
+        }
+    }
+
     // Per-table filter controls (status dropdown + start-date range).
     .ftpd_filter {
         display: inline-flex;
