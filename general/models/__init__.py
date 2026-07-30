@@ -14,3 +14,4 @@ from . import recruitment_skill
 from . import recruitment_interview
 from . import recruitment_offer
 from . import employee_onboarding
+from . import res_users

@@ -205,7 +205,7 @@
                              onClick="() => this.openPipeline()"/>
                     <KpiCard title="'Sales Closed'" value="kpis.sales_closed"
                              icon="'fa-trophy'" color="'#10B981'"
-                             tooltip="'Opportunities won in the period, by Closed Date'"
+                             tooltip="'Opportunities won whose Expected Closing falls in the selected period'"
                              onClick="() => this.openWon()"/>
                     <KpiCard title="'Sales Closed Value'" value="kpis.sales_closed_value" prefix="'₹ '"
                              icon="'fa-inr'" color="'#8B5CF6'"
@@ -213,30 +213,68 @@
                              onClick="() => this.openWon()"/>
                     <KpiCard title="'Opportunities Lost'" value="kpis.opportunities_lost"
                              icon="'fa-times-circle'" color="'#EF4444'"
-                             tooltip="'Opportunities marked lost in the period, by Closed Date'"
+                             tooltip="'Opportunities lost whose Expected Closing falls in the selected period'"
                              onClick="() => this.openLost()"/>
                     <KpiCard title="'Conversion Ratio'" value="kpis.conversion_ratio" suffix="'%'"
                              icon="'fa-percent'" color="'#F59E0B'"
                              tooltip="'Sales Closed / Opportunities Generated x 100'"/>
                 </div>
 
-                <div class="btsd_chart_row">
-                    <FunnelChart title="'Sales Funnel (Expected Revenue by Stage)'"
+                <!-- Breakdown: stage-wise or executive-wise, chosen from the
+                     dropdown. Both are already in the payload, so switching is
+                     instant and needs no refetch. -->
+                <div class="btsd_switchbar">
+                    <span class="btsd_switch_label">Breakdown</span>
+                    <!-- Same pill group as the period filter in the header, so
+                         every "pick one" control on the dashboard looks and
+                         behaves identically. -->
+                    <div class="btsd_periods">
+                        <t t-foreach="breakdowns" t-as="b" t-key="b.id">
+                            <button class="btsd_period_btn"
+                                    t-att-class="{ 'btsd_period_btn--active': state.breakdown === b.id }"
+                                    t-on-click="() => this.setBreakdown(b.id)">
+                                <t t-esc="b.label"/>
+                            </button>
+                        </t>
+                    </div>
+                </div>
+
+                <div class="btsd_chart_row" t-if="state.breakdown === 'stage'">
+                    <FunnelChart title="'Stage-wise — Expected Revenue by Stage'"
                                  data="charts.funnel" fullWidth="true"
                                  onStageClick="(stage) => this.openStage(stage)"/>
                 </div>
+                <div class="btsd_chart_row" t-else="">
+                    <TableCard title="'Executive-wise — Opportunities, Value and Conversion'"
+                               columns="execColumns" rows="executives" fullWidth="true"
+                               note="'By Expected Closing in the selected period. Click a row to open that executive\'s opportunities.'"
+                               emptyText="'No opportunities with an Expected Closing in this period.'"
+                               onRowClick="(row) => this.openExecutive(row)"/>
+                </div>
+                <div class="btsd_switchbar">
+                    <span class="btsd_switch_label">Pipeline window</span>
+                    <div class="btsd_periods">
+                        <t t-foreach="pipelineViews" t-as="v" t-key="v.id">
+                            <button class="btsd_period_btn"
+                                    t-att-class="{ 'btsd_period_btn--active': state.pipelineView === v.id }"
+                                    t-on-click="() => this.setPipelineView(v.id)">
+                                <t t-esc="v.label"/>
+                            </button>
+                        </t>
+                    </div>
+                </div>
                 <div class="btsd_chart_row">
-                    <MonthBoard title="'Pipeline — Next 6 Months'"
-                                data="boards.pipeline_next_months"
-                                note="'Open opportunities by Expected Closing. Fixed forward window — not affected by the period filter.'"
-                                emptyText="'No open opportunities are expected to close in the next 6 months.'"
-                                onMonthClick="(m) => this.openBoardMonth('pipeline_next_months', m)"
+                    <MonthBoard title="pipelineTitle"
+                                data="pipelineBoard"
+                                note="'Open opportunities by Expected Closing. Fixed window — not affected by the period filter.'"
+                                emptyText="'No open opportunities have an Expected Closing in this window.'"
+                                onMonthClick="(m) => this.openBoardMonth(pipelineBoardKey, m)"
                                 onLeadClick="(lead) => this.openLead(lead)"/>
                 </div>
                 <div class="btsd_chart_row">
                     <MonthBoard title="'Opportunities Closed — Last 6 Months'"
                                 data="boards.closed_last_months"
-                                note="'Won opportunities by Closed Date. Fixed window.'"
+                                note="'Won opportunities, by Expected Closing. Fixed window — not affected by the period filter.'"
                                 emptyText="'No opportunities were won in the last 6 months.'"
                                 onMonthClick="(m) => this.openBoardMonth('closed_last_months', m)"
                                 onLeadClick="(lead) => this.openLead(lead)"/>
@@ -244,19 +282,12 @@
                 <div class="btsd_chart_row">
                     <MonthBoard title="'Opportunities Lost — Last 6 Months'"
                                 data="boards.lost_last_months"
-                                note="'Lost opportunities by Closed Date. Fixed window.'"
+                                note="'Lost opportunities, by Expected Closing. Fixed window — not affected by the period filter.'"
                                 emptyText="'No opportunities were marked lost in the last 6 months.'"
                                 onMonthClick="(m) => this.openBoardMonth('lost_last_months', m)"
                                 onLeadClick="(lead) => this.openLead(lead)"/>
                 </div>
 
-                <div class="btsd_chart_row">
-                    <TableCard title="'Executive-wise Performance'"
-                               columns="execColumns" rows="executives" fullWidth="true"
-                               note="'Opportunities whose Expected Closing falls in the selected period. Click a row to open them.'"
-                               emptyText="'No opportunities with an Expected Closing in this period.'"
-                               onRowClick="(row) => this.openExecutive(row)"/>
-                </div>
             </div>
         </div>
     </t>

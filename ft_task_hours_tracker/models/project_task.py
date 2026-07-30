@@ -18,6 +18,19 @@ FT_BUCKETS = ('dev', 'qa', 'pm', 'ba', 'trainee')
 class ProjectTask(models.Model):
     _inherit = 'project.task'
 
+    # The task's own stage_id is the TASK stage (Planned / Working / …). This is
+    # the stage of the PROJECT it belongs to (General / Discovery / Development
+    # / …), so both can be shown side by side in the task list.
+    # Stored, not just related: a non-stored related column cannot be sorted or
+    # grouped in a list view, which is most of the point of having it there.
+    ft_project_stage_id = fields.Many2one(
+        related='project_id.stage_id',
+        string='Project Stage',
+        store=True,
+        readonly=True,
+        index=True,
+    )
+
     ft_total_hours_taken = fields.Float(
         string='Total Hours Taken',
         compute='_compute_ft_total_hours_taken',
