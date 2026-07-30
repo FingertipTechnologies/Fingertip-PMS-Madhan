@@ -165,9 +165,11 @@
     }
 
     // ---------------- KPI cards ----------------
-    // 4 columns, not 5: there are 16 KPI cards, so 4 divides them into four
-    // full rows with no orphan card left stranded on a row of its own. The
+    // 4 columns, not 5: Project Summary has 16 cards, so 4 divides them into
+    // four full rows with no orphan card left stranded on a row of its own, and
+    // the Hours Utilisation role and activity rows hold exactly 4 each. The
     // breakpoints below step down through divisors of 16 for the same reason.
+    // The one row that does not hold a multiple of 4 opts into --five below.
     .ftpd_kpi_grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -179,6 +181,40 @@
         // rather than dropping to 2 early and wasting the width.
         @media (max-width: 1100px) { grid-template-columns: repeat(2, 1fr); }
         @media (max-width: 560px)  { grid-template-columns: 1fr; }
+    }
+
+    // A 5-card row (Task Hour Totals). Steps 5 -> 3 -> 2 -> 1 rather than
+    // through divisors: 5 is prime, so no column count divides it evenly and
+    // the aim is instead to avoid leaving a single card alone on a row. 5 across
+    // needs ~1400px to keep each card readable; at 3 across it breaks 3+2.
+    .ftpd_kpi_grid--five {
+        grid-template-columns: repeat(5, 1fr);
+
+        @media (max-width: 1400px) { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 1100px) { grid-template-columns: repeat(2, 1fr); }
+        @media (max-width: 560px)  { grid-template-columns: 1fr; }
+    }
+
+    // Row label inside a section that stacks several KPI grids. Hours
+    // Utilisation needs these: its three rows are measured off different
+    // records over different date anchors, so a reader has to be able to see
+    // which basis a card belongs to. Lighter than .ftpd_section_title so the
+    // section heading still reads as the parent.
+    .ftpd_kpi_subhead {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--ftpd-muted);
+        margin: 4px 0 0;
+
+        small {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0;
+            text-transform: none;
+            opacity: .8;
+        }
     }
 
     .ftpd_kpi {

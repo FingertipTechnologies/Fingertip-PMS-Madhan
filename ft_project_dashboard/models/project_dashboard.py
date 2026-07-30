@@ -56,14 +56,39 @@ class FtProjectDashboard(models.TransientModel):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _ts_domain(self, date_from, date_to):
+    def _scope_leaves_via_project(self, filters=None):
+        """The header's Project / Status leaves, for a model holding ``project_id``.
+
+        Every timesheet-line and task query on the board runs through here, so
+        the one pair of pickers in the header scopes the whole dashboard
+        identically instead of each section deciding for itself.
+        """
+        filters = filters or {}
+        leaves = []
+        if filters.get('project_id'):
+            leaves.append(('project_id', '=', int(filters['project_id'])))
+        if filters.get('stage_id'):
+            leaves.append(('project_id.stage_id', '=', int(filters['stage_id'])))
+        return leaves
+
+    def _scope_leaves_on_project(self, filters=None):
+        """The same two leaves expressed on ``project.project`` itself."""
+        filters = filters or {}
+        leaves = []
+        if filters.get('project_id'):
+            leaves.append(('id', '=', int(filters['project_id'])))
+        if filters.get('stage_id'):
+            leaves.append(('stage_id', '=', int(filters['stage_id'])))
+        return leaves
+
+    def _ts_domain(self, date_from, date_to, filters=None):
         """Domain for timesheet lines (account.analytic.line) within range."""
         domain = [('project_id', '!=', False)]
         if date_from:
             domain.append(('date', '>=', date_from))
         if date_to:
             domain.append(('date', '<=', date_to))
-        return domain
+        return domain + self._scope_leaves_via_project(filters)
 
     def _role_employee_ids(self):
         """Active-employee ids grouped by role bucket (via job position).
@@ -98,26 +123,30 @@ class FtProjectDashboard(models.TransientModel):
         return self.env['project.project.stage'].with_context(
             active_test=False).search([('name', 'in', list(names))]).ids
 
-    def _active_project_domain(self):
+    def _active_project_domain(self, filters=None):
         """Projects counted as active: not General, not Hold, not Closed.
 
         ``not in`` on a many2one also matches rows with no stage set, so a
         project that has never been staged still counts as active rather than
         silently disappearing from the figure.
+
+        The header's Status picker is ANDed on top, so choosing an inactive
+        stage such as Closed legitimately reads 0 here — the card counts active
+        projects, and none of them are Closed.
         """
         return [
             ('active', '=', True),
             ('stage_id', 'not in', self._stage_ids_named(INACTIVE_STAGE_NAMES)),
-        ]
+        ] + self._scope_leaves_on_project(filters)
 
-    def _amc_project_domain(self):
+    def _amc_project_domain(self, filters=None):
         """Projects sitting in the AMC stage."""
         return [
             ('active', '=', True),
             ('stage_id', 'in', self._stage_ids_named((AMC_STAGE_NAME,))),
-        ]
+        ] + self._scope_leaves_on_project(filters)
 
-    def _implementation_project_domain(self):
+    def _implementation_project_domain(self, filters=None):
         """Active projects still being implemented: Active Projects minus AMC.
 
         AMC is ongoing maintenance rather than delivery work, so it is reported
@@ -128,7 +157,7 @@ class FtProjectDashboard(models.TransientModel):
             ('active', '=', True),
             ('stage_id', 'not in',
              self._stage_ids_named(INACTIVE_STAGE_NAMES + (AMC_STAGE_NAME,))),
-        ]
+        ] + self._scope_leaves_on_project(filters)
 
     def _hours_filter_domain(self, filters=None):
         """Timesheet-line domain behind the Hours Utilisation section.
@@ -144,16 +173,28 @@ class FtProjectDashboard(models.TransientModel):
             domain.append(('date', '>=', filters['date_from']))
         if filters.get('date_to'):
             domain.append(('date', '<=', filters['date_to']))
-        if filters.get('project_id'):
-            domain.append(('project_id', '=', int(filters['project_id'])))
-        if filters.get('stage_id'):
-            domain.append(('project_id.stage_id', '=', int(filters['stage_id'])))
-        # PM and Dev both mean "the person who booked the time", so they are
-        # OR-ed. AND-ing two employee filters could only ever match nothing,
-        # since a line has exactly one employee.
-        people = [int(x) for x in (filters.get('pm_id'), filters.get('dev_id')) if x]
-        if people:
-            domain.append(('employee_id', 'in', people))
+        domain += self._scope_leaves_via_project(filters)
+
+        # PM means "manager of the project the time was booked on"; Developer
+        # means "the person who booked it". Those are the same two meanings the
+        # task sections use, so the identical-looking dropdown pair now answers
+        # the same question everywhere on the board.
+        #
+        # Both used to match ``employee_id`` and therefore had to be OR-ed:
+        # picking a PM and a Developer together returned each other's lines
+        # instead of narrowing, and picking a PM alone reported the hours that
+        # person booked personally rather than the hours booked on the projects
+        # they run — which is what the label says and what every other section
+        # already meant by it.
+        Employee = self.env['hr.employee'].sudo()
+        if filters.get('pm_id'):
+            user = Employee.browse(int(filters['pm_id'])).user_id
+            # An employee with no linked user matches nothing rather than being
+            # ignored: dropping the leaf would show totals that look unfiltered.
+            domain.append(('project_id.user_id', '=', user.id) if user
+                          else ('id', '=', 0))
+        if filters.get('dev_id'):
+            domain.append(('employee_id', '=', int(filters['dev_id'])))
         return domain
 
     def _role_hours(self, domain):
@@ -240,11 +281,14 @@ class FtProjectDashboard(models.TransientModel):
 
     @api.model
     def get_hours_utilisation(self, filters=None):
-        """Recompute just the Hours Utilisation cards for its own filters.
+        """Recompute just the Hours Utilisation cards for its own PM / Developer.
 
-        The section carries filters the top period bar knows nothing about, so
-        the numbers have to be rebuilt server-side — the browser holds totals,
-        and no amount of client-side filtering can turn a total into a subset.
+        ``filters`` arrives as the header's range and scope with the section's
+        own two dropdowns merged in, so this narrows the same window the rest of
+        the board is showing rather than answering a second one.
+
+        Rebuilt server-side because the browser only ever holds totals, and no
+        amount of client-side filtering can turn a total into a subset.
         """
         return self._hours_utilisation_values(filters)
 
@@ -278,11 +322,7 @@ class FtProjectDashboard(models.TransientModel):
         unlike the Hours filters they AND together and stay meaningful.
         """
         filters = filters or {}
-        domain = []
-        if filters.get('project_id'):
-            domain.append(('project_id', '=', int(filters['project_id'])))
-        if filters.get('stage_id'):
-            domain.append(('project_id.stage_id', '=', int(filters['stage_id'])))
+        domain = self._scope_leaves_via_project(filters)
 
         # The dropdowns carry hr.employee ids but tasks reference res.users, so
         # each pick has to be resolved through the employee's linked user. An
@@ -365,17 +405,34 @@ class FtProjectDashboard(models.TransientModel):
         return self._tasks_summary_values(filters)
 
     def _task_hours_summary_values(self, filters=None):
-        """Hour totals read off the task records themselves.
+        """Billing-side hour totals read off the task records themselves.
 
         Every figure here is a stored column on project.task, so each is one
         SQL sum. This is deliberately task-centric: it answers "what do these
-        tasks add up to", which is why it can report Estimated, Billable and
-        Billed alongside Actual — none of which exist on a timesheet line.
+        tasks add up to", which is why it can report Billable, Non Billable and
+        Billed — none of which exist on a timesheet line.
 
-        Scope matches Tasks Summary (tasks CREATED in the window, plus the
-        project / stage / people filters) rather than Hours Utilisation's
-        "time booked in the window". The two sections answer different
-        questions and will not tally when a date filter is on.
+        These four cards render in the Hours Utilisation section, on their own
+        row, because they are the only hour figures on the board that carry a
+        billing dimension. They are NOT interchangeable with the role and
+        activity cards above them: those count time BOOKED in the window, while
+        these total tasks CREATED in it (the same scope as Tasks Summary). The
+        row carries its own sub-heading for exactly that reason — the two halves
+        will not tally when a date filter is on, and that is correct.
+
+        Meeting / Internal Meeting / External Meeting used to be reported here
+        too, duplicating the three identically-named cards that the Hours
+        Utilisation role split already provides from the timesheet lines. The
+        timesheet-based ones are kept because they answer the same date range as
+        the rest of that section; these were dropped rather than shown twice
+        with two different numbers under one label.
+
+        ``th_estimated_hours`` IS kept, even though Project Summary also carries
+        an Estimated Hours card, because estimation is tracked at both levels in
+        this PMS and both are wanted on the board. The card here is titled
+        "Estimated Hours (Task)" so the two are not read as one figure. Note the
+        Project Summary card is currently NOT the project-level estimate — it
+        sums this same task field with no date bound at all.
         """
         filters = filters or {}
         Task = self.env['project.task']
@@ -389,14 +446,7 @@ class FtProjectDashboard(models.TransientModel):
                 if group.get(field)
             )
 
-        internal = total('ft_total_hours_taken',
-                         [('task_type', '=', INTERNAL_MEETING_TYPE)])
-        external = total('ft_total_hours_taken',
-                         [('task_type', '=', EXTERNAL_MEETING_TYPE)])
         return {
-            'th_meeting_hours': round(internal + external, 2),
-            'th_internal_meeting_hours': round(internal, 2),
-            'th_external_meeting_hours': round(external, 2),
             'th_estimated_hours': round(total('estimated'), 2),
             'th_actual_hours': round(total('ft_total_hours_taken'), 2),
             'th_billable_hours': round(total('ft_billable_hours'), 2),
@@ -409,29 +459,38 @@ class FtProjectDashboard(models.TransientModel):
 
     @api.model
     def get_task_hours_summary(self, filters=None):
-        """Recompute just the Task Hours Summary cards for its own filters."""
+        """Recompute the task-hour totals row of Hours Utilisation.
+
+        Still its own RPC rather than folded into ``get_hours_utilisation``
+        because the two are computed off different models with different date
+        anchors. The client calls both with the one filter payload and merges
+        the results, so the section's single PM / Developer bar drives both.
+        """
         return self._task_hours_summary_values(filters)
 
     @api.model
     def get_hours_filter_options(self):
-        """Dropdown contents for the Hours Utilisation filter bar.
+        """Contents for every dropdown on the board.
 
-        Only projects that actually carry task time are offered: a picker
-        listing every project ever created would mostly be options that can
-        only ever produce zero.
+        Projects and Stages feed the two pickers in the header, which scope the
+        whole dashboard. Every active project is therefore offered: the list was
+        previously narrowed to projects that already carry task time, which made
+        sense for a Hours-only filter but leaves a project unselectable here even
+        though the tables and charts below can report on it.
         """
-        AAL = self.env['account.analytic.line']
-        project_groups = AAL.read_group(
-            [('task_id', '!=', False), ('project_id', '!=', False)],
-            ['unit_amount:sum'], ['project_id'])
         projects = sorted(
-            ({'id': g['project_id'][0], 'name': g['project_id'][1]}
-             for g in project_groups if g.get('project_id')),
-            key=lambda p: (p['name'] or '').lower())
+            ({'id': p['id'], 'name': p['name'] or ''}
+             for p in self.env['project.project'].search_read(
+                 [('active', '=', True)], ['name'])),
+            key=lambda p: p['name'].lower())
 
+        # active_test=False to match _stage_ids_named: a project can still sit in
+        # an archived stage, so leaving it out of the picker would make those
+        # projects unreachable through the Status filter.
         stages = [
             {'id': s.id, 'name': s.name}
-            for s in self.env['project.project.stage'].search([], order='sequence, name')
+            for s in self.env['project.project.stage'].with_context(
+                active_test=False).search([], order='sequence, name')
         ]
 
         role_ids = self._role_employee_ids()
@@ -474,76 +533,60 @@ class FtProjectDashboard(models.TransientModel):
     # Public RPC entry point
     # ------------------------------------------------------------------
     @api.model
-    def get_dashboard_data(self, date_from=None, date_to=None):
+    def get_dashboard_data(self, date_from=None, date_to=None, filters=None):
         """Return all KPI values and chart datasets for the dashboard.
 
         :param date_from/date_to: 'YYYY-MM-DD' strings (inclusive) or False.
+        :param filters: ``{'project_id': id, 'stage_id': id}`` — the Project and
+            Status pickers in the header. Either may be absent or empty.
 
-        Resource Status and Resource Performance are deliberately NOT
-        given the period: both are per-person standing views that carry their
-        own Start/End pickers, and answering to two date filters at once made
-        the numbers unreadable — a range typed into the table was silently
-        intersected with whatever the top bar was on. They load all-time and
-        change only through their own pickers (get_resource_status /
-        get_delivery_by_resource).
+        Every figure on the board answers this one date range and this one
+        scope, the header being the only place either is chosen. The sections
+        and tables used to carry date pickers of their own, which meant a range
+        typed into a table was silently intersected with the header's — two
+        answers to the same question on a single screen, and no way to tell
+        which one a number came from. The per-section dropdowns that remain
+        (PM / Developer) only ever narrow this scope further.
+
+        Open & Overdue is the one deliberate exception, here and in the tables:
+        it stays a snapshot of now, because a task that is late today is late
+        whatever window is being looked at.
         """
         return {
-            'kpis': self._compute_kpis(date_from, date_to),
+            'kpis': self._compute_kpis(date_from, date_to, filters),
             'tables': {
-                'project_status': self._table_project_status(date_from, date_to),
-                'resource_status': self._table_resource_status(),
-                'delivery': self._table_delivery(),
+                'project_status': self._table_project_status(date_from, date_to, filters),
+                'resource_status': self._table_resource_status(date_from, date_to, filters),
+                'delivery': self._table_delivery(date_from, date_to, filters),
             },
             'charts': {
-                'project_hours': self._chart_project_hours(date_from, date_to),
-                'billable': self._chart_billable(date_from, date_to),
+                'project_hours': self._chart_project_hours(date_from, date_to, filters),
+                'billable': self._chart_billable(date_from, date_to, filters),
                 'team_composition': self._chart_team_composition(),
-                'progress_trend': self._chart_progress_trend(date_from, date_to),
+                'progress_trend': self._chart_progress_trend(date_from, date_to, filters),
             },
         }
-
-    @api.model
-    def get_resource_status(self, date_from=None, date_to=None):
-        """Just the Resource Status rows, for that table's own date range.
-
-        The table carries its own Start/End pickers. Filtering the already
-        fetched rows in the browser could only ever hide rows — Hours Spent was
-        still whichever period the top filter asked for, so the dates changed
-        which rows showed without changing the numbers in them. Recomputing
-        server-side is the only way those columns can answer the dates picked.
-        """
-        return self._table_resource_status(date_from or None, date_to or None)
-
-    @api.model
-    def get_delivery_by_resource(self, date_from=None, date_to=None):
-        """Just the Resource Performance rows, for its own date range.
-
-        Same reasoning as ``get_resource_status``: Delivered / On Time / Late are
-        aggregates, not per-row dates, so the browser has nothing it could filter
-        them by. The range has to reach the delivery domain, which means the
-        server recomputes. With both bounds empty this is the all-time table.
-
-        Open & Overdue stays a snapshot of now whatever the range says — a task
-        that is late today is late regardless of the window being looked at.
-        """
-        return self._table_delivery(date_from or None, date_to or None)
 
     # ------------------------------------------------------------------
     # KPI cards
     # ------------------------------------------------------------------
-    def _compute_kpis(self, date_from, date_to):
+    def _compute_kpis(self, date_from, date_to, filters=None):
         Project = self.env['project.project']
         AAL = self.env['account.analytic.line']
         Task = self.env['project.task']
 
-        active_project_domain = self._active_project_domain()
-        amc_project_domain = self._amc_project_domain()
-        implementation_project_domain = self._implementation_project_domain()
+        # The header's Project / Status scope, in the two shapes the queries
+        # below need it.
+        task_scope = self._scope_leaves_via_project(filters)
+
+        active_project_domain = self._active_project_domain(filters)
+        amc_project_domain = self._amc_project_domain(filters)
+        implementation_project_domain = self._implementation_project_domain(filters)
         active_projects = Project.search_count(active_project_domain)
         amc_projects = Project.search_count(amc_project_domain)
         implementation_projects = Project.search_count(implementation_project_domain)
 
-        ts_domain = self._ts_domain(date_from, date_to)
+        ts_domain = self._ts_domain(date_from, date_to, filters)
         spent = sum(g['unit_amount'] for g in AAL.read_group(
             ts_domain, ['unit_amount:sum'], []) if g.get('unit_amount'))
 
@@ -552,27 +595,36 @@ class FtProjectDashboard(models.TransientModel):
             ['unit_amount:sum'], []) if g.get('unit_amount'))
 
         estimated = sum(g['estimated'] for g in Task.read_group(
-            [('project_id', '!=', False)], ['estimated:sum'], [])
+            [('project_id', '!=', False)] + task_scope, ['estimated:sum'], [])
             if g.get('estimated'))
 
         role_ids = self._role_employee_ids()
         roles = {k: len(v) for k, v in role_ids.items()}
 
-        # Hours Utilisation first paint: unfiltered totals. The section has its
-        # own filter bar and refetches through get_hours_utilisation, so it is
-        # deliberately NOT tied to the period filter at the top.
-        hours_utilisation = self._hours_utilisation_values()
-        tasks_summary = self._tasks_summary_values()
+        # First paint for the two filtered sections. These carry the header's
+        # range and scope, exactly like every other card — they used to be
+        # computed with NO filters at all, so on load the board showed all-time
+        # figures under a header that said "This Month" and only started
+        # agreeing with it once a section dropdown was touched.
+        #
+        # The task-hour totals are spread in alongside Hours Utilisation because
+        # they now render as the third row of that section; the client refetches
+        # both through the section's one filter bar.
+        section_filters = dict(filters or {},
+                               date_from=date_from, date_to=date_to)
+        hours_utilisation = self._hours_utilisation_values(section_filters)
+        tasks_summary = self._tasks_summary_values(section_filters)
         # Lifted out before the spread below: the payload has one shared
         # `actions` map, so leaving this key in place would collide with it and
         # the Tasks Summary cards would open nothing on first paint.
         task_actions = tasks_summary.pop('actions', {})
-        task_hours_summary = self._task_hours_summary_values()
+        task_hours_summary = self._task_hours_summary_values(section_filters)
 
         # On-time delivery for the selected period. The maths lives on
         # project.task so this and the project.project fields can never disagree
         # about what "delivered" or "on time" means.
-        delivery = Task._ft_on_time_stats(date_from=date_from, date_to=date_to)
+        delivery = Task._ft_on_time_stats(
+            task_scope, date_from=date_from, date_to=date_to)
 
         # Drill-down domains, built from the SAME queries as the numbers above so
         # the list a card opens always holds exactly the count it shows. Cards
@@ -581,7 +633,8 @@ class FtProjectDashboard(models.TransientModel):
             'res_model': 'hr.employee', 'name': name,
             'domain': [('id', 'in', ids)],
         }
-        delivery_domain = Task._ft_delivery_domain(date_from=date_from, date_to=date_to)
+        delivery_domain = Task._ft_delivery_domain(
+            task_scope, date_from=date_from, date_to=date_to)
         actions = {
             # Served from the same domains as the counts above, so the list the
             # card opens always holds exactly the number the card shows.
@@ -615,7 +668,8 @@ class FtProjectDashboard(models.TransientModel):
             },
             'overdue_open_tasks': {
                 'res_model': 'project.task', 'name': 'Open & Overdue',
-                'domain': self._jsonify_domain(Task._ft_overdue_open_domain()),
+                'domain': self._jsonify_domain(
+                    Task._ft_overdue_open_domain(task_scope)),
             },
             # Tasks Summary drill-downs, built by _tasks_summary_values.
             **task_actions,
@@ -626,11 +680,12 @@ class FtProjectDashboard(models.TransientModel):
             'implementation_projects': implementation_projects,
             'amc_projects': amc_projects,
             'hours_spent': round(spent, 2),
-            # Hours Utilisation and Tasks Summary (unfiltered first paint —
-            # both sections refetch through their own filter bars).
+            # Hours Utilisation (role + activity + task-hour rows) and Tasks
+            # Summary, on first paint — both sections refetch through their own
+            # filter bar once one is touched.
             **hours_utilisation,
-            **tasks_summary,
             **task_hours_summary,
+            **tasks_summary,
             'billable_hours': round(billable, 2),
             'developers': roles['dev'],
             'testers': roles['qa'],
@@ -684,7 +739,7 @@ class FtProjectDashboard(models.TransientModel):
             return False
         return True
 
-    def _table_project_status(self, date_from=None, date_to=None):
+    def _table_project_status(self, date_from=None, date_to=None, filters=None):
         """One row per active project with dates and estimated/actual hours.
 
         Estimated = sum of task.estimated for the project (all-time: an
@@ -707,12 +762,15 @@ class FtProjectDashboard(models.TransientModel):
                 est_by_proj[g['project_id'][0]] = g.get('estimated') or 0.0
         act_by_proj = {}
         for g in AAL.read_group(
-                self._ts_domain(date_from, date_to), ['unit_amount:sum'],
+                self._ts_domain(date_from, date_to, filters), ['unit_amount:sum'],
                 ['project_id'], lazy=False):
             if g.get('project_id'):
                 act_by_proj[g['project_id'][0]] = g.get('unit_amount') or 0.0
 
-        shown = Project.search([('active', '=', True)], order='name').filtered(
+        shown = Project.search(
+            [('active', '=', True)] + self._scope_leaves_on_project(filters),
+            order='name',
+        ).filtered(
             lambda p: self._overlaps_period(
                 p.date_start, p.date, date_from, date_to))
 
@@ -752,7 +810,7 @@ class FtProjectDashboard(models.TransientModel):
             })
         return rows
 
-    def _table_delivery(self, date_from=None, date_to=None):
+    def _table_delivery(self, date_from=None, date_to=None, filters=None):
         """One row per person: how much they delivered and how much was on time.
 
         Covers TLs and Developers (and everyone else) in one table, with the
@@ -770,6 +828,7 @@ class FtProjectDashboard(models.TransientModel):
         """
         Task = self.env['project.task']
         Emp = self.env['hr.employee']
+        task_scope = self._scope_leaves_via_project(filters)
 
         employees = Emp.search([('active', '=', True)])
         emp_by_user = {e.user_id.id: e for e in employees if e.user_id}
@@ -779,7 +838,7 @@ class FtProjectDashboard(models.TransientModel):
         # loop would rebuild the set on every step.
         delivered_ids = {}
         for task in Task.search(Task._ft_delivery_domain(
-                date_from=date_from, date_to=date_to)):
+                task_scope, date_from=date_from, date_to=date_to)):
             for user in task.user_ids:
                 emp = emp_by_user.get(user.id)
                 if emp:
@@ -791,7 +850,7 @@ class FtProjectDashboard(models.TransientModel):
         # Open + overdue right now, same attribution. One search, grouped in
         # Python, rather than a count per employee.
         overdue_by_emp = {}
-        for task in Task.search(Task._ft_overdue_open_domain()):
+        for task in Task.search(Task._ft_overdue_open_domain(task_scope)):
             for user in task.user_ids:
                 emp = emp_by_user.get(user.id)
                 if emp:
@@ -805,7 +864,7 @@ class FtProjectDashboard(models.TransientModel):
         # appear because they are never a task assignee.
         participant_emp_ids = set()
         for t in Task.search_read(
-                [('user_ids', '!=', False)], ['user_ids']):
+                [('user_ids', '!=', False)] + task_scope, ['user_ids']):
             for uid in t.get('user_ids', []):
                 emp = emp_by_user.get(uid)
                 if emp:
@@ -848,7 +907,7 @@ class FtProjectDashboard(models.TransientModel):
         rows.sort(key=lambda r: r['employee'].lower())
         return rows
 
-    def _table_resource_status(self, date_from=None, date_to=None):
+    def _table_resource_status(self, date_from=None, date_to=None, filters=None):
         """One row per (employee, project), grouped/sorted by employee name.
 
         Hours Spent    = timesheet hours the employee logged on the project
@@ -874,7 +933,8 @@ class FtProjectDashboard(models.TransientModel):
         # Hours spent per (employee, project) from timesheets.
         hours = {}
         for g in AAL.read_group(
-                self._ts_domain(date_from, date_to) + [('employee_id', '!=', False)],
+                self._ts_domain(date_from, date_to, filters)
+                + [('employee_id', '!=', False)],
                 ['unit_amount:sum'], ['employee_id', 'project_id'], lazy=False):
             if g.get('employee_id') and g.get('project_id'):
                 hours[(g['employee_id'][0], g['project_id'][0])] = \
@@ -889,7 +949,8 @@ class FtProjectDashboard(models.TransientModel):
         est = {}
         assigned = set()
         for t in Task.search_read(
-                [('project_id', '!=', False), ('user_ids', '!=', False)],
+                [('project_id', '!=', False), ('user_ids', '!=', False)]
+                + self._scope_leaves_via_project(filters),
                 ['project_id', 'user_ids', 'estimated']):
             proj_id = t['project_id'][0]
             estimated = t.get('estimated') or 0.0
@@ -948,7 +1009,7 @@ class FtProjectDashboard(models.TransientModel):
         rows.sort(key=lambda r: (r['employee'].lower(), r['project'].lower()))
         return rows
 
-    def _chart_project_hours(self, date_from, date_to):
+    def _chart_project_hours(self, date_from, date_to, filters=None):
         """Bar: estimated / spent / remaining per project.
 
         Estimated = the project's Estimated Time (``allocated_hours``) — the
@@ -973,24 +1034,26 @@ class FtProjectDashboard(models.TransientModel):
 
         name_by_proj = {}
         est_by_proj = {}
-        for p in Project.search_read([], ['name', 'allocated_hours']):
+        for p in Project.search_read(
+                self._scope_leaves_on_project(filters), ['name', 'allocated_hours']):
             name_by_proj[p['id']] = p['name'] or ''
             est_by_proj[p['id']] = p['allocated_hours'] or 0.0
 
         # Spent: the selected period only, so the orange bars follow the filter.
         spent_by_proj = {}
         for g in AAL.read_group(
-                self._ts_domain(date_from, date_to), ['unit_amount:sum'],
+                self._ts_domain(date_from, date_to, filters), ['unit_amount:sum'],
                 ['project_id']):
             proj = g.get('project_id')
             if proj:
                 spent_by_proj[proj[0]] = g.get('unit_amount') or 0.0
 
-        # Spend to date, unfiltered — the basis for Remaining. Same domain
-        # minus the dates, so the two totals can only differ by the period.
+        # Spend to date, ignoring the dates only — the basis for Remaining. The
+        # header's project/status scope still applies, so the two totals can
+        # differ by the period and nothing else.
         spent_all_by_proj = {}
         for g in AAL.read_group(
-                self._ts_domain(None, None), ['unit_amount:sum'],
+                self._ts_domain(None, None, filters), ['unit_amount:sum'],
                 ['project_id']):
             proj = g.get('project_id')
             if proj:
@@ -1020,10 +1083,10 @@ class FtProjectDashboard(models.TransientModel):
             'meta': {'project_ids': [r[0] for r in rows]},
         }
 
-    def _chart_billable(self, date_from, date_to):
+    def _chart_billable(self, date_from, date_to, filters=None):
         """Bar: billable vs non-billable hours (by project allow_billable flag)."""
         AAL = self.env['account.analytic.line']
-        ts_domain = self._ts_domain(date_from, date_to)
+        ts_domain = self._ts_domain(date_from, date_to, filters)
         total = sum(g['unit_amount'] for g in AAL.read_group(
             ts_domain, ['unit_amount:sum'], []) if g.get('unit_amount'))
         billable = sum(g['unit_amount'] for g in AAL.read_group(
@@ -1081,7 +1144,7 @@ class FtProjectDashboard(models.TransientModel):
             return key.strftime('%b %Y')
         return key.strftime('%d %b %Y')
 
-    def _chart_progress_trend(self, date_from, date_to):
+    def _chart_progress_trend(self, date_from, date_to, filters=None):
         """Bar: hours logged and tasks completed per bucket within the range.
 
         Uses ``_read_group`` so each day is a real ``date`` object — sorting on
@@ -1103,19 +1166,26 @@ class FtProjectDashboard(models.TransientModel):
 
         hours_by_day = {}
         for day, total in AAL._read_group(
-                self._ts_domain(date_from, date_to), ['date:day'], ['unit_amount:sum']):
+                self._ts_domain(date_from, date_to, filters),
+                ['date:day'], ['unit_amount:sum']):
             if day:
                 hours_by_day[_as_date(day)] = round(total or 0.0, 2)
 
         tasks_by_day = {}
         try:
-            task_domain = [('state', '=', '1_done')]
-            if date_from:
-                task_domain.append(('date_last_stage_update', '>=', date_from))
-            if date_to:
-                task_domain.append(('date_last_stage_update', '<=', date_to + ' 23:59:59'))
+            # Bucketed off ft_completion_date through the shared delivery
+            # domain, so this series counts exactly what the Tasks Delivered
+            # card counts. It previously grouped `state = '1_done'` by
+            # date_last_stage_update, which reported almost nothing: stages in
+            # Odoo 18 do not set `state`, which is the whole reason
+            # _ft_delivery_domain keys off the folded stage instead. Any project
+            # whose workflow never writes state explicitly showed a flat zero
+            # line beside a healthy Hours Logged series.
             for day, count in Task._read_group(
-                    task_domain, ['date_last_stage_update:day'], ['__count']):
+                    Task._ft_delivery_domain(
+                        self._scope_leaves_via_project(filters),
+                        date_from, date_to),
+                    ['ft_completion_date:day'], ['__count']):
                 if day:
                     tasks_by_day[_as_date(day)] = count
         except Exception as e:  # pragma: no cover - defensive against field/state drift
