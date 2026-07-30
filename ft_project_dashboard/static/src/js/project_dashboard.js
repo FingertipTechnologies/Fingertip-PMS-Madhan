@@ -21,33 +21,32 @@ const PERIODS = [
 const DEFAULT_PERIOD = "month";
 
 // Drilling into a card opens a list view as a new action; coming back rebuilds
-// this dashboard from scratch, which reset the period to the default and threw
-// away the selection. Mirror it into sessionStorage so the round trip returns to
-// the period the user was actually looking at. Only the period/range is stored —
-// the data itself is always refetched, so nothing stale is shown.
-const PERIOD_KEY = "ft_project_dashboard.period";
+// this dashboard from scratch, which reset the header to its defaults and threw
+// away the selection. Mirror the header into sessionStorage so the round trip
+// returns to what the user was actually looking at. Only the period/range and
+// the project/status scope are stored — the data itself is always refetched, so
+// nothing stale is ever shown.
+const SCOPE_KEY = "ft_project_dashboard.scope";
 
-function readStoredPeriod() {
+function readStoredScope() {
     try {
-        const stored = JSON.parse(browser.sessionStorage.getItem(PERIOD_KEY) || "null");
+        const stored = JSON.parse(browser.sessionStorage.getItem(SCOPE_KEY) || "null");
         // Guard against a stale key from an older build naming a period that no
         // longer exists, which would leave the dashboard with no range at all.
         if (stored && PERIODS.some((p) => p.id === stored.period)) {
             return stored;
         }
     } catch {
-        // Unreadable/corrupt storage: fall back to the default period.
+        // Unreadable/corrupt storage: fall back to the defaults.
     }
     return null;
 }
 
-function writeStoredPeriod(period, dateFrom, dateTo) {
+function writeStoredScope(scope) {
     try {
-        browser.sessionStorage.setItem(
-            PERIOD_KEY, JSON.stringify({ period, dateFrom, dateTo })
-        );
+        browser.sessionStorage.setItem(SCOPE_KEY, JSON.stringify(scope));
     } catch {
-        // Storage unavailable/full: the period just won't persist.
+        // Storage unavailable/full: the selection just won't persist.
     }
 }
 
@@ -69,93 +68,97 @@ export class ProjectDashboard extends Component {
         this.action = useService("action");
         this.periods = PERIODS;
         this.state = useState({
-            period: "month",
+            period: DEFAULT_PERIOD,
             dateFrom: null,
             dateTo: null,
+            // Header scope. One Project picker and one Status picker for the
+            // whole board, replacing the copies every section used to carry:
+            // the same two questions asked five times over could be answered
+            // five different ways at once, and nothing on screen said which
+            // answer a given number came from.
+            projectId: "",
+            stageId: "",
             data: null,
             loading: true,
+            // Dropdown contents for the header pickers and the section
+            // PM/Developer pickers. Fetched once — they do not depend on the
+            // range or the scope.
+            filterOptions: { projects: [], stages: [], project_managers: [], developers: [] },
+            // Table text searches. These stay per-table: they are free text
+            // over rows already on screen, not a question for the server.
             projectSearch: "",
-            projectStatus: "",
-            projectDateFrom: null,
-            projectDateTo: null,
             resourceSearch: "",
             resourceProjectSearch: "",
-            resourceDateFrom: null,
-            resourceDateTo: null,
-            // Rows recomputed by the server for the resource table's own date
-            // range. Null means "no range set" -> fall back to the rows the
-            // top period filter already delivered.
-            resourceRowsOverride: null,
             projectHoursSearch: "",
             deliverySearch: "",
-            deliveryDateFrom: null,
-            deliveryDateTo: null,
-            // Same contract as resourceRowsOverride: rows the server recomputed
-            // for this table's own range, or null for the all-time rows that
-            // came with the dashboard payload.
-            deliveryRowsOverride: null,
-            // Hours Utilisation has its own filters, independent of the period
-            // bar at the top. hoursOverride null means "no filter applied" ->
-            // show the unfiltered totals that came with the payload.
-            hoursDateFrom: null,
-            hoursDateTo: null,
-            hoursProjectId: "",
-            hoursStageId: "",
+            // The two filtered sections keep PM + Developer and nothing else.
+            // Each holds an override: the figures the server recomputed for its
+            // own two dropdowns, or null to read the header-scoped payload
+            // exactly as it arrived.
+            //
+            // Hours Utilisation absorbed the old Task Hours Summary section, so
+            // its override now merges two server payloads behind one pair of
+            // dropdowns — see reloadHoursUtilisation.
             hoursPmId: "",
             hoursDevId: "",
             hoursOverride: null,
             hoursLoading: false,
-            hoursOptions: { projects: [], stages: [], project_managers: [], developers: [] },
-            // Tasks Summary carries the same filter shape as Hours Utilisation
-            // but its own values, so the two sections can be sliced apart.
-            tasksDateFrom: null,
-            tasksDateTo: null,
-            tasksProjectId: "",
-            tasksStageId: "",
             tasksPmId: "",
             tasksDevId: "",
             tasksOverride: null,
             tasksLoading: false,
-            // Task Hours Summary — same filter shape again, own values.
-            taskHoursDateFrom: null,
-            taskHoursDateTo: null,
-            taskHoursProjectId: "",
-            taskHoursStageId: "",
-            taskHoursPmId: "",
-            taskHoursDevId: "",
-            taskHoursOverride: null,
-            taskHoursLoading: false,
         });
+
+        // Monotonic request token per section. These queries are heavy enough
+        // that flipping a dropdown twice can land the two responses out of
+        // order, leaving the section showing figures for the previous pick; a
+        // reply is only applied if no newer request has started since.
+        this._reqSeq = { hours: 0, tasks: 0 };
 
         onWillStart(async () => {
             await loadJS("/web/static/lib/Chart/Chart.js");
-            const restored = readStoredPeriod();
-            if (restored?.period === "custom") {
-                // _applyPeriod's "custom" branch reads the dates back off state,
-                // so they must be in place before it runs.
-                this.state.dateFrom = restored.dateFrom;
-                this.state.dateTo = restored.dateTo;
+            const restored = readStoredScope();
+            if (restored) {
+                this.state.projectId = restored.projectId || "";
+                this.state.stageId = restored.stageId || "";
+                if (restored.period === "custom") {
+                    // _applyPeriod's "custom" branch reads the dates back off
+                    // state, so they must be in place before it runs.
+                    this.state.dateFrom = restored.dateFrom;
+                    this.state.dateTo = restored.dateTo;
+                }
             }
             // Named periods are recomputed against today rather than restored
             // from the stored dates: coming back to "This Year" should mean this
             // year now, not the year it was when the range was first picked.
             this._applyPeriod(restored?.period || DEFAULT_PERIOD);
             await this.loadData();
-            // Filter choices are independent of the period, so they are fetched
-            // once. A failure here only costs empty dropdowns, never the board.
+            // Filter choices are independent of the range and the scope, so they
+            // are fetched once. A failure here only costs empty dropdowns, never
+            // the board.
             try {
-                this.state.hoursOptions = await this.orm.call(
+                this.state.filterOptions = await this.orm.call(
                     "ft.project.dashboard", "get_hours_filter_options", []
                 );
             } catch (e) {
-                console.warn("Hours filter options failed to load", e);
+                console.warn("Filter options failed to load", e);
             }
         });
     }
 
     // ----------------------------------------------------------------
-    // Date range handling
+    // Header: date range
     // ----------------------------------------------------------------
+    _persistScope() {
+        writeStoredScope({
+            period: this.state.period,
+            dateFrom: this.state.dateFrom,
+            dateTo: this.state.dateTo,
+            projectId: this.state.projectId,
+            stageId: this.state.stageId,
+        });
+    }
+
     _applyPeriod(period) {
         const now = new Date();
         let from = null;
@@ -191,7 +194,7 @@ export class ProjectDashboard extends Component {
         this.state.period = period;
         this.state.dateFrom = from;
         this.state.dateTo = to;
-        writeStoredPeriod(period, from, to);
+        this._persistScope();
     }
 
     async onPeriodChange(period) {
@@ -208,8 +211,47 @@ export class ProjectDashboard extends Component {
     async applyCustomRange() {
         this.state.period = "custom";
         // Set directly rather than via _applyPeriod, so persist here too.
-        writeStoredPeriod("custom", this.state.dateFrom, this.state.dateTo);
+        this._persistScope();
         await this.loadData();
+    }
+
+    // ----------------------------------------------------------------
+    // Header: Project / Status scope
+    // ----------------------------------------------------------------
+    /** Compare a dropdown option id with the stored filter value.
+     *
+     *  Lives here rather than inline in the template because Owl resolves bare
+     *  identifiers against the component, so JS globals like String() are not
+     *  callable from a template expression. Option ids arrive as numbers and
+     *  select values as strings, hence the coercion.
+     */
+    isFilterSelected(optionId, current) {
+        return String(optionId) === String(current);
+    }
+
+    get hasScopeFilter() {
+        return !!(this.state.projectId || this.state.stageId);
+    }
+
+    async onScopeChange(field, ev) {
+        this.state[field] = ev.target.value || "";
+        this._persistScope();
+        await this.loadData();
+    }
+
+    async clearScopeFilters() {
+        this.state.projectId = "";
+        this.state.stageId = "";
+        this._persistScope();
+        await this.loadData();
+    }
+
+    /** The header scope, in the shape get_dashboard_data expects. */
+    _scopePayload() {
+        return {
+            project_id: this.state.projectId || false,
+            stage_id: this.state.stageId || false,
+        };
     }
 
     // ----------------------------------------------------------------
@@ -221,11 +263,24 @@ export class ProjectDashboard extends Component {
             this.state.data = await this.orm.call(
                 "ft.project.dashboard",
                 "get_dashboard_data",
-                [this.state.dateFrom, this.state.dateTo]
+                [this.state.dateFrom, this.state.dateTo, this._scopePayload()]
             );
         } finally {
             this.state.loading = false;
         }
+        // The payload that just arrived is already scoped, so a section with no
+        // dropdown set reads correctly as it stands. One that HAS a PM or a
+        // Developer picked is still holding figures computed for the PREVIOUS
+        // header scope, so it has to be refetched or it would quietly contradict
+        // every card around it.
+        await this._reloadFilteredSections();
+    }
+
+    async _reloadFilteredSections() {
+        await Promise.all([
+            this.reloadHoursUtilisation(),
+            this.reloadTasksSummary(),
+        ]);
     }
 
     async refresh() {
@@ -239,6 +294,14 @@ export class ProjectDashboard extends Component {
         const domain = [["project_id", "!=", false]];
         if (this.state.dateFrom) domain.push(["date", ">=", this.state.dateFrom]);
         if (this.state.dateTo) domain.push(["date", "<=", this.state.dateTo]);
+        // The header scope has to reach the drill-down too, or the list opens
+        // wider than the card that was clicked.
+        if (this.state.projectId) {
+            domain.push(["project_id", "=", parseInt(this.state.projectId, 10)]);
+        }
+        if (this.state.stageId) {
+            domain.push(["project_id.stage_id", "=", parseInt(this.state.stageId, 10)]);
+        }
         if (billableOnly) domain.push(["project_id.allow_billable", "=", true]);
         this.action.doAction({
             type: "ir.actions.act_window",
@@ -315,7 +378,7 @@ export class ProjectDashboard extends Component {
     }
 
     // ----------------------------------------------------------------
-    // Column definitions for the two full-width tables. DataTable handles
+    // Column definitions for the three full-width tables. DataTable handles
     // sorting / pagination / rows-per-page / scroll from these.
     // ----------------------------------------------------------------
     // Project Performance. Existing columns kept; DE / OTD / RWR / DWD added,
@@ -377,119 +440,26 @@ export class ProjectDashboard extends Component {
     }
 
     // ----------------------------------------------------------------
-    // Table search / filters (client-side). Rows arrive sorted from the
-    // server; DataTable re-sorts/paginates on top of the filtered set.
-    // Dates are ISO 'YYYY-MM-DD' strings, which compare chronologically as
-    // plain strings, so a range check is a simple lexicographic comparison.
+    // Table searches. Rows arrive from the server already scoped by the header,
+    // so all that is left here is free-text narrowing of what is on screen.
+    // Nothing in this section drops rows by date or by project any more: doing
+    // that in the browser hid rows without changing the aggregates inside them,
+    // so the figures answered one question while the rows answered another.
     // ----------------------------------------------------------------
-    get deliveryRows() {
-        const q = (this.state.deliverySearch || "").trim().toLowerCase();
-        // With a range set the server has recomputed DE / OTD / RWR / DWD for
-        // it; without one these are the all-time rows. Either way the top
-        // period filter does not reach this table.
-        const rows = this.state.deliveryRowsOverride || this.tables.delivery || [];
-        if (!q) return rows;
-        return rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
-    }
-    onDeliverySearch(ev) {
-        this.state.deliverySearch = ev.target.value || "";
-    }
-    onDeliveryDateFrom(ev) {
-        this.state.deliveryDateFrom = ev.target.value || null;
-        this.reloadDeliveryByResource();
-    }
-    onDeliveryDateTo(ev) {
-        this.state.deliveryDateTo = ev.target.value || null;
-        this.reloadDeliveryByResource();
-    }
-    clearDeliveryDates() {
-        this.state.deliveryDateFrom = null;
-        this.state.deliveryDateTo = null;
-        this.state.deliveryRowsOverride = null;
-    }
-    /** Refetch the delivery rows for this table's own range (both bounds
-     *  optional). Clearing both returns the table to all-time. */
-    async reloadDeliveryByResource() {
-        const from = this.state.deliveryDateFrom;
-        const to = this.state.deliveryDateTo;
-        if (!from && !to) {
-            this.state.deliveryRowsOverride = null;
-            return;
-        }
-        try {
-            this.state.deliveryRowsOverride = await this.orm.call(
-                "ft.project.dashboard",
-                "get_delivery_by_resource",
-                [from, to]
-            );
-        } catch (e) {
-            // Keep the last good rows rather than blanking the table.
-            console.warn("Delivery by resource reload failed", e);
-        }
-    }
-    _inDateRange(iso, from, to) {
-        // Rows without a date are dropped once any bound is active.
-        if (!from && !to) return true;
-        if (!iso) return false;
-        if (from && iso < from) return false;
-        if (to && iso > to) return false;
-        return true;
-    }
-
-    // Distinct project statuses present in the current data, for the
-    // Project Status dropdown ("" = All Statuses).
-    get projectStatusOptions() {
-        const seen = new Set();
-        for (const r of this.tables.project_status || []) {
-            if (r.status) seen.add(r.status);
-        }
-        return Array.from(seen).sort((a, b) => a.localeCompare(b));
-    }
-
     get projectRows() {
         const q = (this.state.projectSearch || "").trim().toLowerCase();
-        const status = this.state.projectStatus || "";
-        const from = this.state.projectDateFrom;
-        const to = this.state.projectDateTo;
-        let rows = this.tables.project_status || [];
-        if (q) {
-            rows = rows.filter((r) => (r.project || "").toLowerCase().includes(q));
-        }
-        if (status) {
-            rows = rows.filter((r) => (r.status || "") === status);
-        }
-        if (from || to) {
-            rows = rows.filter((r) => this._inDateRange(r.start_date, from, to));
-        }
-        return rows;
+        const rows = this.tables.project_status || [];
+        if (!q) return rows;
+        return rows.filter((r) => (r.project || "").toLowerCase().includes(q));
     }
     onProjectSearch(ev) {
         this.state.projectSearch = ev.target.value || "";
-    }
-    onProjectStatus(ev) {
-        this.state.projectStatus = ev.target.value || "";
-    }
-    onProjectDateFrom(ev) {
-        this.state.projectDateFrom = ev.target.value || null;
-    }
-    onProjectDateTo(ev) {
-        this.state.projectDateTo = ev.target.value || null;
-    }
-    clearProjectFilters() {
-        this.state.projectStatus = "";
-        this.state.projectDateFrom = null;
-        this.state.projectDateTo = null;
     }
 
     get resourceRows() {
         const q = (this.state.resourceSearch || "").trim().toLowerCase();
         const pq = (this.state.resourceProjectSearch || "").trim().toLowerCase();
-        // With a date range set the server has already recomputed Hours Spent
-        // for it; without one the top period filter's rows stand. Either way
-        // only the text searches are applied here — dropping rows by date in
-        // the browser would leave the figures answering a different period
-        // than the dates on screen.
-        let rows = this.state.resourceRowsOverride || this.tables.resource_status || [];
+        let rows = this.tables.resource_status || [];
         if (q) {
             rows = rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
         }
@@ -504,58 +474,33 @@ export class ProjectDashboard extends Component {
     onResourceProjectSearch(ev) {
         this.state.resourceProjectSearch = ev.target.value || "";
     }
-    onResourceDateFrom(ev) {
-        this.state.resourceDateFrom = ev.target.value || null;
-        this.reloadResourceStatus();
+
+    get deliveryRows() {
+        const q = (this.state.deliverySearch || "").trim().toLowerCase();
+        const rows = this.tables.delivery || [];
+        if (!q) return rows;
+        return rows.filter((r) => (r.employee || "").toLowerCase().includes(q));
     }
-    onResourceDateTo(ev) {
-        this.state.resourceDateTo = ev.target.value || null;
-        this.reloadResourceStatus();
-    }
-    clearResourceDates() {
-        this.state.resourceDateFrom = null;
-        this.state.resourceDateTo = null;
-        this.state.resourceRowsOverride = null;
-    }
-    /** Refetch the resource rows for this table's own range (both bounds
-     *  optional). Clearing both hands the table back to the top filter. */
-    async reloadResourceStatus() {
-        const from = this.state.resourceDateFrom;
-        const to = this.state.resourceDateTo;
-        if (!from && !to) {
-            this.state.resourceRowsOverride = null;
-            return;
-        }
-        try {
-            this.state.resourceRowsOverride = await this.orm.call(
-                "ft.project.dashboard",
-                "get_resource_status",
-                [from, to]
-            );
-        } catch (e) {
-            // Keep the last good rows rather than blanking the table.
-            console.warn("Resource status reload failed", e);
-        }
+    onDeliverySearch(ev) {
+        this.state.deliverySearch = ev.target.value || "";
     }
 
     // ----------------------------------------------------------------
-    // Hours Utilisation — its own filters, recomputed server-side.
+    // The two filtered sections — PM / Developer, recomputed server-side.
     // ----------------------------------------------------------------
-    /** Cards read from here: the filtered figures when a filter is set,
-     *  otherwise the unfiltered ones that shipped with the dashboard. */
+    /** Cards read from here: the filtered figures when a dropdown is set,
+     *  otherwise the header-scoped ones that shipped with the payload.
+     *
+     *  Hours Utilisation's three rows all read from this one getter, including
+     *  the `th_*` task hour totals absorbed from the old Task Hours Summary
+     *  section — one section, one override, so the rows can never end up
+     *  showing two different filter states at once. */
     get hours() {
         return this.state.hoursOverride || this.kpis;
     }
 
-    /** Compare a dropdown option id with the stored filter value.
-     *
-     *  Lives here rather than inline in the template because Owl resolves bare
-     *  identifiers against the component, so JS globals like String() are not
-     *  callable from a template expression. Option ids arrive as numbers and
-     *  select values as strings, hence the coercion.
-     */
-    isHoursFilterSelected(optionId, current) {
-        return String(optionId) === String(current);
+    get tasks() {
+        return this.state.tasksOverride || this.kpis;
     }
 
     get hasHoursFilter() {
@@ -566,68 +511,42 @@ export class ProjectDashboard extends Component {
         return this._hasFilter("tasks");
     }
 
-    get hasTaskHoursFilter() {
-        return this._hasFilter("taskHours");
-    }
-
-    get taskHours() {
-        return this.state.taskHoursOverride || this.kpis;
-    }
-
-    /** Cards read from here: the filtered figures when a filter is set,
-     *  otherwise the unfiltered ones that shipped with the dashboard. */
-    get tasks() {
-        return this.state.tasksOverride || this.kpis;
-    }
-
-    // Both filter bars share a shape (from/to + project/stage/pm/dev), so the
-    // plumbing is written once and keyed by prefix rather than twice.
+    // Both sections share a shape — PM + Developer — so the plumbing is
+    // written once and keyed by prefix rather than twice. Date, Project
+    // and Status are deliberately absent: they belong to the header now and
+    // reach the server through _filterPayload instead.
     _filterFields(prefix) {
-        return [`${prefix}DateFrom`, `${prefix}DateTo`, `${prefix}ProjectId`,
-                `${prefix}StageId`, `${prefix}PmId`, `${prefix}DevId`];
+        return [`${prefix}PmId`, `${prefix}DevId`];
     }
 
     _hasFilter(prefix) {
         return this._filterFields(prefix).some((f) => !!this.state[f]);
     }
 
+    /** The header's range and scope, narrowed by one section's two dropdowns. */
     _filterPayload(prefix) {
-        const s = this.state;
         return {
-            date_from: s[`${prefix}DateFrom`],
-            date_to: s[`${prefix}DateTo`],
-            project_id: s[`${prefix}ProjectId`],
-            stage_id: s[`${prefix}StageId`],
-            pm_id: s[`${prefix}PmId`],
-            dev_id: s[`${prefix}DevId`],
+            date_from: this.state.dateFrom,
+            date_to: this.state.dateTo,
+            project_id: this.state.projectId || false,
+            stage_id: this.state.stageId || false,
+            pm_id: this.state[`${prefix}PmId`],
+            dev_id: this.state[`${prefix}DevId`],
         };
     }
 
     onHoursFilter(field, ev) {
-        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
+        this.state[field] = ev.target.value || "";
         this.reloadHoursUtilisation();
     }
 
     onTasksFilter(field, ev) {
-        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
+        this.state[field] = ev.target.value || "";
         this.reloadTasksSummary();
-    }
-
-    onTaskHoursFilter(field, ev) {
-        this.state[field] = ev.target.value || (field.endsWith("Id") ? "" : null);
-        this.reloadTaskHoursSummary();
     }
 
     clearHoursFilters() {
         this._clearFilters("hours");
-    }
-
-    clearTaskHoursFilters() {
-        this._clearFilters("taskHours");
-    }
-
-    async reloadTaskHoursSummary() {
-        await this._reloadSection("taskHours", "get_task_hours_summary");
     }
 
     clearTasksFilters() {
@@ -636,36 +555,67 @@ export class ProjectDashboard extends Component {
 
     _clearFilters(prefix) {
         for (const f of this._filterFields(prefix)) {
-            this.state[f] = f.endsWith("Id") ? "" : null;
+            this.state[f] = "";
         }
         this.state[`${prefix}Override`] = null;
+        // Bump the token so a reply still in flight for the cleared filter
+        // cannot land afterwards and put the section back into a filtered state
+        // the dropdowns no longer show. That reply will now skip its own
+        // clean-up, so the spinner has to be cleared here or it never stops.
+        this._reqSeq[prefix] += 1;
+        this.state[`${prefix}Loading`] = false;
     }
 
+    /** Hours Utilisation is measured off two different models — timesheet lines
+     *  for the role and activity rows, task records for the hour totals — so it
+     *  takes two calls, merged into the one override behind its one filter bar. */
     async reloadHoursUtilisation() {
-        await this._reloadSection("hours", "get_hours_utilisation");
+        await this._reloadSection("hours", [
+            "get_hours_utilisation",
+            "get_task_hours_summary",
+        ]);
     }
 
     async reloadTasksSummary() {
         await this._reloadSection("tasks", "get_tasks_summary");
     }
 
-    /** Refetch one section for its own filters. No filter set hands the
-     *  section back to the unfiltered payload rather than calling the server. */
-    async _reloadSection(prefix, method) {
+    /** Refetch one section for its own dropdowns. Nothing set hands the section
+     *  back to the header-scoped payload rather than calling the server. */
+    async _reloadSection(prefix, methods) {
         if (!this._hasFilter(prefix)) {
             this.state[`${prefix}Override`] = null;
+            // Same as _clearFilters: invalidating an in-flight reply means that
+            // reply will not clear the spinner, so do it here.
+            this._reqSeq[prefix] += 1;
+            this.state[`${prefix}Loading`] = false;
             return;
         }
+        const token = ++this._reqSeq[prefix];
         this.state[`${prefix}Loading`] = true;
         try {
-            this.state[`${prefix}Override`] = await this.orm.call(
-                "ft.project.dashboard", method, [this._filterPayload(prefix)]
+            const names = Array.isArray(methods) ? methods : [methods];
+            const payload = this._filterPayload(prefix);
+            const parts = await Promise.all(
+                names.map((m) =>
+                    this.orm.call("ft.project.dashboard", m, [payload])
+                )
             );
+            // A newer pick started while these were in flight — its reply is the
+            // one that matches the dropdowns, so drop this result.
+            if (token !== this._reqSeq[prefix]) {
+                return;
+            }
+            // Disjoint key sets (plain figures vs `th_`-prefixed ones), so the
+            // merge cannot have one call overwrite the other's numbers.
+            this.state[`${prefix}Override`] = Object.assign({}, ...parts);
         } catch (e) {
             // Keep the last good figures rather than blanking the cards.
             console.warn(`${prefix} section reload failed`, e);
         } finally {
-            this.state[`${prefix}Loading`] = false;
+            if (token === this._reqSeq[prefix]) {
+                this.state[`${prefix}Loading`] = false;
+            }
         }
     }
 
