@@ -132,11 +132,14 @@
             <attribute name="invisible">1</attribute>
         </xpath>
 
-        <!-- Move Allocated Hours above Actual Hours -->
+        <!-- Estimated Time above Actual Hours. This is the project's own
+             `estimated` field (the roll-up of the tasks' Estimated hours), NOT
+             core allocated_hours, which stays hidden. -->
         <xpath expr="//field[@name='user_id']" position="after">
-            <field name="allocated_hours"
+            <field name="estimated"
                    string="Estimated Time"
-                   widget="timesheet_uom_no_toggle"/>
+                   widget="float_time"
+                   readonly="1"/>
         </xpath>
 
 
