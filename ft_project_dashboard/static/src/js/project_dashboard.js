@@ -20,6 +20,16 @@ const PERIODS = [
 
 const DEFAULT_PERIOD = "month";
 
+// The three row filters on Project Performance, in render order. `group` matches
+// the `hidden_group` the server stamps on each row, so which stage names belong
+// to which toggle is decided server-side and never duplicated here — this list
+// only supplies the labels.
+const PROJECT_STAGE_TOGGLES = [
+    { group: "closed", label: "Closed" },
+    { group: "amc", label: "AMC" },
+    { group: "general", label: "General" },
+];
+
 // Drilling into a card opens a list view as a new action; coming back rebuilds
 // this dashboard from scratch, which reset the header to its defaults and threw
 // away the selection. Mirror the header into sessionStorage so the round trip
@@ -91,6 +101,11 @@ export class ProjectDashboard extends Component {
             resourceProjectSearch: "",
             projectHoursSearch: "",
             deliverySearch: "",
+            // Project Performance hides Closed / AMC / General projects by
+            // default, each behind its own toggle so they can be brought back
+            // independently. Keyed by the `hidden_group` the server stamps on
+            // each row, so adding a fourth group needs no change here.
+            projectShowStage: { closed: false, amc: false, general: false },
             // The two filtered sections keep PM + Developer and nothing else.
             // Each holds an override: the figures the server recomputed for its
             // own two dropdowns, or null to read the header-scoped payload
@@ -446,14 +461,41 @@ export class ProjectDashboard extends Component {
     // that in the browser hid rows without changing the aggregates inside them,
     // so the figures answered one question while the rows answered another.
     // ----------------------------------------------------------------
+    // Dropping rows here is safe in a way it would not be elsewhere on the
+    // board: every figure in this table belongs to the row it sits on, so
+    // hiding a row removes its numbers with it. There is no cross-row total
+    // that could keep counting what is no longer on screen — the pager's
+    // "Showing x of N" recounts from the filtered set.
     get projectRows() {
         const q = (this.state.projectSearch || "").trim().toLowerCase();
-        const rows = this.tables.project_status || [];
-        if (!q) return rows;
-        return rows.filter((r) => (r.project || "").toLowerCase().includes(q));
+        let rows = this.tables.project_status || [];
+        // A row with no hidden_group is always visible; one with a group shows
+        // only while that group's own toggle is on.
+        rows = rows.filter(
+            (r) => !r.hidden_group || this.state.projectShowStage[r.hidden_group]
+        );
+        if (q) {
+            rows = rows.filter((r) => (r.project || "").toLowerCase().includes(q));
+        }
+        return rows;
     }
     onProjectSearch(ev) {
         this.state.projectSearch = ev.target.value || "";
+    }
+    onProjectShowStage(group, ev) {
+        this.state.projectShowStage[group] = ev.target.checked;
+    }
+
+    /** The three toggles with the row count each is currently holding back.
+     *  The counts come off the unfiltered payload, so they stay put as boxes are
+     *  ticked and explain an empty-looking table rather than leaving it looking
+     *  broken. */
+    get projectStageToggles() {
+        const rows = this.tables.project_status || [];
+        return PROJECT_STAGE_TOGGLES.map((toggle) => ({
+            ...toggle,
+            count: rows.filter((r) => r.hidden_group === toggle.group).length,
+        }));
     }
 
     get resourceRows() {

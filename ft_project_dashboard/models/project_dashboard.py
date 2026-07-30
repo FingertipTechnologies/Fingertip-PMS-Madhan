@@ -33,6 +33,27 @@ INACTIVE_STAGE_NAMES = ('General', 'Hold', 'Closed')
 # Stage holding projects under an annual maintenance contract.
 AMC_STAGE_NAME = 'AMC'
 
+# Stages whose projects are hidden from the Project Performance table until the
+# matching toggle beside its search box is ticked. One toggle per stage rather
+# than one for all three: they are hidden for different reasons and are wanted
+# back at different times, so somebody reviewing AMC renewals should not have to
+# pull 128 Closed projects onto the screen to do it.
+#
+# Keys are the flag names the client toggles; values are the stage names. Order
+# is the order the toggles render in, so it is kept deliberate rather than
+# alphabetical — Closed first because it is by far the largest bucket.
+#
+# Deliberately NOT the same set as INACTIVE_STAGE_NAMES: Hold is absent here,
+# because a paused project is still delivery work somebody has to chase, whereas
+# AMC is present, because a maintenance contract has no delivery performance to
+# measure. The table is about how delivery is going, so these three are noise by
+# default rather than being removed outright — hence toggles, not a filter.
+PERF_HIDDEN_STAGE_GROUPS = {
+    'closed': 'Closed',
+    'amc': AMC_STAGE_NAME,
+    'general': 'General',
+}
+
 # Project whose task time is reported as Standup Hours. Matched by name for the
 # same reason stages are: the project id differs between databases.
 STANDUP_PROJECT_NAME = 'Fingertip Standup'
@@ -749,6 +770,17 @@ class FtProjectDashboard(models.TransientModel):
                     KPI cards.
         Rows are limited to projects whose start/end window overlaps the
         period; projects with open-ended dates always show.
+
+        Every row carries ``hidden_group``: ``'closed'``, ``'amc'``, ``'general'``
+        or ``False`` (see PERF_HIDDEN_STAGE_GROUPS). The client hides each group
+        until that group's own toggle beside the search box is ticked, so the
+        three can be brought back independently. Sending the group name rather
+        than a plain boolean is what makes that possible without the browser
+        having to know which stage names map to which toggle.
+
+        The classification is decided HERE, resolved through _stage_ids_named
+        like every other stage test in this module — which also means an archived
+        stage and a translated stage name both still match.
         """
         Project = self.env['project.project']
         Task = self.env['project.task']
@@ -786,11 +818,24 @@ class FtProjectDashboard(models.TransientModel):
         # "N/A" instead of a 0% that looks like failure.
         no_delivery = Task._ft_delivery_kpis(Task.browse())
 
+        # stage id -> toggle group, resolved once rather than per row. One search
+        # per group keeps the name matching inside _stage_ids_named, which is
+        # what handles archived and translated stage names.
+        group_by_stage_id = {}
+        for group, stage_name in PERF_HIDDEN_STAGE_GROUPS.items():
+            for stage_id in self._stage_ids_named((stage_name,)):
+                group_by_stage_id[stage_id] = group
+
         rows = []
         for p in shown:
             stats = stats_by_project.get(p.id) or no_delivery
             rows.append({
                 'project': p.name or '',
+                # Which toggle governs this row, or False for always-visible.
+                # A project with no stage set is never hidden: a falsy stage_id
+                # is not in the map, so unstaged work stays visible rather than
+                # disappearing behind a toggle nobody would think to tick.
+                'hidden_group': group_by_stage_id.get(p.stage_id.id, False),
                 # Show the standard Kanban stage (the status bar on the project
                 # form); the custom 'status' selection is unset on most projects.
                 'status': p.stage_id.name or '',
