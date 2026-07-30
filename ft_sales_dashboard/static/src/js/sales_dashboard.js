@@ -15,6 +15,10 @@ import { MonthBoard } from "./month_board";
 // Each month board and the domain a click on one of its months should open.
 // Keeps the drill-down in step with what the server counted for that board.
 const BOARD_DOMAINS = {
+    pipeline_last_months: {
+        name: "Pipeline",
+        domain: [["active", "=", true], ["stage_id.is_won", "=", false]],
+    },
     pipeline_next_months: {
         name: "Pipeline",
         domain: [["active", "=", true], ["stage_id.is_won", "=", false]],
@@ -29,6 +33,21 @@ const BOARD_DOMAINS = {
         activeTest: false,
     },
 };
+
+// The breakdown card shows one of these at a time, chosen from a dropdown.
+// Stage-wise and executive-wise answer the same question ("where is the
+// revenue?") along different axes, so they share a slot rather than both
+// occupying screen height permanently.
+const BREAKDOWNS = [
+    { id: "stage", label: "Stage-wise" },
+    { id: "executive", label: "Executive-wise" },
+];
+
+// The pipeline board looks either backwards or forwards over six months.
+const PIPELINE_VIEWS = [
+    { id: "last", label: "Last 6 Months", key: "pipeline_last_months" },
+    { id: "next", label: "Next 6 Months", key: "pipeline_next_months" },
+];
 
 // Columns for the executive-wise report. Declared once here rather than inline
 // in the template so the table stays a data-driven component.
@@ -87,6 +106,8 @@ export class SalesDashboard extends Component {
         this.action = useService("action");
         this.periods = PERIODS;
         this.execColumns = EXEC_COLUMNS;
+        this.breakdowns = BREAKDOWNS;
+        this.pipelineViews = PIPELINE_VIEWS;
 
         // props.state covers the breadcrumb; sessionStorage covers browser Back
         // (which rebuilds the action fresh). Either way we land on the period
@@ -96,6 +117,11 @@ export class SalesDashboard extends Component {
             period: restored?.period || "month",
             dateFrom: restored?.dateFrom ?? null,
             dateTo: restored?.dateTo ?? null,
+            // Which axis the breakdown card shows, and which way the pipeline
+            // board looks. Restored with the filter so returning via the
+            // breadcrumb lands on the same view the user left.
+            breakdown: restored?.breakdown || "stage",
+            pipelineView: restored?.pipelineView || "last",
             data: null,
             loading: true,
         });
@@ -172,7 +198,35 @@ export class SalesDashboard extends Component {
             period: this.state.period,
             dateFrom: this.state.dateFrom,
             dateTo: this.state.dateTo,
+            breakdown: this.state.breakdown,
+            pipelineView: this.state.pipelineView,
         };
+    }
+
+    // View switches are presentation only — the payload already carries every
+    // breakdown and both pipeline windows, so there is nothing to re-fetch.
+    setBreakdown(id) {
+        this.state.breakdown = id;
+        writeStoredFilter(this._filter());
+    }
+
+    setPipelineView(id) {
+        this.state.pipelineView = id;
+        writeStoredFilter(this._filter());
+    }
+
+    get pipelineBoardKey() {
+        const view = PIPELINE_VIEWS.find((v) => v.id === this.state.pipelineView);
+        return (view || PIPELINE_VIEWS[0]).key;
+    }
+
+    get pipelineBoard() {
+        return this.boards[this.pipelineBoardKey] || {};
+    }
+
+    get pipelineTitle() {
+        const view = PIPELINE_VIEWS.find((v) => v.id === this.state.pipelineView);
+        return `Opportunity Pipeline — ${(view || PIPELINE_VIEWS[0]).label}`;
     }
 
     async loadData() {

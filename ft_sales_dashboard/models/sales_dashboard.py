@@ -1,17 +1,14 @@
 """Data provider for the Sales dashboard.
 
-PERIOD FIELDS
-=============
-The dashboard mixes two different questions, so it deliberately filters on two
-different date fields rather than one:
+PERIOD FIELD
+============
+Every metric is dated by ``date_deadline`` (Expected Closing) — see
+PERIOD_FIELD below for why, and for the one-line switch back to ``date_closed``
+for won/lost once the underlying data supports it.
 
-* "What is in the pipeline for this period?" -> ``date_deadline`` (Expected
-  Closing). Pipeline Value, the funnel, stage-wise revenue and the
-  executive-wise reports all use it. Creation date answers a different
-  question ("what did we take in") and made every pipeline figure wrong.
-* "What did we actually close in this period?" -> ``date_closed``. Odoo stamps
-  it when a lead reaches probability 100 (won) or is archived (lost), so it is
-  the only field that dates the outcome rather than the origin.
+Creation date is used nowhere. An opportunity created in one month is often
+expected to close in another, so dating anything by ``create_date`` reported
+the wrong month; that was the original defect.
 
 WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 =============================================================
@@ -32,6 +29,22 @@ PALETTE = [
     '#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#EF4444',
     '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#3B82F6',
 ]
+
+# THE period field for every metric on this dashboard.
+#
+# An opportunity created in one month is often expected to close in another, so
+# filtering on create_date reported the wrong month for everything — that was
+# the original defect. Expected Closing is the business date, so it is used
+# uniformly: pipeline, funnel, executive reports, won and lost alike.
+#
+# Odoo's own CRM reports date outcomes by ``date_closed`` instead. That is left
+# here as a one-line switch rather than removed: in THIS database only 21 of 53
+# won opportunities carry a date_closed (32 were imported straight into a Won
+# stage, which never stamps it), against 47 that carry an Expected Closing.
+# Once that data is repaired, flipping OUTCOME_FIELD to 'date_closed' restores
+# strict "when did it actually close" semantics for won/lost.
+PERIOD_FIELD = 'date_deadline'
+OUTCOME_FIELD = 'date_deadline'
 
 MONTHS_AHEAD = 6
 MONTHS_BACK = 6
@@ -92,10 +105,9 @@ class FtSalesDashboard(models.TransientModel):
         ``_chart_pipeline_next_months`` / ``_chart_by_month``).
         """
         opp = self._opp_domain()
-        # Pipeline questions are asked against Expected Closing...
-        by_deadline = opp + self._date_domain('date_deadline', date_from, date_to)
-        # ...outcome questions against the date the outcome was recorded.
-        by_closed = opp + self._date_domain('date_closed', date_from, date_to)
+        # One field for everything — see PERIOD_FIELD.
+        period = opp + self._date_domain(PERIOD_FIELD, date_from, date_to)
+        outcome = opp + self._date_domain(OUTCOME_FIELD, date_from, date_to)
 
         today = fields.Date.context_today(self)
         ahead = self._month_buckets(today, MONTHS_AHEAD)
@@ -103,46 +115,53 @@ class FtSalesDashboard(models.TransientModel):
             today.replace(day=1) - relativedelta(months=MONTHS_BACK - 1), MONTHS_BACK)
 
         return {
-            'kpis': self._kpis(by_deadline, by_closed),
+            'kpis': self._kpis(period, outcome),
             'charts': {
                 # The stage picture is the funnel only. A separate
                 # "revenue by stage" bar chart showed the same figures a second
                 # time, so it was removed rather than kept as a duplicate.
-                'funnel': self._chart_funnel(by_deadline),
+                'funnel': self._chart_funnel(period),
             },
             'boards': {
+                # Trailing pipeline is what the spec asks for; the forward view
+                # is kept alongside it because a pipeline that only looks
+                # backwards cannot answer "what is coming". The front end
+                # toggles between the two on one card.
+                'pipeline_last_months': self._month_board(
+                    opp + self._open_domain(), PERIOD_FIELD, back, '#4F46E5'),
                 'pipeline_next_months': self._month_board(
-                    opp + self._open_domain(), 'date_deadline', ahead, '#06B6D4'),
+                    opp + self._open_domain(), PERIOD_FIELD, ahead, '#06B6D4'),
                 'closed_last_months': self._month_board(
-                    opp + self._won_domain(), 'date_closed', back, '#10B981'),
+                    opp + self._won_domain(), OUTCOME_FIELD, back, '#10B981'),
                 'lost_last_months': self._month_board(
-                    opp + self._lost_domain(), 'date_closed', back, '#EF4444',
+                    opp + self._lost_domain(), OUTCOME_FIELD, back, '#EF4444',
                     active_test=False),
             },
-            'executives': self._executive_report(by_deadline),
+            'executives': self._executive_report(period),
         }
 
     # ------------------------------------------------------------------
     # KPIs
     # ------------------------------------------------------------------
-    def _kpis(self, by_deadline, by_closed):
+    def _kpis(self, period, outcome):
         Lead = self.env['crm.lead']
 
-        generated = Lead.search_count(by_deadline)
+        generated = Lead.search_count(period)
 
         # Pipeline Value: Expected Revenue of everything still open whose
         # Expected Closing falls in the period. Previously this summed by
         # creation date, which is why it never moved with the filter.
-        pipeline_value = self._sum_revenue(by_deadline + self._open_domain())
+        pipeline_value = self._sum_revenue(period + self._open_domain())
 
-        # Sales Closed: dated by date_closed, so Month/Quarter/Year actually
-        # change it. Previously it counted leads CREATED in the period that
-        # happen to be won now — static with respect to closing activity.
-        won_domain = by_closed + self._won_domain()
+        # Sales Closed / Lost: same period field as everything else, so the
+        # conversion ratio below divides two numbers drawn from one population.
+        # Dating these by create_date made them static; dating them by
+        # date_closed made them disagree with the rest of the dashboard.
+        won_domain = outcome + self._won_domain()
         sales_closed = Lead.search_count(won_domain)
         sales_closed_value = self._sum_closed_amount(won_domain)
 
-        lost = Lead.search_count(by_closed + self._lost_domain())
+        lost = Lead.search_count(outcome + self._lost_domain())
 
         # Conversion over the same population the two numbers come from.
         conversion = round(sales_closed / generated * 100, 1) if generated else 0.0
