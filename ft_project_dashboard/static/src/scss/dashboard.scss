@@ -195,6 +195,16 @@
         @media (max-width: 560px)  { grid-template-columns: 1fr; }
     }
 
+    // A 6-card row: the By Role split while unclassified hours still exist.
+    // 6 divides cleanly, so every step down leaves full rows — 3+3, then 2+2+2.
+    .ftpd_kpi_grid--six {
+        grid-template-columns: repeat(6, 1fr);
+
+        @media (max-width: 1500px) { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 1100px) { grid-template-columns: repeat(2, 1fr); }
+        @media (max-width: 560px)  { grid-template-columns: 1fr; }
+    }
+
     // Row label inside a section that stacks several KPI grids. Hours
     // Utilisation needs these: its three rows are measured off different
     // records over different date anchors, so a reader has to be able to see
@@ -423,6 +433,20 @@
 
         .ftpd_ss_ico { font-size: 12px; }
         .ftpd_ss_caret { font-size: 12px; pointer-events: none; }
+
+        // Caption in place of the magnifier, when the picker is labelled. Same
+        // treatment as .ftpd_filter_name so a labelled search box and a labelled
+        // dropdown read as the same kind of control.
+        .ftpd_ss_name {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--ftpd-muted);
+            white-space: nowrap;
+            padding-right: 6px;
+            border-right: 1px solid var(--ftpd-border);
+        }
 
         .ftpd_ss_input {
             border: 0;

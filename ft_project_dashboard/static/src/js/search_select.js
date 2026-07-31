@@ -23,6 +23,10 @@ const MAX_VISIBLE = 50;
  *  - placeholder : input placeholder
  *  - onSelect    : function(idOrEmptyString)
  *  - title       : optional tooltip for the control
+ *  - label       : optional caption shown inside the box, e.g. "RESOURCE". Worth
+ *                  setting wherever more than one picker sits side by side: once
+ *                  a value is chosen the boxes look alike, and the caption is
+ *                  what says which is which.
  */
 export class SearchSelect extends Component {
     static template = "ft_project_dashboard.SearchSelect";
@@ -33,6 +37,7 @@ export class SearchSelect extends Component {
         placeholder: { type: String, optional: true },
         onSelect: { type: Function },
         title: { type: String, optional: true },
+        label: { type: String, optional: true },
     };
 
     setup() {

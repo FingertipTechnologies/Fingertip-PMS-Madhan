@@ -21,12 +21,8 @@ const PERIODS = [
 
 const DEFAULT_PERIOD = "month";
 
-// Sentinel values either people picker can hold instead of an hr.employee id.
-// Must match FILTER_NONE / FILTER_UNASSIGNED in models/project_dashboard.py.
-//
-// NONE means "nobody from this side": PM + Developer=None gives the PM's own
-// records without her team, PM=None + Developer gives that developer's alone.
-const FILTER_NONE = "none";
+// Sentinel the person picker can hold instead of an hr.employee id.
+// Must match FILTER_UNASSIGNED in models/project_dashboard.py.
 const FILTER_UNASSIGNED = "unassigned";
 
 // The three row filters on Project Performance, in render order. `group` matches
@@ -119,10 +115,10 @@ export class ProjectDashboard extends Component {
             stageId: "",
             data: null,
             loading: true,
-            // Dropdown contents for the header pickers and the section
-            // PM/Developer pickers. Fetched once — they do not depend on the
-            // range or the scope.
-            filterOptions: { projects: [], stages: [], project_managers: [], developers: [] },
+            // Dropdown contents for the header pickers and the one person
+            // picker each section carries. Fetched once — they do not depend on
+            // the range or the scope.
+            filterOptions: { projects: [], stages: [], resources: [] },
             // Table text searches. These stay per-table: they are free text
             // over rows already on screen, not a question for the server.
             projectSearch: "",
@@ -135,20 +131,18 @@ export class ProjectDashboard extends Component {
             // independently. Keyed by the `hidden_group` the server stamps on
             // each row, so adding a fourth group needs no change here.
             projectShowStage: { closed: false, amc: false, general: false },
-            // The two filtered sections keep PM + Developer and nothing else.
+            // The two filtered sections keep one person picker and nothing else.
             // Each holds an override: the figures the server recomputed for its
-            // own two dropdowns, or null to read the header-scoped payload
-            // exactly as it arrived.
+            // own picker, or null to read the header-scoped payload exactly as
+            // it arrived.
             //
             // Hours Utilisation absorbed the old Task Hours Summary section, so
-            // its override now merges two server payloads behind one pair of
-            // dropdowns — see reloadHoursUtilisation.
-            hoursPmId: "",
-            hoursDevId: "",
+            // its override merges two server payloads behind the one picker —
+            // see reloadHoursUtilisation.
+            hoursPersonId: "",
             hoursOverride: null,
             hoursLoading: false,
-            tasksPmId: "",
-            tasksDevId: "",
+            tasksPersonId: "",
             tasksOverride: null,
             tasksLoading: false,
         });
@@ -604,59 +598,47 @@ export class ProjectDashboard extends Component {
         return this._hasFilter("tasks");
     }
 
-    // Both sections share a shape — PM + Developer — so the plumbing is
-    // written once and keyed by prefix rather than twice. Date, Project
-    // and Status are deliberately absent: they belong to the header now and
-    // reach the server through _filterPayload instead.
+    // Both sections carry one picker each, so the plumbing is written once and
+    // keyed by prefix. Date, Project and Status are deliberately absent: they
+    // belong to the header and reach the server through _filterPayload instead.
     _filterFields(prefix) {
-        return [`${prefix}PmId`, `${prefix}DevId`];
+        return [`${prefix}PersonId`];
     }
 
     _hasFilter(prefix) {
         return this._filterFields(prefix).some((f) => !!this.state[f]);
     }
 
-    /** The header's range and scope, narrowed by one section's two dropdowns. */
+    /** The header's range and scope, narrowed by one section's picker. */
     _filterPayload(prefix) {
         return {
             date_from: this.state.dateFrom,
             date_to: this.state.dateTo,
             project_id: this.state.projectId || false,
             stage_id: this.state.stageId || false,
-            pm_id: this.state[`${prefix}PmId`],
-            dev_id: this.state[`${prefix}DevId`],
+            person_id: this.state[`${prefix}PersonId`],
         };
     }
 
-    /** Developer = None resolves to "the selected PM's own records", so it means
-     *  nothing without a real PM chosen — the server deliberately matches nothing
-     *  in that state rather than reporting the whole team as if it were hers.
-     *  Clearing the PM therefore drops the Developer pick back to "All", so the
-     *  section never sits on a silent zero. */
-    _syncPmDependentDev(prefix) {
-        if (
-            !this.hasRealPm(prefix) &&
-            this.state[`${prefix}DevId`] === FILTER_NONE
-        ) {
-            this.state[`${prefix}DevId`] = "";
-        }
+    /** Every active employee, with Unassigned offered first.
+     *
+     *  One list rather than the old separate PM and Developer lists: which
+     *  dropdown you reached for no longer changes what the answer means, so
+     *  there is no reason to split the people up. The job title is in the label
+     *  because it is no longer implied by the picker you used. */
+    get resourceOptions() {
+        return [{ id: FILTER_UNASSIGNED, name: "Unassigned" }].concat(
+            this.state.filterOptions.resources || []
+        );
     }
 
-    /** True when the PM picker holds an actual person, not blank or None. */
-    hasRealPm(prefix) {
-        const v = this.state[`${prefix}PmId`];
-        return !!v && v !== FILTER_NONE;
-    }
-
-    onHoursFilter(field, ev) {
-        this.state[field] = ev.target.value || "";
-        this._syncPmDependentDev("hours");
+    onHoursFilter(value) {
+        this.state.hoursPersonId = value || "";
         this.reloadHoursUtilisation();
     }
 
-    onTasksFilter(field, ev) {
-        this.state[field] = ev.target.value || "";
-        this._syncPmDependentDev("tasks");
+    onTasksFilter(value) {
+        this.state.tasksPersonId = value || "";
         this.reloadTasksSummary();
     }
 
