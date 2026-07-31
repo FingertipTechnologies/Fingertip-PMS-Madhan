@@ -10,6 +10,11 @@ PERIOD_FIELD / OUTCOME_FIELD below:
   ``date_deadline`` (Expected Closing). The Opportunities card, Pipeline Value,
   the pipeline month boards, the funnel, the Conversion denominator, and the
   Opportunities / Expected Revenue columns of the executive-wise report.
+  Opportunities and Pipeline Value cover one population — every stage, live
+  records only (see ``_generated_domain``) — so one is the count and the other
+  the sum of the same set, and both equal the matching group in the Pipeline
+  list. Note this means Pipeline Value includes won and lost deals and is
+  therefore NOT a forecast of money still to come.
 * "What did we actually close in this period?" -> ``date_closed`` (Closed
   Date). Sales Closed, Sales Closed Value, Opportunities Lost, the Closed and
   Lost month boards, and the Sales Closed / Lost columns of the executive
@@ -193,6 +198,21 @@ class FtSalesDashboard(models.TransientModel):
     def _opp_domain(self):
         return [('type', '=', 'opportunity')]
 
+    def _generated_domain(self):
+        """The population the Opportunities and Pipeline Value cards describe.
+
+        EVERY stage — Cold through Won and Lost — but live records only.
+        Archived opportunities are deliberately left out here: they are counted
+        by Opportunities Lost instead, and including them made the two cards
+        impossible to reconcile against the Pipeline list, which hides archived
+        records. With this, both cards equal that list's group for the period
+        exactly.
+
+        Note the two cards therefore cover the SAME set: Opportunities is its
+        count and Pipeline Value its sum, so they can never disagree.
+        """
+        return [('active', '=', True)]
+
     def _lost_stage_ids(self):
         """Stages that mean "lost", matched by name.
 
@@ -252,7 +272,8 @@ class FtSalesDashboard(models.TransientModel):
         # Three fields, three questions — see GENERATED_FIELD / PERIOD_FIELD /
         # OUTCOME_FIELD. What we opened, what is forecast to close, what did
         # close.
-        generated = opp + self._date_domain(GENERATED_FIELD, date_from, date_to)
+        generated = (opp + self._generated_domain()
+                     + self._date_domain(GENERATED_FIELD, date_from, date_to))
         period = opp + self._date_domain(PERIOD_FIELD, date_from, date_to)
         outcome = opp + self._date_domain(OUTCOME_FIELD, date_from, date_to)
 
@@ -272,7 +293,7 @@ class FtSalesDashboard(models.TransientModel):
         lost_opps = opp + self._lost_domain()
 
         return {
-            'kpis': self._kpis(generated, period, outcome),
+            'kpis': self._kpis(generated, outcome),
             # The bounds every figure was actually measured between, per date
             # field. The client filters its drill-downs on these rather than
             # rebuilding them, so a card and the list it opens cannot disagree —
@@ -323,22 +344,24 @@ class FtSalesDashboard(models.TransientModel):
     # ------------------------------------------------------------------
     # KPIs
     # ------------------------------------------------------------------
-    def _kpis(self, generated, period, outcome):
+    def _kpis(self, generated, outcome):
         Lead = self._leads()
 
-        # Opportunities Generated: EVERY status — New, Discussion, Demo,
-        # Negotiation, Won, Lost, Closed and any other configured stage —
-        # CREATED in the period. Archived (lost) records used to drop out here
-        # but not from the Lost card, which is what made the totals
-        # irreconcilable.
+        # Opportunities: EVERY stage — New, Discussion, Demo, Negotiation, Won,
+        # Lost and any other configured stage — whose Expected Closing falls in
+        # the period. Live records only; see _generated_domain().
         generated_count = Lead.search_count(generated)
 
-        # Pipeline Value: Expected Revenue of everything still open whose
-        # Expected Closing falls in the period. The one figure that stays on
-        # Expected Closing, because "what is in the pipeline for this period" is
-        # a question about the forecast — deliberately a different population
-        # from the card beside it, so the two counts are not meant to tally.
-        pipeline_value = self._sum_revenue(period + self._open_domain())
+        # Pipeline Value: Expected Revenue of the SAME records the Opportunities
+        # card counts — every stage, Won and Lost included, live records only.
+        #
+        # It previously summed open deals only (not Won, not Lost), which is the
+        # stricter reading of "pipeline" and the right basis for a forecast. It
+        # was widened deliberately so the two cards describe one population, a
+        # count and a sum, and can be checked against the Pipeline list in one
+        # step. The consequence is that this figure includes deals already won
+        # and deals already lost, so it is NOT a forecast of money still to come.
+        pipeline_value = self._sum_revenue(generated)
 
         # Sales Closed / Lost: dated by date_closed (OUTCOME_FIELD), because
         # "what did we close this period" is a question about when the deal

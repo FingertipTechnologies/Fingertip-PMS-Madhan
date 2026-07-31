@@ -359,6 +359,15 @@ export class SalesDashboard extends Component {
         return this._fieldDomain(this.state.data?.generated_field || "date_deadline");
     }
 
+    // The population BOTH left-hand cards describe: every stage, live records
+    // only, dated by the generated field. Mirrors _generated_domain() on the
+    // server. active=true is explicit here rather than left to the list view's
+    // default, because _openLeads passes active_test:false — without it the
+    // drill-down would list the archived deals the cards deliberately exclude.
+    _generatedPopulation() {
+        return [["active", "=", true], ...this._generatedDomain()];
+    }
+
     /** Stage ids that mean "lost", as resolved by the server for this payload. */
     get lostStageIds() {
         return this.state.data?.lost_stage_ids || [];
@@ -395,19 +404,17 @@ export class SalesDashboard extends Component {
 
     openOpportunities() {
         this._openLeads(
-            [["type", "=", "opportunity"], ...this._generatedDomain()],
+            [["type", "=", "opportunity"], ...this._generatedPopulation()],
             "Opportunities"
         );
     }
 
+    // Pipeline Value sums the same records the Opportunities card counts, so its
+    // drill-down opens the same list — only the title differs.
     openPipeline() {
         this._openLeads(
-            [
-                ["type", "=", "opportunity"],
-                ...this._statusDomain("open"),
-                ...this._deadlineDomain(),
-            ],
-            "Open Pipeline"
+            [["type", "=", "opportunity"], ...this._generatedPopulation()],
+            "Pipeline Value"
         );
     }
 
@@ -436,33 +443,34 @@ export class SalesDashboard extends Component {
     }
 
     // Click a funnel band -> open exactly the opportunities it counts. The
-    // trailing "Lost" band is every archived record in the period, whatever
-    // stage it stopped in, so it filters on active rather than on a stage.
+    // trailing "Lost" band holds the live records sitting in a Lost stage; the
+    // bands are drawn from the same population as the Opportunities card, which
+    // excludes archived records, so the band filters on stage, not on active.
     openStage(stage) {
         const isLost = stage.stageId === "lost";
         const domain = [
             ["type", "=", "opportunity"],
             ...(isLost
-                ? this._statusDomain("lost")
-                : [["active", "=", true], ["stage_id", "=", stage.stageId || false]]),
-            ...this._generatedDomain(),
+                ? [["stage_id", "in", this.lostStageIds]]
+                : [["stage_id", "=", stage.stageId || false]]),
+            ...this._generatedPopulation(),
         ];
         this._openLeads(domain, stage.label || "Opportunities");
     }
 
-    // Click an executive row -> their opportunities for the same period, on the
-    // same date field the Opportunities column was counted on.
+    // Click an executive row -> their opportunities for the same period, over
+    // the same population the Opportunities column was counted on.
     openExecutive(row) {
         if (row.isTotal) {
-            // The totals row equals the Opportunities Generated card, so it
-            // opens the same list the card does.
+            // The totals row equals the Opportunities card, so it opens the
+            // same list the card does.
             return this.openOpportunities();
         }
         this._openLeads(
             [
                 ["type", "=", "opportunity"],
                 ["user_id", "=", row.user_id || false],
-                ...this._generatedDomain(),
+                ...this._generatedPopulation(),
             ],
             row.name || "Opportunities"
         );
