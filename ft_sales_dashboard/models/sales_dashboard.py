@@ -6,12 +6,10 @@ The dashboard mixes three different questions, so it deliberately filters on
 three different date fields rather than one — see GENERATED_FIELD /
 PERIOD_FIELD / OUTCOME_FIELD below:
 
-* "How many opportunities did we open in this period?" -> ``create_date``
-  (Creation Date). Opportunities Generated, the funnel, the Conversion
-  denominator, and the Opportunities / Expected Revenue columns of the
-  executive-wise report all use it.
-* "What is in the pipeline for this period?" -> ``date_deadline`` (Expected
-  Closing). Pipeline Value and the pipeline month boards use it.
+* "What is due to close in this period, and what is it worth?" ->
+  ``date_deadline`` (Expected Closing). The Opportunities card, Pipeline Value,
+  the pipeline month boards, the funnel, the Conversion denominator, and the
+  Opportunities / Expected Revenue columns of the executive-wise report.
 * "What did we actually close in this period?" -> ``date_closed`` (Closed
   Date). Sales Closed, Sales Closed Value, Opportunities Lost, the Closed and
   Lost month boards, and the Sales Closed / Lost columns of the executive
@@ -77,17 +75,22 @@ PALETTE = [
     '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#3B82F6',
 ]
 
-# "Opportunities Generated": dated by when the opportunity was CREATED.
+# The "Opportunities" card: dated by Expected Closing, the same field as Pipeline
+# Value beside it. The two cards therefore describe one population from two
+# angles — how many deals are due to close in the period, and what the open ones
+# among them are worth.
 #
-# This is the count of what the team generated in the period, so it answers
-# "how many did we open", not "how many are due to close" — the plain reading of
-# the card's own label, and the reason a batch of deals entered today all land in
-# today's figure whatever their forecast dates say.
+# It was briefly dated by create_date ("how many did we open in the period"),
+# which is the other defensible reading of the old label. Expected Closing was
+# chosen instead so the card, Pipeline Value and the funnel all answer the same
+# question; the card was renamed from "Opportunities Generated" to
+# "Opportunities" to match, since it no longer counts what was generated.
 #
 # The funnel, the Executive-wise Opportunities and Expected Revenue columns and
 # the Conversion denominator all measure this same population, so the breakdowns
-# and the totals row keep reconciling with the card exactly.
-GENERATED_FIELD = 'create_date'
+# and the totals row keep reconciling with the card exactly. Point this at
+# 'create_date' and all of them move together.
+GENERATED_FIELD = 'date_deadline'
 
 # Pipeline Value and the pipeline month boards: dated by when the deal is
 # EXPECTED to close, because "what is in the pipeline for this period" is a
@@ -283,6 +286,11 @@ class FtSalesDashboard(models.TransientModel):
             # _lost_domain() / _open_domain() exactly rather than hard-coding
             # "active = false" and disagreeing with the cards.
             'lost_stage_ids': self._lost_stage_ids(),
+            # Which field the Opportunities card, the funnel and the executive
+            # table were measured on. Sent rather than assumed by the client so
+            # that changing GENERATED_FIELD moves the cards and their
+            # drill-downs together instead of leaving the two out of step.
+            'generated_field': GENERATED_FIELD,
             'charts': {
                 # The stage picture is the funnel only. A separate
                 # "revenue by stage" bar chart showed the same figures a second

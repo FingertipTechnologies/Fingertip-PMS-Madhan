@@ -207,9 +207,9 @@
 
             <div t-else="" class="btsd_content">
                 <div class="btsd_kpi_grid">
-                    <KpiCard title="'Opportunities Generated'" value="kpis.opportunities"
+                    <KpiCard title="'Opportunities'" value="kpis.opportunities"
                              icon="'fa-bullseye'" color="'#4F46E5'"
-                             tooltip="'Opportunities in every stage — New, Discussion, Demo, Negotiation, Won, Lost — created in the selected period'"
+                             tooltip="'Opportunities in every stage — New, Discussion, Demo, Negotiation, Won, Lost — whose Expected Closing falls in the selected period'"
                              onClick="() => this.openOpportunities()"/>
                     <KpiCard title="'Pipeline Value'" value="kpis.pipeline_value" prefix="'₹ '"
                              icon="'fa-filter'" color="'#06B6D4'"
@@ -229,7 +229,7 @@
                              onClick="() => this.openLost()"/>
                     <KpiCard title="'Conversion Ratio'" value="kpis.conversion_ratio" suffix="'%'"
                              icon="'fa-percent'" color="'#F59E0B'"
-                             tooltip="'Sales Closed / Opportunities Generated x 100'"/>
+                             tooltip="'Sales Closed / Opportunities x 100'"/>
                 </div>
 
                 <!-- Breakdown: stage-wise or executive-wise, chosen from the

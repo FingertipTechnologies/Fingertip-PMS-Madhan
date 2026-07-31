@@ -351,9 +351,12 @@ export class SalesDashboard extends Component {
         return domain;
     }
 
-    // Opportunities Generated, the funnel and the executive table: Creation Date.
-    _createdDomain() {
-        return this._fieldDomain("create_date");
+    // The Opportunities card, the funnel and the executive table. Which field
+    // that is comes from the payload (GENERATED_FIELD on the server) rather than
+    // being hard-coded here, so the cards and their drill-downs cannot end up
+    // measured on two different dates.
+    _generatedDomain() {
+        return this._fieldDomain(this.state.data?.generated_field || "date_deadline");
     }
 
     /** Stage ids that mean "lost", as resolved by the server for this payload. */
@@ -392,7 +395,7 @@ export class SalesDashboard extends Component {
 
     openOpportunities() {
         this._openLeads(
-            [["type", "=", "opportunity"], ...this._createdDomain()],
+            [["type", "=", "opportunity"], ...this._generatedDomain()],
             "Opportunities"
         );
     }
@@ -442,7 +445,7 @@ export class SalesDashboard extends Component {
             ...(isLost
                 ? this._statusDomain("lost")
                 : [["active", "=", true], ["stage_id", "=", stage.stageId || false]]),
-            ...this._createdDomain(),
+            ...this._generatedDomain(),
         ];
         this._openLeads(domain, stage.label || "Opportunities");
     }
@@ -459,7 +462,7 @@ export class SalesDashboard extends Component {
             [
                 ["type", "=", "opportunity"],
                 ["user_id", "=", row.user_id || false],
-                ...this._createdDomain(),
+                ...this._generatedDomain(),
             ],
             row.name || "Opportunities"
         );
