@@ -35,6 +35,10 @@
                     <attribute name="options">
                         {'no_create': True, 'no_create_edit': True}
                     </attribute>
+                    <!-- Required whenever a project is set, which is what makes
+                         the line a timesheet. Conditional rather than flat, so
+                         an analytic line with no project stays valid. -->
+                    <attribute name="required">project_id</attribute>
                 </xpath>
                 <xpath expr="//field[@name='so_line']" position="attributes">
                     <attribute name="column_invisible">1</attribute>
@@ -93,6 +97,10 @@
                     <attribute name="options">
                         {'no_create': True, 'no_create_edit': True}
                     </attribute>
+                    <!-- Required whenever a project is set, which is what makes
+                         the line a timesheet. Conditional rather than flat, so
+                         an analytic line with no project stays valid. -->
+                    <attribute name="required">project_id</attribute>
                 </xpath>
                 <xpath expr="//field[@name='so_line']" position="attributes">
                     <attribute name="column_invisible">1</attribute>
@@ -120,6 +128,7 @@
                     <attribute name="options">
                         {'no_create': True, 'no_create_edit': True}
                     </attribute>
+                    <attribute name="required">project_id</attribute>
                 </xpath>
             </field>
         </record>

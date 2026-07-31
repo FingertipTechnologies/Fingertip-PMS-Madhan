@@ -560,8 +560,24 @@ class FtProjectDashboard(models.TransientModel):
         date_from, date_to = filters.get('date_from'), filters.get('date_to')
 
         created = scope + self._date_leaves('create_date', date_from, date_to)
-        due = scope + [('date_deadline', '!=', False)] + self._date_leaves(
-            'date_deadline', date_from, date_to)
+        # Due = the deadline has arrived or passed AND the task is not finished,
+        # i.e. work that should already have been delivered and has not been.
+        #
+        # A snapshot of today, deliberately NOT filtered by the header's range,
+        # for the same reason Open Tasks and Open & Overdue are not: something
+        # overdue today is overdue whatever window is being looked at. It used to
+        # count deadlines falling INSIDE the selected range, which answered a
+        # different question entirely — it included work already delivered on
+        # time, and excluded anything overdue from before the range started.
+        #
+        # `<= today 23:59:59` rather than `< now()`, so a task due later today
+        # counts as due. That is the one difference from Open & Overdue beside
+        # it, which stays strictly past its deadline.
+        today = fields.Date.context_today(self)
+        due = Task._ft_open_domain(scope) + [
+            ('date_deadline', '!=', False),
+            ('date_deadline', '<=', str(today) + ' 23:59:59'),
+        ]
 
         # Delivered tasks are fetched once and split here rather than asking for
         # counts and then re-searching for the drill-downs: the list a card

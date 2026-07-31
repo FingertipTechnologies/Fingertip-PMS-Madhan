@@ -86,7 +86,16 @@ class ProjectTask(models.Model):
         # create tasks. Superuser and system administrators bypass the check so
         # data imports, automation and mail-to-task keep working.
         self._check_task_create_permission()
-        return super().create(vals_list)
+        tasks = super().create(vals_list)
+        # Run the required-field checks explicitly. @api.constrains alone is not
+        # enough on create: Odoo validates only the fields PRESENT in the values,
+        # so leaving estimated and date_deadline out entirely skipped both — a
+        # task with no estimate at all sailed through while one explicitly set to
+        # 0 was refused. Both methods still exempt superuser, so imports and
+        # automation are unaffected.
+        tasks._check_estimated_required()
+        tasks._check_deadline_required()
+        return tasks
 
     def write(self, vals):
         # Count reopens: a task leaving a delivered stage for an open one is
@@ -121,6 +130,50 @@ class ProjectTask(models.Model):
                 "You are not allowed to create tasks. Only a Technical Lead, "
                 "Project Manager or Project Coordinator can create tasks."
             ))
+
+    # Estimate and deadline are required on every task from here on. They are
+    # enforced as constraints rather than with `required=True` on the fields,
+    # for two reasons that both matter:
+    #
+    #   estimated is a Float, so it is never NULL — it defaults to 0.0 and
+    #       `required=True` would be satisfied by a zero, enforcing nothing. The
+    #       real rule is "> 0", which only a constraint can express.
+    #   date_deadline would take a NOT NULL column, and 6,936 of the 7,029 active
+    #       tasks have no deadline — the upgrade would simply fail.
+    #
+    # A constraint also limits the blast radius on that legacy data: it fires on
+    # create, and on write only when the field itself is being changed. Editing
+    # an old task's description or moving its stage does not trip it, so the
+    # backlog stays workable while everything new is complete.
+    @api.constrains('estimated')
+    def _check_estimated_required(self):
+        # Superuser only: imports, migrations and scheduled jobs must not be
+        # blocked. A plain administrator IS held to it, like task creation.
+        if self.env.su:
+            return
+        for task in self:
+            if task.estimated <= 0:
+                raise ValidationError(_(
+                    "Estimated time is required.\n\n"
+                    "Task: %s\n\n"
+                    "Enter how long this task is expected to take. Without it "
+                    "the task cannot be counted in Delivery Efficiency, and it "
+                    "lands in the Not Estimated figure on the dashboard."
+                ) % (task.name or ''))
+
+    @api.constrains('date_deadline')
+    def _check_deadline_required(self):
+        if self.env.su:
+            return
+        for task in self:
+            if not task.date_deadline:
+                raise ValidationError(_(
+                    "Deadline is required.\n\n"
+                    "Task: %s\n\n"
+                    "Set the date this task is due. Without it the task can "
+                    "never be judged on time or late — it is excluded from "
+                    "On-Time Delivery and counted as Delivered Without Deadline."
+                ) % (task.name or ''))
 
     @api.constrains('name')
     def _check_task_title_length(self):

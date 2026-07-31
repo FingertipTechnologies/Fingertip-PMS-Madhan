@@ -7,7 +7,11 @@
             <field name="partner_id" position="after">
                 <group>
                     <field name="task_type"/>
-                    <field name="estimated" widget="float_time"/>
+                    <!-- Required: a task with no estimate cannot be measured by
+                         Delivery Efficiency and lands in Not Estimated. The
+                         server constraint is the real enforcement; this is so
+                         the field is marked before the save rather than after. -->
+                    <field name="estimated" widget="float_time" required="1"/>
                     <field name="actual"/>
                     <field name="module_id" required="True"/>
                     <!-- Both hidden until this task has actually been reopened,
@@ -19,6 +23,13 @@
                            invisible="ft_reopen_count == 0"/>
                 </group>
             </field>
+            <!-- Deadline is a core field, so it is marked required here rather
+                 than redeclared. Without one a task can never be judged on time
+                 or late: it is excluded from On-Time Delivery and counted as
+                 Delivered Without Deadline. -->
+            <xpath expr="//field[@name='date_deadline']" position="attributes">
+                <attribute name="required">1</attribute>
+            </xpath>
         </field>
     </record>
  
@@ -30,6 +41,11 @@
         <field name="arch" type="xml">
             <field name="user_ids" position="before">
                 <field name="module_id" required="True"/>
+                <!-- Both are required by a server constraint, so quick-create
+                     has to offer them or every quick-created task would be
+                     rejected on save with no way to satisfy it from here. -->
+                <field name="estimated" widget="float_time" required="1"/>
+                <field name="date_deadline" required="1"/>
             </field>
         </field>
     </record>
