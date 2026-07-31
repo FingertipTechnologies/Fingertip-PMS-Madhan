@@ -21,10 +21,13 @@ const PERIODS = [
 
 const DEFAULT_PERIOD = "month";
 
-// Sentinel values the Developer picker can hold instead of an hr.employee id.
-// Must match DEV_FILTER_UNASSIGNED / DEV_FILTER_PM in models/project_dashboard.py.
-const DEV_FILTER_UNASSIGNED = "none";
-const DEV_FILTER_PM = "pm";
+// Sentinel values either people picker can hold instead of an hr.employee id.
+// Must match FILTER_NONE / FILTER_UNASSIGNED in models/project_dashboard.py.
+//
+// NONE means "nobody from this side": PM + Developer=None gives the PM's own
+// records without her team, PM=None + Developer gives that developer's alone.
+const FILTER_NONE = "none";
+const FILTER_UNASSIGNED = "unassigned";
 
 // The three row filters on Project Performance, in render order. `group` matches
 // the `hidden_group` the server stamps on each row, so which stage names belong
@@ -625,22 +628,24 @@ export class ProjectDashboard extends Component {
         };
     }
 
-    /** "Only this PM" has no meaning without a PM selected, and the server
-     *  deliberately matches nothing in that state rather than reporting the whole
-     *  team as if it were hers. Clearing the PM therefore drops the Developer
-     *  pick back to "All", so the section never sits on a silent zero. */
+    /** Developer = None resolves to "the selected PM's own records", so it means
+     *  nothing without a real PM chosen — the server deliberately matches nothing
+     *  in that state rather than reporting the whole team as if it were hers.
+     *  Clearing the PM therefore drops the Developer pick back to "All", so the
+     *  section never sits on a silent zero. */
     _syncPmDependentDev(prefix) {
         if (
-            !this.state[`${prefix}PmId`] &&
-            this.state[`${prefix}DevId`] === DEV_FILTER_PM
+            !this.hasRealPm(prefix) &&
+            this.state[`${prefix}DevId`] === FILTER_NONE
         ) {
             this.state[`${prefix}DevId`] = "";
         }
     }
 
-    /** True while "Only this PM" is worth offering, i.e. a PM is selected. */
-    hasPmSelected(prefix) {
-        return !!this.state[`${prefix}PmId`];
+    /** True when the PM picker holds an actual person, not blank or None. */
+    hasRealPm(prefix) {
+        const v = this.state[`${prefix}PmId`];
+        return !!v && v !== FILTER_NONE;
     }
 
     onHoursFilter(field, ev) {
