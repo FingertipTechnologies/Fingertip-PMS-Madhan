@@ -8,6 +8,7 @@ import { loadJS } from "@web/core/assets";
 import { KpiCard } from "./kpi_card";
 import { ChartCard } from "./chart_card";
 import { DataTable } from "./data_table";
+import { SearchSelect } from "./search_select";
 
 const PERIODS = [
     { id: "today", label: "Today" },
@@ -20,10 +21,35 @@ const PERIODS = [
 
 const DEFAULT_PERIOD = "month";
 
+// Sentinel values the Developer picker can hold instead of an hr.employee id.
+// Must match DEV_FILTER_UNASSIGNED / DEV_FILTER_PM in models/project_dashboard.py.
+const DEV_FILTER_UNASSIGNED = "none";
+const DEV_FILTER_PM = "pm";
+
 // The three row filters on Project Performance, in render order. `group` matches
 // the `hidden_group` the server stamps on each row, so which stage names belong
 // to which toggle is decided server-side and never duplicated here — this list
 // only supplies the labels.
+// Full forms for the four abbreviated delivery columns, shown on hover. Defined
+// once and spread into both Project Performance and Resource Performance, which
+// carry the same four measures — one per project, one per person — so the two
+// tables can never explain them differently.
+const DELIVERY_COL_HELP = {
+    de: "DE — Delivery Efficiency. Estimated ÷ Actual hours, as a percentage. "
+        + "Target 90–110%: under 90% means the work took materially longer than "
+        + "estimated, over 110% means the estimate was padded. Only counts tasks "
+        + "carrying both an estimate and logged time.",
+    otd: "OTD — On-Time Delivery. Delivered on time ÷ delivered with a deadline, "
+        + "as a percentage. Target 95% or above. Tasks delivered without a "
+        + "deadline cannot be judged and are excluded (see DWD).",
+    rwr: "RWR — Rework Rate. Reopened ÷ delivered, as a percentage. Target 10% "
+        + "or below. A task counts as reopened each time it is moved back out of "
+        + "a completed stage, counted from when this feature was installed.",
+    dwd: "DWD — Delivered Without Deadline. Delivered tasks that had no deadline "
+        + "set, so OTD could not judge them. A high number means the OTD "
+        + "percentage beside it rests on only part of the work.",
+};
+
 const PROJECT_STAGE_TOGGLES = [
     { group: "closed", label: "Closed" },
     { group: "amc", label: "AMC" },
@@ -70,7 +96,7 @@ function fmt(date) {
 
 export class ProjectDashboard extends Component {
     static template = "ft_project_dashboard.ProjectDashboard";
-    static components = { KpiCard, ChartCard, DataTable };
+    static components = { KpiCard, ChartCard, DataTable, SearchSelect };
     static props = ["*"];
 
     setup() {
@@ -249,7 +275,13 @@ export class ProjectDashboard extends Component {
     }
 
     async onScopeChange(field, ev) {
-        this.state[field] = ev.target.value || "";
+        await this.onScopePick(field, ev.target.value);
+    }
+
+    /** Same as onScopeChange but taking the value directly, for SearchSelect,
+     *  which hands back an id rather than a DOM event. */
+    async onScopePick(field, value) {
+        this.state[field] = value || "";
         this._persistScope();
         await this.loadData();
     }
@@ -408,11 +440,15 @@ export class ProjectDashboard extends Component {
             { key: "end_date", label: "End Date", date: true },
             { key: "estimated", label: "Estimated Hrs", numeric: true },
             { key: "actual", label: "Actual Hrs", numeric: true },
-            { key: "delivered", label: "Delivered", numeric: true },
-            { key: "de_rate", label: "DE (%)", numeric: true },
-            { key: "otd_rate", label: "OTD (%)", numeric: true },
-            { key: "rwr_rate", label: "RWR (%)", numeric: true },
-            { key: "dwd", label: "DWD", numeric: true },
+            { key: "delivered", label: "Delivered", numeric: true,
+              help: "Tasks this project delivered in the selected period — the "
+                  + "denominator behind DE, OTD and RWR. Shown so a percentage "
+                  + "drawn from two tasks is not read as if it came from two "
+                  + "hundred." },
+            { key: "de_rate", label: "DE (%)", numeric: true, help: DELIVERY_COL_HELP.de },
+            { key: "otd_rate", label: "OTD (%)", numeric: true, help: DELIVERY_COL_HELP.otd },
+            { key: "rwr_rate", label: "RWR (%)", numeric: true, help: DELIVERY_COL_HELP.rwr },
+            { key: "dwd", label: "DWD", numeric: true, help: DELIVERY_COL_HELP.dwd },
         ];
     }
     get resourceColumns() {
@@ -441,16 +477,28 @@ export class ProjectDashboard extends Component {
         return [
             { key: "employee", label: "Resource Name", group: true, cls: "ftpd_res_name" },
             { key: "role", label: "Role", group: true },
-            { key: "delivered", label: "Delivered", numeric: true },
-            { key: "on_time", label: "On Time", numeric: true },
-            { key: "late", label: "Late", numeric: true },
-            { key: "on_time_rate", label: "On-Time %", numeric: true },
-            { key: "no_deadline", label: "No Deadline", numeric: true },
-            { key: "de_rate", label: "DE (%)", numeric: true },
-            { key: "otd_rate", label: "OTD (%)", numeric: true },
-            { key: "rwr_rate", label: "RWR (%)", numeric: true },
-            { key: "dwd", label: "DWD", numeric: true },
-            { key: "overdue_open", label: "Open & Overdue", numeric: true },
+            { key: "delivered", label: "Delivered", numeric: true,
+              help: "Tasks this person delivered in the selected period — the "
+                  + "denominator behind DE, OTD and RWR." },
+            { key: "on_time", label: "On Time", numeric: true,
+              help: "Delivered on or before the deadline, compared by calendar "
+                  + "day in your timezone." },
+            { key: "late", label: "Late", numeric: true,
+              help: "Delivered after the deadline." },
+            { key: "on_time_rate", label: "On-Time %", numeric: true,
+              help: "On Time ÷ (On Time + Late). Carries the same number as "
+                  + "OTD (%); both labels are shown because both were asked for." },
+            { key: "no_deadline", label: "No Deadline", numeric: true,
+              help: "Delivered with no deadline set, so neither On Time nor Late "
+                  + "could apply. Same number as DWD." },
+            { key: "de_rate", label: "DE (%)", numeric: true, help: DELIVERY_COL_HELP.de },
+            { key: "otd_rate", label: "OTD (%)", numeric: true, help: DELIVERY_COL_HELP.otd },
+            { key: "rwr_rate", label: "RWR (%)", numeric: true, help: DELIVERY_COL_HELP.rwr },
+            { key: "dwd", label: "DWD", numeric: true, help: DELIVERY_COL_HELP.dwd },
+            { key: "overdue_open", label: "Open & Overdue", numeric: true,
+              help: "Tasks still open whose deadline has passed. A snapshot of "
+                  + "now, deliberately not filtered by the selected period — it "
+                  + "is the check on OTD, which only counts work that finished." },
         ];
     }
 
@@ -577,13 +625,33 @@ export class ProjectDashboard extends Component {
         };
     }
 
+    /** "Only this PM" has no meaning without a PM selected, and the server
+     *  deliberately matches nothing in that state rather than reporting the whole
+     *  team as if it were hers. Clearing the PM therefore drops the Developer
+     *  pick back to "All", so the section never sits on a silent zero. */
+    _syncPmDependentDev(prefix) {
+        if (
+            !this.state[`${prefix}PmId`] &&
+            this.state[`${prefix}DevId`] === DEV_FILTER_PM
+        ) {
+            this.state[`${prefix}DevId`] = "";
+        }
+    }
+
+    /** True while "Only this PM" is worth offering, i.e. a PM is selected. */
+    hasPmSelected(prefix) {
+        return !!this.state[`${prefix}PmId`];
+    }
+
     onHoursFilter(field, ev) {
         this.state[field] = ev.target.value || "";
+        this._syncPmDependentDev("hours");
         this.reloadHoursUtilisation();
     }
 
     onTasksFilter(field, ev) {
         this.state[field] = ev.target.value || "";
+        this._syncPmDependentDev("tasks");
         this.reloadTasksSummary();
     }
 

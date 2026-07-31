@@ -62,6 +62,18 @@ STANDUP_PROJECT_NAME = 'Fingertip Standup'
 INTERNAL_MEETING_TYPE = 'internal_call'
 EXTERNAL_MEETING_TYPE = 'external_call'
 
+# Sentinel values the Developer picker can carry instead of an hr.employee id.
+# Strings, so they can never collide with a real id.
+#
+#   UNASSIGNED — work with nobody on it. Meaningful for tasks (2,947 active ones
+#       carry no assignee); in Hours Utilisation it correctly reports 0, because
+#       a timesheet line always records who booked it.
+#   PM — the selected project manager's OWN work, stripping out her team's. The
+#       PM picker on its own means "projects this person MANAGES", so it includes
+#       every developer who booked time on them; this narrows it to just her.
+DEV_FILTER_UNASSIGNED = 'none'
+DEV_FILTER_PM = 'pm'
+
 # A consistent, professional palette reused across charts.
 PALETTE = [
     '#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#EF4444',
@@ -111,16 +123,61 @@ class FtProjectDashboard(models.TransientModel):
             domain.append(('date', '<=', date_to))
         return domain + self._scope_leaves_via_project(filters)
 
-    def _role_employee_ids(self):
+    def _worked_employee_ids(self, filters=None, date_from=None, date_to=None):
+        """Ids of employees who booked time on the scoped project(s) in range.
+
+        ``None`` when the header carries no Project/Status scope, meaning "do not
+        narrow" — distinct from an empty list, which means "nobody worked on it".
+
+        Timesheet lines rather than task assignees, for two reasons. Retrieval:
+        ``employee_id`` and ``project_id`` are both indexed columns on
+        account.analytic.line, so this is a single read_group with no
+        many2many join through project_task_user_rel and no res.users ->
+        hr.employee mapping afterwards. Meaning: booked hours are already what
+        the rest of this board treats as the evidence that somebody worked on
+        something — the Resource Status table says so explicitly. The trade-off
+        is that a person assigned to a task who has logged no time does not
+        count as having worked on it, which is the intended reading of "worked".
+        """
+        scope = self._scope_leaves_via_project(filters)
+        if not scope:
+            return None
+        domain = [('project_id', '!=', False)] + scope
+        if date_from:
+            domain.append(('date', '>=', date_from))
+        if date_to:
+            domain.append(('date', '<=', date_to))
+        return [
+            group['employee_id'][0]
+            for group in self.env['account.analytic.line'].read_group(
+                domain, ['employee_id'], ['employee_id'], lazy=False)
+            if group.get('employee_id')
+        ]
+
+    def _role_employee_ids(self, filters=None, date_from=None, date_to=None):
         """Active-employee ids grouped by role bucket (via job position).
 
         Returns the ids, not just a count, so a KPI card can open exactly the
         employees behind its number — the drill-down can't drift from the count
         because both come from this one classification.
+
+        With a Project or Status chosen in the header, the buckets are narrowed
+        to the people who actually booked time on those projects inside the
+        selected period, so the headcount cards answer "who worked on this" and
+        not "how many of these does the company employ". Unscoped they keep the
+        company-wide meaning they have always had.
+
+        Still limited to ACTIVE employees either way: the cards are a headcount,
+        and including leavers would make the drill-down list — which filters out
+        archived records by default — shorter than the number it was opened from.
         """
+        worked_ids = self._worked_employee_ids(filters, date_from, date_to)
+        domain = [('active', '=', True)]
+        if worked_ids is not None:
+            domain.append(('id', 'in', worked_ids))
+
         buckets = {'dev': [], 'qa': [], 'pm': [], 'ba': [], 'trainee': [], 'other': []}
-        for emp in self.env['hr.employee'].search_read(
-                [('active', '=', True)], ['job_id']):
+        for emp in self.env['hr.employee'].search_read(domain, ['job_id']):
             job = emp.get('job_id')
             name = (job[1] if job else '').strip().lower()
             if name.startswith('trainee'):
@@ -129,9 +186,12 @@ class FtProjectDashboard(models.TransientModel):
                 buckets[ROLE_BUCKETS.get(name, 'other')].append(emp['id'])
         return buckets
 
-    def _role_counts(self):
+    def _role_counts(self, filters=None, date_from=None, date_to=None):
         """Count active employees per role bucket via their job position."""
-        return {k: len(v) for k, v in self._role_employee_ids().items()}
+        return {
+            k: len(v)
+            for k, v in self._role_employee_ids(filters, date_from, date_to).items()
+        }
 
     def _stage_ids_named(self, names):
         """Resolve project stage names to ids.
@@ -180,16 +240,28 @@ class FtProjectDashboard(models.TransientModel):
              self._stage_ids_named(INACTIVE_STAGE_NAMES + (AMC_STAGE_NAME,))),
         ] + self._scope_leaves_on_project(filters)
 
-    def _hours_filter_domain(self, filters=None):
-        """Timesheet-line domain behind the Hours Utilisation section.
+    def _pm_employee(self, filters=None):
+        """The hr.employee behind the PM picker, or an empty recordset.
 
-        Every figure in that section is built from this one domain, so the
-        cards can never disagree with each other about what is being counted.
-        With no filters it is simply "every line attached to a task", which is
-        exactly what the task form's Dev/QA/PM/BA Hours fields sum.
+        sudo because hr.employee is not readable by every project user, and the
+        digit check keeps a sentinel or a stray value from reaching browse().
+        """
+        pm_id = (filters or {}).get('pm_id')
+        Employee = self.env['hr.employee'].sudo()
+        if not pm_id or not str(pm_id).isdigit():
+            return Employee.browse()
+        return Employee.browse(int(pm_id))
+
+    def _hours_base_domain(self, filters=None):
+        """Everything the Hours Utilisation filters imply EXCEPT the task leaf.
+
+        Split out so the section can measure task-attached time and task-less
+        project time through the identical range, scope and people filters —
+        otherwise the two would be narrowed differently and could not be added
+        together to reconcile against Project Performance's Actual Hrs.
         """
         filters = filters or {}
-        domain = [('task_id', '!=', False)]
+        domain = []
         if filters.get('date_from'):
             domain.append(('date', '>=', filters['date_from']))
         if filters.get('date_to'):
@@ -214,9 +286,49 @@ class FtProjectDashboard(models.TransientModel):
             # ignored: dropping the leaf would show totals that look unfiltered.
             domain.append(('project_id.user_id', '=', user.id) if user
                           else ('id', '=', 0))
-        if filters.get('dev_id'):
-            domain.append(('employee_id', '=', int(filters['dev_id'])))
+        # Developer, which also carries the two sentinels. Checked before the
+        # int() branch because they are strings and would blow up in it.
+        dev_id = filters.get('dev_id')
+        if dev_id == DEV_FILTER_UNASSIGNED:
+            # Always 0 here in practice: a timesheet line records who booked it.
+            # Offered anyway so the picker reads the same in both sections, and
+            # so an orphaned line would be visible rather than quietly lost.
+            domain.append(('employee_id', '=', False))
+        elif dev_id == DEV_FILTER_PM:
+            pm = self._pm_employee(filters)
+            # No PM chosen means this cannot narrow anything; match nothing
+            # rather than silently reporting the whole team as if it were hers.
+            domain.append(('employee_id', '=', pm.id) if pm else ('id', '=', 0))
+        elif dev_id:
+            domain.append(('employee_id', '=', int(dev_id)))
         return domain
+
+    def _hours_filter_domain(self, filters=None):
+        """Timesheet lines attached to a TASK, for the section's filters.
+
+        Every role and activity figure is built from this one domain, so the
+        cards can never disagree with each other about what is being counted.
+        With no filters it is simply "every line attached to a task", which is
+        exactly what the task form's Dev/QA/PM/BA Hours fields sum.
+        """
+        return [('task_id', '!=', False)] + self._hours_base_domain(filters)
+
+    def _non_task_hours_domain(self, filters=None):
+        """Timesheet lines booked on a PROJECT but against no task.
+
+        These hours are real spend and appear in Project Performance's Actual
+        Hrs, but no task-field sum can ever see them — which is precisely why
+        that column and Task Hour Totals' Actual Hours used to differ with
+        nothing on screen to explain the gap. Reported on their own card so the
+        two reconcile: task hours + non-task hours == the project total.
+
+        They also cannot carry a billing status, there being no task to hold
+        one, so they are deliberately absent from Billable / Billed.
+        """
+        return [
+            ('task_id', '=', False),
+            ('project_id', '!=', False),
+        ] + self._hours_base_domain(filters)
 
     def _role_hours(self, domain):
         """Dev / QA / PM / BA hours for the given timesheet-line domain.
@@ -285,19 +397,55 @@ class FtProjectDashboard(models.TransientModel):
         }
 
     def _hours_utilisation_values(self, filters=None):
-        """The eight Hours Utilisation figures for a set of filters."""
+        """The Hours Utilisation figures for a set of filters.
+
+        The role cards are a PARTITION of the hours booked in the period, which is
+        why `other_hours` exists: _role_hours has always bucketed trainees and
+        anyone whose job position is not in ROLE_BUCKETS, but nothing displayed
+        those two buckets, so the four visible cards silently fell short of the
+        period's real total (by 216 h on one project — 194 of it booked by
+        employees with no job position set at all).
+
+        The invariant this establishes, and the one the Project Performance table
+        is reconciled against:
+
+            dev + pm + qa + ba + other + non_task
+                == Actual Hrs in Project Performance
+
+        both sides being "hours booked in the selected period", under the same
+        project/stage/people scope. It holds whatever the filters are.
+
+        Note this is NOT the same population as `th_actual_hours` in
+        _task_hours_summary_values, which sums whole-task totals over tasks
+        CREATED in the period. The two coincide only when every task in scope was
+        also created in the period, and the cards say so.
+        """
         domain = self._hours_filter_domain(filters)
         role = self._role_hours(domain)
         activity = self._activity_hours(domain)
+        AAL = self.env['account.analytic.line']
+        non_task = sum(
+            group['unit_amount']
+            for group in AAL.read_group(
+                self._non_task_hours_domain(filters), ['unit_amount:sum'], [])
+            if group.get('unit_amount')
+        )
         return {
             'dev_hours': round(role['dev'], 2),
             'pm_hours': round(role['pm'], 2),
             'qa_hours': round(role['qa'], 2),
             'ba_hours': round(role['ba'], 2),
+            # Trainees plus every unclassified job position, so
+            # dev + pm + qa + ba + other == all task-attached hours.
+            'other_hours': round(role['trainee'] + role['other'], 2),
+            'trainee_hours': round(role['trainee'], 2),
             'standup_hours': round(activity['standup'], 2),
             'meeting_hours': round(activity['meeting'], 2),
             'internal_meeting_hours': round(activity['internal_meeting'], 2),
             'external_meeting_hours': round(activity['external_meeting'], 2),
+            # Project time booked against no task. Bridges the last of the gap to
+            # Project Performance's Actual Hrs.
+            'non_task_hours': round(non_task, 2),
         }
 
     @api.model
@@ -350,8 +498,18 @@ class FtProjectDashboard(models.TransientModel):
         # employee with no user matches nothing rather than being ignored —
         # silently dropping the filter would show totals that look unfiltered.
         Employee = self.env['hr.employee'].sudo()
-        if filters.get('dev_id'):
-            user = Employee.browse(int(filters['dev_id'])).user_id
+        # Developer, including the two sentinels. Handled before the int() branch
+        # because they are strings and would raise in it.
+        dev_id = filters.get('dev_id')
+        if dev_id == DEV_FILTER_UNASSIGNED:
+            # Tasks nobody is on. Unlike the hours side this is a real subset —
+            # 2,947 active tasks in the production data carry no assignee.
+            domain.append(('user_ids', '=', False))
+        elif dev_id == DEV_FILTER_PM:
+            user = self._pm_employee(filters).user_id
+            domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
+        elif dev_id:
+            user = Employee.browse(int(dev_id)).user_id
             domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
         if filters.get('pm_id'):
             user = Employee.browse(int(filters['pm_id'])).user_id
@@ -583,7 +741,8 @@ class FtProjectDashboard(models.TransientModel):
             'charts': {
                 'project_hours': self._chart_project_hours(date_from, date_to, filters),
                 'billable': self._chart_billable(date_from, date_to, filters),
-                'team_composition': self._chart_team_composition(),
+                'team_composition': self._chart_team_composition(
+                    filters, date_from, date_to),
                 'progress_trend': self._chart_progress_trend(date_from, date_to, filters),
             },
         }
@@ -619,7 +778,9 @@ class FtProjectDashboard(models.TransientModel):
             [('project_id', '!=', False)] + task_scope, ['estimated:sum'], [])
             if g.get('estimated'))
 
-        role_ids = self._role_employee_ids()
+        # Narrowed to whoever booked time on the scoped project(s) in the period
+        # when the header carries a Project/Status pick; company-wide otherwise.
+        role_ids = self._role_employee_ids(filters, date_from, date_to)
         roles = {k: len(v) for k, v in role_ids.items()}
 
         # First paint for the two filtered sections. These carry the header's
@@ -768,8 +929,13 @@ class FtProjectDashboard(models.TransientModel):
         Actual    = hours logged (account.analytic.line.unit_amount) *within
                     the selected period*, so it lines up with the period's
                     KPI cards.
-        Rows are limited to projects whose start/end window overlaps the
-        period; projects with open-ended dates always show.
+        Rows cover every active project with hours booked in the period, plus
+        those whose start/end window overlaps it; projects with open-ended dates
+        always show. Archived projects are excluded — 79 h across 8 of them in
+        2026, deliberately left out of a performance table.
+
+        Per project, this column reconciles exactly with the Hours Utilisation
+        section: dev + pm + qa + ba + other + non_task == Actual Hrs.
 
         Every row carries ``hidden_group``: ``'closed'``, ``'amc'``, ``'general'``
         or ``False`` (see PERF_HIDDEN_STAGE_GROUPS). The client hides each group
@@ -799,11 +965,22 @@ class FtProjectDashboard(models.TransientModel):
             if g.get('project_id'):
                 act_by_proj[g['project_id'][0]] = g.get('unit_amount') or 0.0
 
+        # Hours booked in the period outrank the project's own dates, exactly as
+        # in _table_resource_status: time logged against a project whose dates say
+        # it was not running is still time that was spent, and dropping the row
+        # made this table's Actual Hrs disagree with the timesheets and with the
+        # Hours Utilisation cards. Two of the twelve busiest projects in 2026
+        # (5,248 h and 1,071 h) had no row here at all for that reason.
+        #
+        # The date window still decides projects with nothing booked, where there
+        # is no evidence either way and an undated project would otherwise appear
+        # in every period.
         shown = Project.search(
             [('active', '=', True)] + self._scope_leaves_on_project(filters),
             order='name',
         ).filtered(
-            lambda p: self._overlaps_period(
+            lambda p: act_by_proj.get(p.id)
+            or self._overlaps_period(
                 p.date_start, p.date, date_from, date_to))
 
         # DE / OTD / RWR / DWD for every shown project in ONE search, from the
@@ -1057,15 +1234,35 @@ class FtProjectDashboard(models.TransientModel):
     def _chart_project_hours(self, date_from, date_to, filters=None):
         """Bar: estimated / spent / remaining per project.
 
-        Estimated = the project's Estimated Time (``allocated_hours``) — the
-                    value shown on the project form. This is a whole-project
-                    figure with no per-period breakdown, so it stays the same
-                    across every filter.
+        Estimated = the sum of the custom ``estimated`` field over the project's
+                    tasks — the same source as the Estimated Hrs column in
+                    Project Performance and the Estimated Hours KPI card, so all
+                    three agree. A whole-project figure with no per-period
+                    breakdown, so it stays the same across every filter.
+
+                    NOT ``project.allocated_hours`` ("Estimated Time" on the
+                    project form), which this chart used to read.
+                    ft_task_hours_tracker hides the core Allocated Time block, so
+                    nobody fills that field in: only 4 of 292 active projects
+                    carry a non-zero value, against 50 projects holding 23,128h
+                    of task-level estimates. The Estimated bar was therefore 0
+                    and invisible on virtually every project, and because
+                    Remaining is derived from it, that bar was forced to
+                    max(0 - spend, 0) == 0 too — leaving Spent as the only bar on
+                    the chart. _ft_efficiency_aggregate had already been moved off
+                    allocated_hours for exactly this reason.
         Spent     = timesheet hours logged on the project *within the selected
                     period*, so the Spent bars follow the date filter.
         Remaining = max(Estimated - ALL-time spend, 0) — the budget still left
                     on the project, so it holds still while Spent moves with
                     the filter.
+
+        Over Budget = max(ALL-time spend - Estimated, 0) — the mirror of
+                    Remaining, so a project is never missing both bars. Remaining
+                    is clamped at zero rather than going negative, which meant an
+                    overrunning project showed no third bar at all and looked as
+                    though the figure were missing; it was simply nothing left.
+                    Exactly one of the two is non-zero for any given project.
 
         Remaining deliberately ignores the date filter. Estimated is a
         whole-project allocation, so subtracting one period's hours from it
@@ -1075,14 +1272,24 @@ class FtProjectDashboard(models.TransientModel):
         project form. A remaining budget is not a per-period quantity.
         """
         Project = self.env['project.project']
+        Task = self.env['project.task']
         AAL = self.env['account.analytic.line']
 
         name_by_proj = {}
-        est_by_proj = {}
         for p in Project.search_read(
-                self._scope_leaves_on_project(filters), ['name', 'allocated_hours']):
+                self._scope_leaves_on_project(filters), ['name']):
             name_by_proj[p['id']] = p['name'] or ''
-            est_by_proj[p['id']] = p['allocated_hours'] or 0.0
+
+        # Estimated, from the tasks rather than the project's allocated_hours —
+        # see the docstring. Same query shape as _table_project_status uses for
+        # its Estimated Hrs column, so the chart and the table cannot disagree.
+        est_by_proj = {}
+        for g in Task.read_group(
+                [('project_id', '!=', False)]
+                + self._scope_leaves_via_project(filters),
+                ['estimated:sum'], ['project_id'], lazy=False):
+            if g.get('project_id'):
+                est_by_proj[g['project_id'][0]] = g.get('estimated') or 0.0
 
         # Spent: the selected period only, so the orange bars follow the filter.
         spent_by_proj = {}
@@ -1113,8 +1320,11 @@ class FtProjectDashboard(models.TransientModel):
             if not est and not spent:
                 continue
             name = name_by_proj.get(pid) or Project.browse(pid).display_name
-            remaining = max(est - spent_all_by_proj.get(pid, 0.0), 0.0)
-            rows.append((pid, name, est, spent, remaining))
+            spent_all = spent_all_by_proj.get(pid, 0.0)
+            # Mirror pair: budget left, or the overrun. Never both.
+            remaining = max(est - spent_all, 0.0)
+            over = max(spent_all - est, 0.0)
+            rows.append((pid, name, est, spent, remaining, over))
         # Every project that has estimated or logged hours, biggest first. The
         # chart scrolls horizontally, so there is no cap on the project count.
         rows.sort(key=lambda r: (r[2] + r[3]), reverse=True)
@@ -1124,6 +1334,7 @@ class FtProjectDashboard(models.TransientModel):
                 {'label': 'Estimated', 'data': [round(r[2], 2) for r in rows], 'backgroundColor': '#4F46E5'},
                 {'label': 'Spent', 'data': [round(r[3], 2) for r in rows], 'backgroundColor': '#F59E0B'},
                 {'label': 'Remaining', 'data': [round(r[4], 2) for r in rows], 'backgroundColor': '#10B981'},
+                {'label': 'Over Budget', 'data': [round(r[5], 2) for r in rows], 'backgroundColor': '#EF4444'},
             ],
             'meta': {'project_ids': [r[0] for r in rows]},
         }
@@ -1147,9 +1358,13 @@ class FtProjectDashboard(models.TransientModel):
             }],
         }
 
-    def _chart_team_composition(self):
-        """Pie: developers / testers / trainees / project managers."""
-        roles = self._role_counts()
+    def _chart_team_composition(self, filters=None, date_from=None, date_to=None):
+        """Pie: developers / testers / trainees / project managers.
+
+        Takes the same scope as the headcount cards, or the pie would keep
+        showing the whole company beside four cards reporting one project's team.
+        """
+        roles = self._role_counts(filters, date_from, date_to)
         return {
             'labels': ['Developers', 'Testers', 'Trainees', 'Project Managers'],
             'datasets': [{

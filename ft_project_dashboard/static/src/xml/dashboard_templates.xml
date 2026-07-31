@@ -17,6 +17,42 @@
         </div>
     </t>
 
+    <!-- ========================== SEARCH SELECT ========================== -->
+    <t t-name="ft_project_dashboard.SearchSelect">
+        <div class="ftpd_ss" t-ref="root" t-att-title="props.title">
+            <i class="fa fa-search ftpd_ss_ico"/>
+            <!-- While closed the input shows the current pick; while open it is
+                 empty and holds the query, so typing never has to clear the old
+                 value first. -->
+            <input type="text" class="ftpd_ss_input" t-ref="input"
+                   t-att-value="state.open ? state.query : selectedLabel"
+                   t-att-placeholder="props.placeholder"
+                   t-on-focus="onFocus"
+                   t-on-input="onInput"
+                   t-on-keydown="onKeydown"/>
+            <i class="fa ftpd_ss_caret"
+               t-att-class="state.open ? 'fa-angle-up' : 'fa-angle-down'"/>
+
+            <div class="ftpd_ss_menu" t-if="state.open">
+                <t t-foreach="rows" t-as="row" t-key="row.id">
+                    <!-- mousedown, not click: the input's blur would otherwise
+                         close the menu before the click landed. -->
+                    <div class="ftpd_ss_opt"
+                         t-att-class="{ 'ftpd_ss_opt--active': isActive(row_index),
+                                        'ftpd_ss_opt--chosen': isChosen(row) }"
+                         t-on-mousedown.prevent="() => this.pick(row)"
+                         t-on-mouseenter="() => this.state.active = row_index">
+                        <t t-esc="row.name"/>
+                    </div>
+                </t>
+                <div class="ftpd_ss_empty" t-if="!rows.length">No match</div>
+                <div class="ftpd_ss_more" t-if="hiddenCount">
+                    <t t-esc="hiddenCount"/> more — keep typing to narrow
+                </div>
+            </div>
+        </div>
+    </t>
+
     <!-- =========================== CHART CARD =========================== -->
     <t t-name="ft_project_dashboard.ChartCard">
         <div class="ftpd_chart_card" t-att-class="{ 'ftpd_chart_card--full': props.fullWidth }">
@@ -63,7 +99,12 @@
                     <thead>
                         <tr>
                             <t t-foreach="props.columns" t-as="col" t-key="col.key">
-                                <th t-att-class="headClass(col)" t-on-click="() => this.onSort(col.key)">
+                                <!-- title carries the full form of an abbreviated
+                                     header (DE, OTD, RWR, DWD) plus how it is
+                                     measured; absent on self-explanatory ones, so
+                                     no empty tooltip appears. -->
+                                <th t-att-class="headClass(col)" t-att-title="col.help"
+                                    t-on-click="() => this.onSort(col.key)">
                                     <t t-esc="col.label"/>
                                     <i class="fa ftpd_sort_ico" t-att-class="sortIcon(col)"/>
                                 </th>
@@ -149,17 +190,15 @@
                          table and chart below. They used to be repeated in each
                          section, which let five copies of the same question hold
                          five different answers at once. -->
-                    <div class="ftpd_filter" title="Scope the whole dashboard to one project">
-                        <select class="ftpd_filter_select"
-                                t-on-change="(ev) => this.onScopeChange('projectId', ev)">
-                            <option value="">All Projects</option>
-                            <t t-foreach="state.filterOptions.projects" t-as="p" t-key="p.id">
-                                <option t-att-value="p.id"
-                                        t-att-selected="isFilterSelected(p.id, state.projectId)"
-                                        t-esc="p.name"/>
-                            </t>
-                        </select>
-                    </div>
+                    <!-- Type-to-search rather than a <select>: a native select
+                         only jumps to the first letter, which is unusable across
+                         a few hundred projects. -->
+                    <SearchSelect options="state.filterOptions.projects"
+                                  value="state.projectId"
+                                  allLabel="'All Projects'"
+                                  placeholder="'All Projects'"
+                                  title="'Scope the whole dashboard to one project — type to search'"
+                                  onSelect="(id) => this.onScopePick('projectId', id)"/>
                     <div class="ftpd_filter" title="Scope the whole dashboard to one project stage">
                         <select class="ftpd_filter_select"
                                 t-on-change="(ev) => this.onScopeChange('stageId', ev)">
@@ -214,21 +253,28 @@
                     <KpiCard title="'Billable Hours'" value="kpis.billable_hours" suffix="'h'"
                              icon="'fa-money'" color="'#10B981'"
                              onClick="() => this.openTimesheets(true)"/>
+                    <!-- Headcount cards. With a Project or Status picked in the
+                         header these count only the people who booked time on
+                         it in the selected period; with neither, they stay the
+                         company-wide headcount. -->
                     <KpiCard title="'Developers'" value="kpis.developers"
                              icon="'fa-code'" color="'#06B6D4'"
-                             onClick="() => this.openKpi('developers')"/>
+                             onClick="() => this.openKpi('developers')"
+                             tooltip="'Active employees in a developer role. With a project or status selected, only those who booked time on it during the selected period — click to list them.'"/>
                     <KpiCard title="'Testers'" value="kpis.testers"
                              icon="'fa-bug'" color="'#8B5CF6'"
-                             onClick="() => this.openKpi('testers')"/>
+                             onClick="() => this.openKpi('testers')"
+                             tooltip="'Active employees in a QA role. With a project or status selected, only those who booked time on it during the selected period.'"/>
                     <KpiCard title="'Project Managers'" value="kpis.project_managers"
                              icon="'fa-user-circle'" color="'#EC4899'"
-                             onClick="() => this.openKpi('project_managers')"/>
+                             onClick="() => this.openKpi('project_managers')"
+                             tooltip="'Active employees in a project-manager role. With a project or status selected, only those who booked time on it during the selected period — not merely whoever manages it.'"/>
                     <!-- Trainees sits beside the other headcount cards, and is
                          counted on its own — never inside Developers/Testers. -->
                     <KpiCard title="'Trainees'" value="kpis.trainees"
                              icon="'fa-graduation-cap'" color="'#0EA5E9'"
                              onClick="() => this.openKpi('trainees')"
-                             tooltip="'Active employees whose Job Position starts with &quot;Trainee&quot;. Counted separately, not included in Developers or Testers.'"/>
+                             tooltip="'Active employees whose Job Position starts with &quot;Trainee&quot;. Counted separately, not included in Developers or Testers. With a project or status selected, only those who booked time on it during the selected period.'"/>
                     <KpiCard title="'Estimated Hours'" value="kpis.hours_estimated" suffix="'h'"
                              icon="'fa-hourglass-half'" color="'#3B82F6'"/>
                     <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
@@ -285,6 +331,22 @@
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onHoursFilter('hoursDevId', ev)">
                                     <option value="">All Developers</option>
+                                    <!-- Unassigned reads 0 h here by design: a
+                                         timesheet line always records who booked
+                                         it. Offered so the picker is identical in
+                                         both sections, and so an orphaned line
+                                         would show up rather than stay hidden. -->
+                                    <option value="none"
+                                            t-att-selected="isFilterSelected('none', state.hoursDevId)">
+                                        None (unassigned)
+                                    </option>
+                                    <!-- Only offered with a PM chosen; the PM
+                                         picker alone means "projects she manages",
+                                         so this strips her team back out. -->
+                                    <option value="pm" t-if="hasPmSelected('hours')"
+                                            t-att-selected="isFilterSelected('pm', state.hoursDevId)">
+                                        Only this PM
+                                    </option>
                                     <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
                                                 t-att-selected="isFilterSelected(e.id, state.hoursDevId)"
@@ -297,10 +359,14 @@
                             <span class="ftpd_filter_label" t-if="state.hoursLoading">…</span>
                         </div>
                     </div>
-                    <!-- Role split: who booked the time. Four cards, so the
-                         4-column grid fills exactly with no orphan. -->
-                    <h3 class="ftpd_kpi_subhead">By Role<small> — time booked in the selected period</small></h3>
-                    <div class="ftpd_kpi_grid">
+                    <!-- Role split: who booked the time. A PARTITION of
+                         task-attached hours, so the five cards add up to the
+                         Actual Hours card below. "Other" exists for that reason:
+                         trainees and anyone whose job position is not recognised
+                         were always bucketed but never shown, leaving the row 216 h
+                         short on one project with nothing on screen to say why. -->
+                    <h3 class="ftpd_kpi_subhead">By Role<small> — every hour booked in the selected period, split by job position</small></h3>
+                    <div class="ftpd_kpi_grid ftpd_kpi_grid--five">
                         <KpiCard title="'Developer Hours'" value="hours.dev_hours" suffix="'h'"
                                  icon="'fa-code'" color="'#06B6D4'"
                                  tooltip="'Task time booked in the selected period by people in a developer role.'"/>
@@ -313,6 +379,9 @@
                         <KpiCard title="'BA Hours'" value="hours.ba_hours" suffix="'h'"
                                  icon="'fa-clipboard'" color="'#0EA5E9'"
                                  tooltip="'Task time booked in the selected period by people in a business-analyst role.'"/>
+                        <KpiCard title="'Other Hours'" value="hours.other_hours" suffix="'h'"
+                                 icon="'fa-user-o'" color="'#94A3B8'"
+                                 tooltip="'Everyone the four cards beside this one do not cover: trainees, plus anyone whose Job Position is unset or not one of the recognised delivery roles. Present so this row accounts for every booked hour — without it these hours were counted but never shown, leaving the row silently short.'"/>
                     </div>
                     <!-- Activity split, same timesheet lines as the role row so
                          both answer the same question. These three meeting cards
@@ -321,7 +390,7 @@
                          records instead, which put two different numbers on
                          screen under one label. -->
                     <h3 class="ftpd_kpi_subhead">By Activity<small> — time booked in the selected period</small></h3>
-                    <div class="ftpd_kpi_grid">
+                    <div class="ftpd_kpi_grid ftpd_kpi_grid--five">
                         <KpiCard title="'Standup Hours'" value="hours.standup_hours" suffix="'h'"
                                  icon="'fa-users'" color="'#F59E0B'"
                                  tooltip="'Actual Hours booked on every task in the Fingertip Standup project.'"/>
@@ -334,6 +403,11 @@
                         <KpiCard title="'External Meeting Hours'" value="hours.external_meeting_hours" suffix="'h'"
                                  icon="'fa-phone'" color="'#EF4444'"
                                  tooltip="'Actual Hours on tasks whose Task Type is External Call.'"/>
+                        <!-- The bridge to Project Performance's Actual Hrs: real
+                             project spend that no task-field sum can see. -->
+                        <KpiCard title="'Non-Task Hours'" value="hours.non_task_hours" suffix="'h'"
+                                 icon="'fa-question-circle-o'" color="'#64748B'"
+                                 tooltip="'Time booked on a project but against no task. Counted in the Actual Hrs column of Project Performance, but invisible to any task-based figure — there is no task to hold a total or a billing status. The five By Role cards plus this one account for every hour in that column.'"/>
                     </div>
                     <!-- Task hour totals, moved here from the Task Hours Summary
                          section. Read off stored project.task columns, which is
@@ -359,7 +433,7 @@
                                  tooltip="'Sum of the Estimated field across the selected tasks. The Estimated Hours card in Project Summary sums the same field but over every task, ignoring the selected period.'"/>
                         <KpiCard title="'Actual Hours'" value="hours.th_actual_hours" suffix="'h'"
                                  icon="'fa-clock-o'" color="'#F59E0B'"
-                                 tooltip="'Sum of Actual Hours across the selected tasks.'"/>
+                                 tooltip="'Whole-task Actual Hours summed over the tasks CREATED in this period — including time those tasks accrued outside it. A different question from the By Role cards above, which slice only the hours booked inside the period, so the two agree only when every task in scope was also created in the period.'"/>
                         <KpiCard title="'Billable Hours (Task)'" value="hours.th_billable_hours" suffix="'h'"
                                  icon="'fa-money'" color="'#14B8A6'"
                                  tooltip="'Sum of the Billable Hours field on the selected tasks. Defaults to Actual Hours until overridden. Distinct from the Billable Hours card in Project Summary, which sums timesheet lines on billable projects.'"/>
@@ -396,6 +470,17 @@
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onTasksFilter('tasksDevId', ev)">
                                     <option value="">All Developers</option>
+                                    <!-- A real subset here, unlike the hours
+                                         section: plenty of tasks carry no
+                                         assignee at all. -->
+                                    <option value="none"
+                                            t-att-selected="isFilterSelected('none', state.tasksDevId)">
+                                        None (unassigned)
+                                    </option>
+                                    <option value="pm" t-if="hasPmSelected('tasks')"
+                                            t-att-selected="isFilterSelected('pm', state.tasksDevId)">
+                                        Only this PM
+                                    </option>
                                     <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
                                                 t-att-selected="isFilterSelected(e.id, state.tasksDevId)"
