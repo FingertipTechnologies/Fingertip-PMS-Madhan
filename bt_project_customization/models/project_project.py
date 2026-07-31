@@ -203,8 +203,12 @@ class InheritProjectProject(models.Model):
         for project in self:
             project.estimated = round(sum(project.tasks.mapped('estimated')), 2)
 
+    # stage_id.name joins the depends for the same reason it is in
+    # _compute_ft_completion_date's: whether a stage counts as delivered now
+    # turns on its name as well as its fold flag.
     @api.depends('task_ids.ft_completion_date', 'task_ids.date_deadline',
-                 'task_ids.stage_id.fold', 'task_ids.state',
+                 'task_ids.stage_id.fold', 'task_ids.stage_id.name',
+                 'task_ids.state',
                  'task_ids.estimated', 'task_ids.effective_hours',
                  'task_ids.ft_reopen_count')
     def _compute_ft_delivery_stats(self):

@@ -15,6 +15,23 @@ TASK_CREATE_JOBS = {
     'project cordinator',   # legacy typo present in source data
 }
 
+# Task stage names that mean the work is delivered even when the Kanban "Folded
+# in Kanban" flag was never ticked on the stage.
+#
+# `fold` is Odoo's own marker for a closed stage and remains the primary test,
+# but it cannot be the only one. On the production database every delivery figure
+# read zero, because 6,768 active tasks sat across 489 non-folded stages and NOT
+# ONE task was in a folded stage — the 200 folded "Done" stages are unused
+# per-project defaults. The workflow actually in use is Working / Completed /
+# Planned / Testing, of which only Completed is final, and nobody had ticked
+# Folded on it.
+#
+# Matching the name as well makes the metrics correct on a stage set whose fold
+# flags were never maintained, while still honouring `fold` wherever it IS set.
+# Ticking Folded on a stage therefore remains a supported way to mark it final —
+# this is an addition, not a replacement.
+COMPLETED_STAGE_NAMES = ('Completed',)
+
 
 class ProjectTask(models.Model):
     _inherit = 'project.task'
@@ -62,15 +79,21 @@ class ProjectTask(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
-        # Count reopens: a task leaving a folded (Completed) stage for an open
-        # one is rework. Snapshot which records were folded BEFORE the super()
+        # Count reopens: a task leaving a delivered stage for an open one is
+        # rework. Snapshot which records were in a final stage BEFORE the super()
         # call, because stage_id is what we are about to change.
+        #
+        # Uses the same _ft_final_stage_ids test as the delivery metrics rather
+        # than raw `fold`, or a task moved out of Completed would not be counted
+        # as reopened on a stage set whose fold flag is unticked — which is every
+        # stage set in this database.
         if 'stage_id' not in vals:
             return super().write(vals)
-        was_folded = {t.id: t.stage_id.fold for t in self}
+        final_ids = set(self._ft_final_stage_ids())
+        was_final = {t.id: t.stage_id.id in final_ids for t in self}
         res = super().write(vals)
         reopened = self.filtered(
-            lambda t: was_folded.get(t.id) and not t.stage_id.fold
+            lambda t: was_final.get(t.id) and t.stage_id.id not in final_ids
         )
         for task in reopened:
             # sudo: the counter is readonly to users, and whoever drags the card
@@ -98,7 +121,37 @@ class ProjectTask(models.Model):
                     "Task title must be at least %s characters long."
                 ) % TASK_TITLE_MIN_LEN)
 
-    @api.depends('date_end', 'date_last_stage_update', 'stage_id.fold')
+    @api.model
+    def _ft_final_stage_ids(self):
+        """Ids of every task stage that counts as DELIVERED.
+
+        THE single answer to "is this stage finished" for the whole PMS: folded
+        stages, plus any stage named in COMPLETED_STAGE_NAMES whether or not
+        somebody remembered to tick Folded.
+
+        Resolved to ids rather than filtering on ``stage_id.name`` inside each
+        domain, because the stage name is a translated (jsonb) column — comparing
+        it in a domain is slower and answers differently per language, and the
+        same reasoning already governs the project-stage lookups in
+        ft_project_dashboard.
+
+        Archived stages are included: a task can still sit in one, and leaving
+        them out would make that work vanish from delivered and open alike.
+        """
+        return self.env['project.task.type'].with_context(
+            active_test=False
+        ).search([
+            '|',
+            ('fold', '=', True),
+            ('name', 'in', list(COMPLETED_STAGE_NAMES)),
+        ]).ids
+
+    # stage_id.name is in the depends because the set of final stages now turns
+    # on the name too: renaming a stage to or from "Completed" has to recompute
+    # the tasks sitting in it, or their completion date would silently disagree
+    # with what the metrics count.
+    @api.depends('date_end', 'date_last_stage_update',
+                 'stage_id.fold', 'stage_id.name')
     def _compute_ft_completion_date(self):
         """The delivery date, with a fallback for a missing ``date_end``.
 
@@ -119,10 +172,13 @@ class ProjectTask(models.Model):
         Stored so it can be searched and date-ranged, and so that upgrading this
         module backfills every historical task in one recompute.
         """
+        # Resolved once for the whole recordset: this compute runs over every
+        # task in the database on upgrade.
+        final_ids = set(self._ft_final_stage_ids())
         for task in self:
             task.ft_completion_date = (
                 (task.date_end or task.date_last_stage_update)
-                if task.stage_id.fold else False
+                if task.stage_id.id in final_ids else False
             )
 
     # ------------------------------------------------------------------
@@ -159,7 +215,7 @@ class ProjectTask(models.Model):
         in the period, not what was created in it.
         """
         dom = [
-            ('stage_id.fold', '=', True),
+            ('stage_id', 'in', self._ft_final_stage_ids()),
             ('state', '!=', '1_canceled'),
             ('ft_completion_date', '!=', False),
         ]
@@ -302,7 +358,20 @@ class ProjectTask(models.Model):
         not set `state`, so "not in a closed state" would call almost everything
         open, including finished work.
         """
-        return [('stage_id.fold', '=', False)] + (extra or [])
+        # Written as the explicit complement of _ft_final_stage_ids rather than
+        # `stage_id.fold = False`, so open and delivered stay exact opposites of
+        # one another and no task can fall into both or neither.
+        #
+        # The stageless leaf is deliberate: a task with no stage at all used to be
+        # counted as neither open nor delivered, because traversing an empty
+        # many2one matches nothing — 173 active tasks were invisible to both
+        # figures on the production restore. It is certainly not delivered, so it
+        # is open.
+        return [
+            '|',
+            ('stage_id', '=', False),
+            ('stage_id', 'not in', self._ft_final_stage_ids()),
+        ] + (extra or [])
 
     @api.model
     def _ft_overdue_open_domain(self, extra=None):
