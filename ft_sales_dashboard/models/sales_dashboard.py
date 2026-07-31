@@ -1,14 +1,34 @@
 """Data provider for the Sales dashboard.
 
-PERIOD FIELD
-============
-Every metric is dated by ``date_deadline`` (Expected Closing) — see
-PERIOD_FIELD below for why, and for the one-line switch back to ``date_closed``
-for won/lost once the underlying data supports it.
+PERIOD FIELDS
+=============
+The dashboard mixes three different questions, so it deliberately filters on
+three different date fields rather than one — see GENERATED_FIELD /
+PERIOD_FIELD / OUTCOME_FIELD below:
 
-Creation date is used nowhere. An opportunity created in one month is often
-expected to close in another, so dating anything by ``create_date`` reported
-the wrong month; that was the original defect.
+* "What is due to close in this period, and what is it worth?" ->
+  ``date_deadline`` (Expected Closing). The Opportunities card, Pipeline Value,
+  the pipeline month boards, the funnel, the Conversion denominator, and the
+  Opportunities / Expected Revenue columns of the executive-wise report.
+* "What did we actually close in this period?" -> ``date_closed`` (Closed
+  Date). Sales Closed, Sales Closed Value, Opportunities Lost, the Closed and
+  Lost month boards, and the Sales Closed / Lost columns of the executive
+  report all use it.
+
+Which field answers which question is the whole design. Dating an OUTCOME by
+Expected Closing was the original defect — a deal that slipped its forecast was
+reported in the month it was supposed to close rather than the month it closed.
+That is why only Pipeline Value, a genuinely forward-looking figure, still reads
+Expected Closing.
+
+TIMEZONES
+=========
+``date_deadline`` is a Date and carries no timezone. ``create_date`` and
+``date_closed`` are Datetimes stored in UTC, while the filter names days in the
+user's timezone — so their bounds are converted (see ``_period_bounds``). In IST
+that moves a day boundary by 5h30m, which is the difference between counting and
+missing an opportunity created at 02:00. The resolved bounds are handed to the
+client in the payload so a drill-down filters on the identical window.
 
 WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 =============================================================
@@ -19,10 +39,35 @@ WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 
 Archived is therefore what separates lost from won; a won stage alone is not
 enough, because a won lead that is later archived is no longer a live sale.
+
+ARCHIVED RECORDS ARE PART OF THE POPULATION
+===========================================
+Lost opportunities are archived. The ORM silently appends ``active = True`` to
+any domain that does not mention ``active`` itself (models._where_calc), so
+every figure whose domain named only type + date — Opportunities Generated, the
+funnel, the executive report — was quietly dropping every lost deal, while the
+Opportunities Lost card (which does name ``active``) counted them. That single
+asymmetry is why the cards, the drill-downs, the filtered lists and a CRM
+export never agreed. Everything here now reads through ``_leads()``, which
+disables active_test, and every drill-down in
+static/src/js/sales_dashboard.js passes ``active_test: False`` to match.
+
+A lost opportunity keeps whatever stage it was in when it was lost (Odoo does
+not move it), so grouping archived records by stage would report them under
+Discussion / Demo / Negotiation. The funnel therefore takes its bands from live
+records only and shows every archived record in one dedicated "Lost" band, so a
+lost deal is never displayed inside an active stage and the bands still add up
+to Opportunities Generated.
 """
 from dateutil.relativedelta import relativedelta
 
+from datetime import datetime, time
+
+import pytz
+
 from odoo import api, fields, models
+
+from .crm_lead import LOST_STAGE_NAME
 
 # Consistent palette shared across the dashboard charts.
 PALETTE = [
@@ -30,24 +75,51 @@ PALETTE = [
     '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#3B82F6',
 ]
 
-# THE period field for every metric on this dashboard.
+# The "Opportunities" card: dated by Expected Closing, the same field as Pipeline
+# Value beside it. The two cards therefore describe one population from two
+# angles — how many deals are due to close in the period, and what the open ones
+# among them are worth.
 #
-# An opportunity created in one month is often expected to close in another, so
-# filtering on create_date reported the wrong month for everything — that was
-# the original defect. Expected Closing is the business date, so it is used
-# uniformly: pipeline, funnel, executive reports, won and lost alike.
+# It was briefly dated by create_date ("how many did we open in the period"),
+# which is the other defensible reading of the old label. Expected Closing was
+# chosen instead so the card, Pipeline Value and the funnel all answer the same
+# question; the card was renamed from "Opportunities Generated" to
+# "Opportunities" to match, since it no longer counts what was generated.
 #
-# Odoo's own CRM reports date outcomes by ``date_closed`` instead. That is left
-# here as a one-line switch rather than removed: in THIS database only 21 of 53
-# won opportunities carry a date_closed (32 were imported straight into a Won
-# stage, which never stamps it), against 47 that carry an Expected Closing.
-# Once that data is repaired, flipping OUTCOME_FIELD to 'date_closed' restores
-# strict "when did it actually close" semantics for won/lost.
+# The funnel, the Executive-wise Opportunities and Expected Revenue columns and
+# the Conversion denominator all measure this same population, so the breakdowns
+# and the totals row keep reconciling with the card exactly. Point this at
+# 'create_date' and all of them move together.
+GENERATED_FIELD = 'date_deadline'
+
+# Pipeline Value and the pipeline month boards: dated by when the deal is
+# EXPECTED to close, because "what is in the pipeline for this period" is a
+# question about the forecast, not about when the record was typed in.
 PERIOD_FIELD = 'date_deadline'
-OUTCOME_FIELD = 'date_deadline'
+
+# Outcome-side metrics (Sales Closed, Opportunities Lost, the won/lost month
+# boards and the won/lost columns of the executive report): dated by when the
+# deal ACTUALLY closed. Odoo stamps date_closed on reaching probability 100 or
+# on archive, so it is the only field that dates the outcome rather than the
+# origin.
+#
+# This must stay in step with _closedDomain() in static/src/js/sales_dashboard.js,
+# which the KPI drill-downs use. Pointing this at date_deadline while the JS
+# still filtered on date_closed is what made the Sales Closed / Lost cards read
+# 0 next to a drill-down listing 4 records.
+#
+# Records won or lost before this dashboard existed (or imported straight into a
+# Won stage) can carry no date_closed at all, which made these KPIs under-report
+# against a CRM export. crm_lead._ft_backfill_date_closed() fills those in once,
+# from the last stage change, so the metric stays correctly defined instead of
+# being redefined to mean "expected to close".
+OUTCOME_FIELD = 'date_closed'
 
 MONTHS_AHEAD = 6
 MONTHS_BACK = 6
+# Upper bound on the month cards a custom range may produce, so "2010 -> today"
+# cannot render 180 cards (and fire 180 queries' worth of work).
+MAX_PERIOD_MONTHS = 24
 # Opportunities listed inline on each month card; the rest are reached by
 # clicking through, so a busy month cannot make the card unreadable.
 LIST_PER_MONTH = 5
@@ -55,6 +127,10 @@ LIST_PER_MONTH = 5
 # separately by read_group, so a cap here never makes a number wrong — it only
 # limits how many rows can be listed inline.
 FETCH_CAP = 400
+
+# Sentinel stage id for the funnel's Lost band. Not a real crm.stage: lost deals
+# keep their old stage, so they are pulled out of the stage bands entirely.
+LOST_BAND = 'lost'
 
 
 class FtSalesDashboard(models.TransientModel):
@@ -64,99 +140,209 @@ class FtSalesDashboard(models.TransientModel):
     # ------------------------------------------------------------------
     # Domain helpers
     # ------------------------------------------------------------------
-    def _date_domain(self, field, date_from, date_to):
-        """Inclusive range on a Date or Datetime field.
+    def _leads(self):
+        """``crm.lead`` including archived records.
 
-        ``date_deadline`` is a Date and ``date_closed`` a Datetime, so the time
-        component is only appended for the latter — comparing a Date against
-        '2026-07-31 23:59:59' silently matches nothing on some backends.
+        Lost opportunities are archived, so without this every domain that does
+        not name ``active`` would silently exclude them — see the module
+        docstring. Every count, sum and read_group on this dashboard goes
+        through here so one population feeds every number.
         """
-        is_datetime = self.env['crm.lead']._fields[field].type == 'datetime'
+        return self.env['crm.lead'].with_context(active_test=False)
+
+    def _period_bounds(self, field, date_from, date_to):
+        """The (from, to) values a domain on ``field`` must use for the period.
+
+        Returned as well as used, so the client can filter its drill-downs on
+        exactly the bounds the KPI was counted with rather than recomputing them
+        and drifting — see ``bounds`` in the payload.
+
+        ``date_deadline`` is a Date and takes the plain day strings. ``create_date``
+        and ``date_closed`` are Datetimes stored in UTC, while the filter names
+        days in the USER's timezone, so their bounds are the UTC instants of
+        local midnight and local 23:59:59 — in IST, 18:30 the previous day to
+        18:29:59 on the last day. Comparing them against naive '00:00:00' /
+        '23:59:59' strings would shift every window by the UTC offset: an
+        opportunity created at 02:00 IST is stored as 20:30 the previous day and
+        would drop out of "Today" entirely, and a pivot or export (which Odoo
+        groups in the user's timezone) would never agree with the cards.
+        """
+        if self.env['crm.lead']._fields[field].type != 'datetime':
+            return date_from or None, date_to or None
+
+        tz = pytz.timezone(self.env.user.tz or 'UTC')
+
+        def as_utc(day, at):
+            local = tz.localize(datetime.combine(fields.Date.to_date(day), at))
+            return fields.Datetime.to_string(
+                local.astimezone(pytz.UTC).replace(tzinfo=None))
+
+        return (as_utc(date_from, time(0, 0, 0)) if date_from else None,
+                as_utc(date_to, time(23, 59, 59)) if date_to else None)
+
+    def _date_domain(self, field, date_from, date_to):
+        """Inclusive range on a Date or Datetime field, in the user's timezone."""
+        low, high = self._period_bounds(field, date_from, date_to)
         dom = []
-        if date_from:
-            dom.append((field, '>=', date_from + ' 00:00:00' if is_datetime else date_from))
-        if date_to:
-            dom.append((field, '<=', date_to + ' 23:59:59' if is_datetime else date_to))
+        if low:
+            dom.append((field, '>=', low))
+        if high:
+            dom.append((field, '<=', high))
         return dom
 
     def _opp_domain(self):
         return [('type', '=', 'opportunity')]
 
+    def _lost_stage_ids(self):
+        """Stages that mean "lost", matched by name.
+
+        ``crm.stage`` carries ``is_won`` but no ``is_lost`` counterpart, so the
+        Lost stage is identified the same way crm_lead.py identifies it for the
+        automatic move on archive. ``active_test`` is off so an archived stage
+        still resolves.
+        """
+        return self.env['crm.stage'].with_context(active_test=False).search(
+            [('name', '=ilike', LOST_STAGE_NAME)]).ids
+
     def _open_domain(self):
-        """Still in play: live and not yet in a won stage."""
-        return [('active', '=', True), ('stage_id.is_won', '=', False)]
+        """Still in play: live, not won, and not parked in a Lost stage.
+
+        The Lost-stage exclusion matters because a deal can be dragged to the
+        Lost stage without ever being archived — 65 of them in the live database
+        — and every one was being reported as open Pipeline Value while sitting
+        in a stage called Lost.
+        """
+        return [('active', '=', True), ('stage_id.is_won', '=', False),
+                ('stage_id', 'not in', self._lost_stage_ids())]
 
     def _won_domain(self):
         return [('active', '=', True), ('stage_id.is_won', '=', True)]
 
     def _lost_domain(self):
-        """Lost = archived (action_set_lost calls action_archive)."""
-        return [('active', '=', False)]
+        """Lost = archived, OR sitting in a Lost stage while still active.
+
+        Odoo records a loss by archiving, so ``active = False`` was the original
+        definition. It is not sufficient on its own: unarchiving a lost deal, or
+        dragging one to the Lost stage in the kanban, leaves a record that reads
+        "Lost" in every list and export while counting as open pipeline on the
+        dashboard. Either signal now means lost, so the card agrees with what the
+        Stage column shows.
+
+        The two halves cannot double-count: ``_open_domain`` and ``_won_domain``
+        both require ``active = True``, and ``_open_domain`` excludes the Lost
+        stages this admits.
+        """
+        return ['|', ('active', '=', False),
+                ('stage_id', 'in', self._lost_stage_ids())]
 
     # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
     @api.model
     def get_dashboard_data(self, date_from=None, date_to=None):
-        """Every KPI, table and chart for the Sales dashboard.
+        """Every KPI, table and board for the Sales dashboard.
 
-        Everything except the three rolling month charts responds to the
-        selected period; those are fixed windows by definition (see
-        ``_chart_pipeline_next_months`` / ``_chart_by_month``).
+        The month boards come in three windows — the trailing six months, the
+        next six months, and the selected period itself. The first two are
+        fixed by definition; the third is what makes "This Year" show January
+        through December (including the months that have no records yet)
+        instead of stopping at today.
         """
         opp = self._opp_domain()
-        # One field for everything — see PERIOD_FIELD.
+        # Three fields, three questions — see GENERATED_FIELD / PERIOD_FIELD /
+        # OUTCOME_FIELD. What we opened, what is forecast to close, what did
+        # close.
+        generated = opp + self._date_domain(GENERATED_FIELD, date_from, date_to)
         period = opp + self._date_domain(PERIOD_FIELD, date_from, date_to)
         outcome = opp + self._date_domain(OUTCOME_FIELD, date_from, date_to)
 
         today = fields.Date.context_today(self)
-        ahead = self._month_buckets(today, MONTHS_AHEAD)
+        # Next 6 months starts NEXT month: starting at the current month made
+        # "Last 6 Months" (Feb->Jul) and "Next 6 Months" (Jul->Dec) both claim
+        # July, so the same deals were counted on two boards.
+        ahead = self._month_buckets(
+            today.replace(day=1) + relativedelta(months=1), MONTHS_AHEAD)
         back = self._month_buckets(
             today.replace(day=1) - relativedelta(months=MONTHS_BACK - 1), MONTHS_BACK)
+        # Every month the filter covers, empty ones included.
+        selected = self._period_buckets(date_from, date_to, today) or back
+
+        open_opps = opp + self._open_domain()
+        won_opps = opp + self._won_domain()
+        lost_opps = opp + self._lost_domain()
 
         return {
-            'kpis': self._kpis(period, outcome),
+            'kpis': self._kpis(generated, period, outcome),
+            # The bounds every figure was actually measured between, per date
+            # field. The client filters its drill-downs on these rather than
+            # rebuilding them, so a card and the list it opens cannot disagree —
+            # including across the UTC/local shift on the two Datetime fields,
+            # which the browser has no reliable way to reproduce.
+            'bounds': {
+                field: self._period_bounds(field, date_from, date_to)
+                for field in (GENERATED_FIELD, PERIOD_FIELD, OUTCOME_FIELD)
+            },
+            # Which stages count as Lost, so the drill-downs can reproduce
+            # _lost_domain() / _open_domain() exactly rather than hard-coding
+            # "active = false" and disagreeing with the cards.
+            'lost_stage_ids': self._lost_stage_ids(),
+            # Which field the Opportunities card, the funnel and the executive
+            # table were measured on. Sent rather than assumed by the client so
+            # that changing GENERATED_FIELD moves the cards and their
+            # drill-downs together instead of leaving the two out of step.
+            'generated_field': GENERATED_FIELD,
             'charts': {
                 # The stage picture is the funnel only. A separate
                 # "revenue by stage" bar chart showed the same figures a second
                 # time, so it was removed rather than kept as a duplicate.
-                'funnel': self._chart_funnel(period),
+                'funnel': self._chart_funnel(generated),
             },
             'boards': {
                 # Trailing pipeline is what the spec asks for; the forward view
                 # is kept alongside it because a pipeline that only looks
                 # backwards cannot answer "what is coming". The front end
-                # toggles between the two on one card.
+                # toggles between the three windows on one card.
                 'pipeline_last_months': self._month_board(
-                    opp + self._open_domain(), PERIOD_FIELD, back, '#4F46E5'),
+                    open_opps, PERIOD_FIELD, back, '#4F46E5'),
                 'pipeline_next_months': self._month_board(
-                    opp + self._open_domain(), PERIOD_FIELD, ahead, '#06B6D4'),
+                    open_opps, PERIOD_FIELD, ahead, '#06B6D4'),
+                'pipeline_period_months': self._month_board(
+                    open_opps, PERIOD_FIELD, selected, '#4F46E5'),
                 'closed_last_months': self._month_board(
-                    opp + self._won_domain(), OUTCOME_FIELD, back, '#10B981'),
+                    won_opps, OUTCOME_FIELD, back, '#10B981'),
+                'closed_period_months': self._month_board(
+                    won_opps, OUTCOME_FIELD, selected, '#10B981'),
                 'lost_last_months': self._month_board(
-                    opp + self._lost_domain(), OUTCOME_FIELD, back, '#EF4444',
-                    active_test=False),
+                    lost_opps, OUTCOME_FIELD, back, '#EF4444'),
+                'lost_period_months': self._month_board(
+                    lost_opps, OUTCOME_FIELD, selected, '#EF4444'),
             },
-            'executives': self._executive_report(period),
+            'executives': self._executive_report(generated, outcome),
         }
 
     # ------------------------------------------------------------------
     # KPIs
     # ------------------------------------------------------------------
-    def _kpis(self, period, outcome):
-        Lead = self.env['crm.lead']
+    def _kpis(self, generated, period, outcome):
+        Lead = self._leads()
 
-        generated = Lead.search_count(period)
+        # Opportunities Generated: EVERY status — New, Discussion, Demo,
+        # Negotiation, Won, Lost, Closed and any other configured stage —
+        # CREATED in the period. Archived (lost) records used to drop out here
+        # but not from the Lost card, which is what made the totals
+        # irreconcilable.
+        generated_count = Lead.search_count(generated)
 
         # Pipeline Value: Expected Revenue of everything still open whose
-        # Expected Closing falls in the period. Previously this summed by
-        # creation date, which is why it never moved with the filter.
+        # Expected Closing falls in the period. The one figure that stays on
+        # Expected Closing, because "what is in the pipeline for this period" is
+        # a question about the forecast — deliberately a different population
+        # from the card beside it, so the two counts are not meant to tally.
         pipeline_value = self._sum_revenue(period + self._open_domain())
 
-        # Sales Closed / Lost: same period field as everything else, so the
-        # conversion ratio below divides two numbers drawn from one population.
-        # Dating these by create_date made them static; dating them by
-        # date_closed made them disagree with the rest of the dashboard.
+        # Sales Closed / Lost: dated by date_closed (OUTCOME_FIELD), because
+        # "what did we close this period" is a question about when the deal
+        # actually closed, not when it was expected to.
         won_domain = outcome + self._won_domain()
         sales_closed = Lead.search_count(won_domain)
         sales_closed_value = self._sum_closed_amount(won_domain)
@@ -164,10 +350,10 @@ class FtSalesDashboard(models.TransientModel):
         lost = Lead.search_count(outcome + self._lost_domain())
 
         # Conversion over the same population the two numbers come from.
-        conversion = round(sales_closed / generated * 100, 1) if generated else 0.0
+        conversion = self._ratio(sales_closed, generated_count)
 
         return {
-            'opportunities': generated,
+            'opportunities': generated_count,
             'pipeline_value': pipeline_value,
             'sales_closed': sales_closed,
             'sales_closed_value': sales_closed_value,
@@ -175,9 +361,17 @@ class FtSalesDashboard(models.TransientModel):
             'conversion_ratio': conversion,
         }
 
+    def _ratio(self, part, whole):
+        """Percentage, guarding the empty-period divide by zero.
+
+        One definition for the KPI card, every executive row and the totals
+        row, so the three can never drift apart.
+        """
+        return round(part / whole * 100, 1) if whole else 0.0
+
     def _sum(self, domain, field):
         """SUM(field) over a domain in a single aggregate query."""
-        groups = self.env['crm.lead'].read_group(domain, [f'{field}:sum'], [], lazy=False)
+        groups = self._leads().read_group(domain, [f'{field}:sum'], [], lazy=False)
         return sum(g.get(field) or 0.0 for g in groups)
 
     def _sum_revenue(self, domain):
@@ -206,7 +400,7 @@ class FtSalesDashboard(models.TransientModel):
         as the pipeline (Cold -> Discussion -> ... -> Won). Stages with no
         sequence and the 'Undefined' bucket sort last.
         """
-        groups = self.env['crm.lead'].read_group(
+        groups = self._leads().read_group(
             domain, ['expected_revenue:sum'], ['stage_id'], lazy=False)
         seq_by_stage = {
             s.id: s.sequence
@@ -217,27 +411,50 @@ class FtSalesDashboard(models.TransientModel):
             g['stage_id'][0] if g.get('stage_id') else False, 10 ** 6))
         return groups
 
-    def _chart_funnel(self, base_domain):
+    def _chart_funnel(self, generated):
         """Sales funnel by Expected Revenue (not opportunity count).
 
         Bands are stages — that is what makes it a funnel — but the value shown
-        and the band width are now Expected Revenue, and the period filter is
-        Expected Closing. Won/lost stages are included so the funnel shows the
-        whole flow; only archived (lost) records drop out.
+        and the band width are Expected Revenue, and the period filter is
+        Creation Date, so the bands add up to Opportunities Generated.
+
+        Stage bands are taken from LIVE records only, and every archived record
+        is shown in one trailing "Lost" band. A lost opportunity keeps whatever
+        stage it was in when it was lost, so grouping it by stage would list it
+        under Discussion / Demo / Negotiation and report a dead deal as active
+        pipeline. Won stages stay in the bands: a won deal is a real end state.
         """
-        groups = self._stage_groups(base_domain + [('active', '=', True)])
+        # Live records only, and never a Lost stage — otherwise an unarchived
+        # lost deal would render its own "Lost" band beside the red one below,
+        # two bands with the same label counting different records.
+        groups = self._stage_groups(generated + [
+            ('active', '=', True), ('stage_id', 'not in', self._lost_stage_ids())])
         labels = [g['stage_id'][1] if g.get('stage_id') else 'Undefined' for g in groups]
         values = [round(g.get('expected_revenue') or 0.0, 2) for g in groups]
         counts = [g['__count'] for g in groups]
         stage_ids = [g['stage_id'][0] if g.get('stage_id') else False for g in groups]
+
+        # One band for everything lost, whatever stage it stopped in.
+        lost_domain = generated + self._lost_domain()
+        lost_count = self._leads().search_count(lost_domain)
+        if lost_count:
+            labels.append('Lost')
+            values.append(self._sum_revenue(lost_domain))
+            counts.append(lost_count)
+            stage_ids.append(LOST_BAND)
+
+        colors = (PALETTE * (len(values) // len(PALETTE) + 1))[:len(values)]
+        if lost_count and colors:
+            colors[-1] = '#EF4444'  # Lost always reads red, wherever it lands.
         return {
             'labels': labels,
             'stage_ids': stage_ids,
             'counts': counts,
+            'total_count': sum(counts),
             'datasets': [{
                 'label': 'Expected Revenue',
                 'data': values,
-                'backgroundColor': PALETTE[:len(values)] or ['#4F46E5'],
+                'backgroundColor': colors or ['#4F46E5'],
             }],
         }
 
@@ -249,27 +466,41 @@ class FtSalesDashboard(models.TransientModel):
         first = start.replace(day=1)
         return [first + relativedelta(months=i) for i in range(count)]
 
-    def _month_board(self, domain, date_field, buckets, color, active_test=True):
+    def _period_buckets(self, date_from, date_to, today):
+        """Every month the selected filter touches, empty months included.
+
+        "This Year" runs 1 January to 31 December, so this returns twelve
+        buckets and the months with no records render as zero cards. Before
+        this, the boards were fixed six-month windows and a year filter could
+        never show August onwards. Returns None when the filter has no bounds
+        at all, and the caller falls back to the trailing window.
+        """
+        start = fields.Date.to_date(date_from) if date_from else None
+        end = fields.Date.to_date(date_to) if date_to else None
+        if not start and not end:
+            return None
+        start = (start or end).replace(day=1)
+        end = (end or today).replace(day=1)
+        if end < start:
+            end = start
+        count = (end.year - start.year) * 12 + (end.month - start.month) + 1
+        return self._month_buckets(start, min(count, MAX_PERIOD_MONTHS))
+
+    def _month_board(self, domain, date_field, buckets, color):
         """Month cards carrying both the totals and the deals behind them.
 
-        Replaces the plain bar chart these three views used to be. A bar says
-        "how much" but never "which"; a flat table of six months of records
-        buries the trend. Each month returns its total, its count and the
-        largest few opportunities, so the shape and the detail are readable at
-        once and every number can be opened.
+        Replaces the plain bar chart these views used to be. A bar says "how
+        much" but never "which"; a flat table of six months of records buries
+        the trend. Each month returns its total, its count and the largest few
+        opportunities, so the shape and the detail are readable at once and
+        every number can be opened.
 
         Totals come from ``read_group`` and are always exact. The inline list
         is a separate fetch, ordered by value and capped, so one huge month
         cannot pull the whole table into memory — anything past
         ``LIST_PER_MONTH`` is reported as ``more`` and reached via drill-down.
-
-        ``active_test=False`` is required for the Lost board: lost leads are
-        archived, and the default ORM filter would return an empty set.
         """
-        Lead = self.env['crm.lead']
-        if not active_test:
-            Lead = Lead.with_context(active_test=False)
-
+        Lead = self._leads()
         is_datetime = Lead._fields[date_field].type == 'datetime'
 
         def month_key(value):
@@ -293,7 +524,7 @@ class FtSalesDashboard(models.TransientModel):
         # Widen the fetch by a day at each end: the bounds below are naive while
         # bucketing is timezone-aware, so a record within a few hours of a
         # boundary would otherwise be dropped before it could be bucketed.
-        # Anything landing outside the six buckets is ignored when mapping, so
+        # Anything landing outside the buckets is ignored when mapping, so
         # the wider window cannot inflate a total.
         window = domain + [
             (date_field, '>=', fields.Date.to_string(
@@ -351,6 +582,15 @@ class FtSalesDashboard(models.TransientModel):
             key = bucket.strftime('%Y-%m')
             total = totals.get(key) or {'amount': 0.0, 'count': 0}
             items = by_month.get(key, [])[:LIST_PER_MONTH]
+            # The card's own drill-down window, resolved here for the same
+            # reason as the period bounds above: this month was BUCKETED in the
+            # user's timezone, so a client rebuilding "2026-08-01" as a UTC
+            # instant would open a window shifted by the offset and miss the
+            # deals sitting within it of a month boundary.
+            month_from, month_to = self._period_bounds(
+                date_field,
+                fields.Date.to_string(bucket),
+                fields.Date.to_string(bucket + relativedelta(months=1, days=-1)))
             months.append({
                 'key': key,
                 'label': bucket.strftime('%b %Y'),
@@ -360,6 +600,8 @@ class FtSalesDashboard(models.TransientModel):
                 'count': total['count'],
                 'items': items,
                 'more': max(total['count'] - len(items), 0),
+                'from': month_from,
+                'to': month_to,
             })
 
         # Shared scale so the bars compare across months rather than each
@@ -376,19 +618,24 @@ class FtSalesDashboard(models.TransientModel):
     # ------------------------------------------------------------------
     # Executive-wise report
     # ------------------------------------------------------------------
-    def _executive_report(self, base_domain):
-        """Per-salesperson count, Expected Revenue and conversion ratio.
+    def _executive_report(self, generated, outcome):
+        """Per-salesperson counts, Expected Revenue and conversion, plus totals.
 
-        Three read_groups for the whole table regardless of how many
+        Four read_groups for the whole table regardless of how many
         salespeople exist — never one query per executive.
 
-        Conversion = won / assigned x 100, both measured over the SAME
-        population (the period's Expected Closing). Mixing populations — e.g.
-        wins by close date against assignments by expected close — produces
-        ratios above 100% and is why this is computed here rather than reusing
-        the global KPI.
+        Each column is measured on the SAME domain as the KPI card above it:
+        Opportunities on Creation Date, Sales Closed and Lost on Closed Date.
+        That is what lets the totals row reconcile exactly with the cards — the
+        check the manager actually performs. Rows are built from the UNION of
+        the three groupings, because an executive can have a deal closing in the
+        period without having opened one in it; dropping those rows would leave
+        the Sales Closed column short of the card it is supposed to match.
+
+        Conversion = Sales Closed / Opportunities x 100, the same definition as
+        the KPI card, computed through _ratio() so the two cannot drift.
         """
-        Lead = self.env['crm.lead']
+        Lead = self._leads()
 
         def by_user(domain, value_field=None):
             fields_ = [f'{value_field}:sum'] if value_field else []
@@ -403,22 +650,44 @@ class FtSalesDashboard(models.TransientModel):
                 }
             return out
 
-        counts = by_user(base_domain)
-        amounts = by_user(base_domain, value_field='expected_revenue')
-        won = by_user(base_domain + self._won_domain())
+        counts = by_user(generated)
+        amounts = by_user(generated, value_field='expected_revenue')
+        won = by_user(outcome + self._won_domain())
+        lost = by_user(outcome + self._lost_domain())
+
+        names = {}
+        for source in (counts, amounts, won, lost):
+            for uid, entry in source.items():
+                names.setdefault(uid, entry['name'])
 
         rows = []
-        for uid, entry in counts.items():
-            total = entry['value']
+        for uid, name in names.items():
+            total = counts.get(uid, {}).get('value', 0)
             won_count = won.get(uid, {}).get('value', 0)
             rows.append({
                 'user_id': uid,
-                'name': entry['name'],
+                'name': name,
                 'count': total,
                 'amount': amounts.get(uid, {}).get('value', 0.0),
                 'won': won_count,
-                'conversion': round(won_count / total * 100, 1) if total else 0.0,
+                'lost': lost.get(uid, {}).get('value', 0),
+                'conversion': self._ratio(won_count, total),
             })
         # Biggest pipeline first: the ordering a sales manager reads top-down.
         rows.sort(key=lambda r: r['amount'], reverse=True)
-        return rows
+
+        # Totals row. Summed from the rows rather than re-queried, so it is
+        # arithmetically impossible for the table body and its own total to
+        # disagree — and because each column uses the KPI's domain, these totals
+        # equal the cards for whatever filter is applied.
+        total_count = sum(r['count'] for r in rows)
+        total_won = sum(r['won'] for r in rows)
+        totals = {
+            'name': 'Total',
+            'count': total_count,
+            'amount': round(sum(r['amount'] for r in rows), 2),
+            'won': total_won,
+            'lost': sum(r['lost'] for r in rows),
+            'conversion': self._ratio(total_won, total_count),
+        }
+        return {'rows': rows, 'total': totals}

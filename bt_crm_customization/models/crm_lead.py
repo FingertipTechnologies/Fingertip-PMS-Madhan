@@ -5,10 +5,20 @@ from odoo.exceptions import ValidationError, UserError
 COLD_STAGE = 'cold'
 # Business Challenge / Expected Revenue / Expected Closing / Technology become
 # mandatory from the Qualified stage onward.
+#
+# 'lost' is deliberately NOT in this set. A lost opportunity is now moved into
+# the Lost stage automatically when it is archived (see
+# ft_sales_dashboard/models/crm_lead.py), so that a list, an export or a pivot
+# never shows a dead deal sitting in Discussion or Demo. Demanding Business
+# Challenge, Technology and an Expected Closing date before a deal may be
+# recorded as lost would block that move outright — 241 of the archived
+# opportunities in the live database do not carry all four — and it asks for
+# forward-looking qualification data about a deal that has already ended.
 QUALIFIED_PLUS_STAGES = {
-    'qualified', 'estimation', 'proposition', 'negotiation', 'won', 'lost',
+    'qualified', 'estimation', 'proposition', 'negotiation', 'won',
 }
 WON_STAGE = 'won'
+LOST_STAGE = 'lost'
 NEXT_ACTION_MIN_LEN = 20
 
 
@@ -90,6 +100,9 @@ class InheritCrmLead(models.Model):
     is_won_stage = fields.Boolean(
         string="Is Won Stage", compute='_compute_stage_flags',
     )
+    is_lost_stage = fields.Boolean(
+        string="Is Lost Stage", compute='_compute_stage_flags',
+    )
 
     @api.depends('stage_id', 'stage_id.name')
     def _compute_stage_flags(self):
@@ -98,12 +111,18 @@ class InheritCrmLead(models.Model):
             lead.is_cold_stage = name == COLD_STAGE
             lead.require_qualified_fields = name in QUALIFIED_PLUS_STAGES
             lead.is_won_stage = name == WON_STAGE
+            lead.is_lost_stage = name == LOST_STAGE
 
     @api.constrains('next_action', 'stage_id', 'type')
     def _check_next_action(self):
-        """Next Action is mandatory (min 20 chars) in every stage except Cold."""
+        """Next Action is mandatory (min 20 chars) except in Cold and Lost.
+
+        Lost is exempt for the same reason it left QUALIFIED_PLUS_STAGES: there
+        is no next action on a deal that has ended, and requiring one would stop
+        the automatic move into the Lost stage on archive.
+        """
         for lead in self:
-            if lead.type != 'opportunity' or lead.is_cold_stage:
+            if lead.type != 'opportunity' or lead.is_cold_stage or lead.is_lost_stage:
                 continue
             text = (lead.next_action or '').strip()
             if not text:
@@ -158,7 +177,14 @@ class InheritCrmLead(models.Model):
         Next Action was updated since the previous stage change.
         """
         stage_changing = self.browse()
-        if 'stage_id' in vals:
+        # Moving INTO Lost is exempt: that move is made automatically when an
+        # opportunity is archived, and there is no next action to record on a
+        # deal that has ended. Without this the automatic move would raise and
+        # the archive would fail.
+        target_is_lost = bool(vals.get('stage_id')) and (
+            self.env['crm.stage'].browse(vals['stage_id']).name or ''
+        ).strip().lower() == LOST_STAGE
+        if 'stage_id' in vals and not target_is_lost:
             new_stage = vals.get('stage_id')
             for lead in self:
                 if lead.type != 'opportunity' or lead.stage_id.id == new_stage:

@@ -1,6 +1,6 @@
 {
     'name': 'FT Sales Dashboard',
-    'version': '18.0.1.0.0',
+    'version': '18.0.1.2.0',
     'category': 'Sales/CRM',
     'summary': 'Executive Sales Dashboard — KPI cards & Chart.js analytics (OWL)',
     'description': """
@@ -35,6 +35,14 @@ Extracted from bt_crm_customization into its own standalone module.
             'ft_sales_dashboard/static/src/xml/sales_dashboard_templates.xml',
         ],
     },
+    # Two data repairs the dashboard depends on, both idempotent:
+    #  * fills the Closed Date that won/lost opportunities imported straight
+    #    into a Won stage never received (Sales Closed / Lost would otherwise
+    #    under-report against a CRM export);
+    #  * moves archived opportunities into the Lost stage, so a list, export or
+    #    pivot never shows a dead deal under Discussion / Demo / Negotiation.
+    # See models/crm_lead.py.
+    'post_init_hook': 'post_init_hook',
     'installable': True,
     'application': True,
     'license': 'LGPL-3',

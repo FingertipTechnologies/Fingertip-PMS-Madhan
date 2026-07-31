@@ -22,6 +22,10 @@ export class TableCard extends Component {
         note: { type: String, optional: true },
         fullWidth: { type: Boolean, optional: true },
         emptyText: { type: String, optional: true },
+        // Optional totals row, rendered in a sticky <tfoot> using the same
+        // column definitions as the body — so a column can never be formatted
+        // one way in the rows and another way in its own total.
+        total: { type: [Object, { value: null }], optional: true },
         onRowClick: { type: Function, optional: true },
     };
 
