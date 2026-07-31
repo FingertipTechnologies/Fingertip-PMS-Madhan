@@ -260,7 +260,7 @@
                     <TableCard title="'Executive-wise — Opportunities, Value and Conversion'"
                                columns="execColumns" rows="executives" total="executiveTotal"
                                fullWidth="true"
-                               note="'Opportunities and Expected Revenue by Creation Date; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly. Click a row to open those opportunities.'"
+                               note="'Opportunities and Expected Revenue by Expected Closing, excluding archived; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly. Click a row to open those opportunities.'"
                                emptyText="'No opportunities in this period.'"
                                onRowClick="(row) => this.openExecutive(row)"/>
                 </div>

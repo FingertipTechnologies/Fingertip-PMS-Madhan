@@ -45,24 +45,31 @@ WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 Archived is therefore what separates lost from won; a won stage alone is not
 enough, because a won lead that is later archived is no longer a live sale.
 
-ARCHIVED RECORDS ARE PART OF THE POPULATION
-===========================================
-Lost opportunities are archived. The ORM silently appends ``active = True`` to
-any domain that does not mention ``active`` itself (models._where_calc), so
-every figure whose domain named only type + date — Opportunities Generated, the
-funnel, the executive report — was quietly dropping every lost deal, while the
-Opportunities Lost card (which does name ``active``) counted them. That single
-asymmetry is why the cards, the drill-downs, the filtered lists and a CRM
-export never agreed. Everything here now reads through ``_leads()``, which
-disables active_test, and every drill-down in
-static/src/js/sales_dashboard.js passes ``active_test: False`` to match.
+WHICH FIGURES SEE ARCHIVED RECORDS
+==================================
+The ORM silently appends ``active = True`` to any domain that does not mention
+``active`` itself (models._where_calc), so a figure could include or exclude
+archived deals purely by accident. That asymmetry is why the cards, the
+drill-downs, the filtered lists and a CRM export never agreed. Every query here
+now goes through ``_leads()``, which disables active_test, and each domain then
+states its own position explicitly:
 
-A lost opportunity keeps whatever stage it was in when it was lost (Odoo does
-not move it), so grouping archived records by stage would report them under
-Discussion / Demo / Negotiation. The funnel therefore takes its bands from live
-records only and shows every archived record in one dedicated "Lost" band, so a
-lost deal is never displayed inside an active stage and the bands still add up
-to Opportunities Generated.
+* Opportunities and Pipeline Value — live records only (``_generated_domain``),
+  so both equal the matching group in the Pipeline list, which also hides
+  archived records. Archived deals are reported by Opportunities Lost instead.
+* Opportunities Lost — archived records AND live ones in a Lost stage.
+* Sales Closed / Sales Closed Value — live records in a won stage.
+
+Every drill-down in static/src/js/sales_dashboard.js passes
+``active_test: False`` and then repeats the same explicit condition, so a card
+and the list it opens can never disagree.
+
+A lost opportunity keeps whatever stage it was in when it was lost, so grouping
+by stage would report it under Discussion / Demo / Negotiation.
+ft_sales_dashboard/models/crm_lead.py therefore moves it into the Lost stage on
+archive, and the funnel pulls every Lost-stage record into one dedicated band,
+so a dead deal is never displayed inside an active stage and the bands still add
+up to the Opportunities card.
 """
 from dateutil.relativedelta import relativedelta
 
@@ -439,10 +446,11 @@ class FtSalesDashboard(models.TransientModel):
 
         Bands are stages — that is what makes it a funnel — but the value shown
         and the band width are Expected Revenue, and the period filter is
-        Creation Date, so the bands add up to Opportunities Generated.
+        Expected Closing, so the bands add up to the Opportunities card.
 
-        Stage bands are taken from LIVE records only, and every archived record
-        is shown in one trailing "Lost" band. A lost opportunity keeps whatever
+        Bands come from the same population as that card, which is live records
+        only, and every live record in a Lost stage is pulled into one trailing
+        "Lost" band. A lost opportunity keeps whatever
         stage it was in when it was lost, so grouping it by stage would list it
         under Discussion / Demo / Negotiation and report a dead deal as active
         pipeline. Won stages stay in the bands: a won deal is a real end state.
@@ -648,7 +656,9 @@ class FtSalesDashboard(models.TransientModel):
         salespeople exist — never one query per executive.
 
         Each column is measured on the SAME domain as the KPI card above it:
-        Opportunities on Creation Date, Sales Closed and Lost on Closed Date.
+        Opportunities and Expected Revenue on Expected Closing over live records
+        (the population both left-hand cards share), Sales Closed and Lost on
+        Closed Date.
         That is what lets the totals row reconcile exactly with the cards — the
         check the manager actually performs. Rows are built from the UNION of
         the three groupings, because an executive can have a deal closing in the
