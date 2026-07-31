@@ -10,6 +10,13 @@
                     <field name="estimated" widget="float_time"/>
                     <field name="actual"/>
                     <field name="module_id" required="True"/>
+                    <!-- Both hidden until this task has actually been reopened,
+                         so a task that went straight through carries no rework
+                         clutter. Shown together because the count alone does not
+                         say what the second round cost. -->
+                    <field name="ft_reopen_count" invisible="ft_reopen_count == 0"/>
+                    <field name="ft_rework_hours" widget="float_time"
+                           invisible="ft_reopen_count == 0"/>
                 </group>
             </field>
         </field>

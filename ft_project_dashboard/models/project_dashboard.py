@@ -62,17 +62,29 @@ STANDUP_PROJECT_NAME = 'Fingertip Standup'
 INTERNAL_MEETING_TYPE = 'internal_call'
 EXTERNAL_MEETING_TYPE = 'external_call'
 
-# Sentinel values the Developer picker can carry instead of an hr.employee id.
+# Sentinel values either people picker can carry instead of an hr.employee id.
 # Strings, so they can never collide with a real id.
 #
-#   UNASSIGNED — work with nobody on it. Meaningful for tasks (2,947 active ones
-#       carry no assignee); in Hours Utilisation it correctly reports 0, because
-#       a timesheet line always records who booked it.
-#   PM — the selected project manager's OWN work, stripping out her team's. The
-#       PM picker on its own means "projects this person MANAGES", so it includes
-#       every developer who booked time on them; this narrows it to just her.
-DEV_FILTER_UNASSIGNED = 'none'
-DEV_FILTER_PM = 'pm'
+# NONE means "nobody from this side of the pair", which reads the same way in
+# both dropdowns and gives the section a symmetric pair of controls:
+#
+#   PM = Asha, Developer = None   -> only Asha's own records. The PM picker alone
+#       means "projects this person MANAGES", so it otherwise sweeps in every
+#       developer who booked time on them — 2,541 h across 24 people on one
+#       project where her own share was 560 h. None strips her team back out.
+#
+#   PM = None, Developer = Ravi   -> only Ravi's records, with no project-manager
+#       scoping applied on top.
+#
+#   Both None is contradictory — nobody on either side — and matches nothing
+#       rather than quietly falling back to everything.
+#
+# UNASSIGNED is a different question and keeps its own entry: records with no
+# assignee at all. Real for tasks (2,947 active ones carry none); in Hours
+# Utilisation it correctly reports 0, a timesheet line always recording who
+# booked it.
+FILTER_NONE = 'none'
+FILTER_UNASSIGNED = 'unassigned'
 
 # A consistent, professional palette reused across charts.
 PALETTE = [
@@ -280,25 +292,37 @@ class FtProjectDashboard(models.TransientModel):
         # they run — which is what the label says and what every other section
         # already meant by it.
         Employee = self.env['hr.employee'].sudo()
-        if filters.get('pm_id'):
-            user = Employee.browse(int(filters['pm_id'])).user_id
+        pm_id = filters.get('pm_id')
+        dev_id = filters.get('dev_id')
+
+        # Developer = None means "no developer's time, only the PM's own".
+        pm_only = dev_id == FILTER_NONE
+
+        # The PM leaf applies whenever a real PM is picked, None or not. It keeps
+        # meaning "projects this person manages"; None simply ANDs "and booked by
+        # her" on top, which is what strips the team out. Dropping the project
+        # leaf here would instead widen the answer to her hours on everyone
+        # else's projects too.
+        if pm_id and pm_id != FILTER_NONE:
+            user = Employee.browse(int(pm_id)).user_id
             # An employee with no linked user matches nothing rather than being
             # ignored: dropping the leaf would show totals that look unfiltered.
             domain.append(('project_id.user_id', '=', user.id) if user
                           else ('id', '=', 0))
-        # Developer, which also carries the two sentinels. Checked before the
-        # int() branch because they are strings and would blow up in it.
-        dev_id = filters.get('dev_id')
-        if dev_id == DEV_FILTER_UNASSIGNED:
+
+        # Sentinels are checked before the int() branch: they are strings and
+        # would raise in it.
+        if pm_only:
+            pm = self._pm_employee(filters)
+            # No real PM chosen means there is nobody on either side of the pair,
+            # which is contradictory input — match nothing rather than quietly
+            # reporting everything.
+            domain.append(('employee_id', '=', pm.id) if pm else ('id', '=', 0))
+        elif dev_id == FILTER_UNASSIGNED:
             # Always 0 here in practice: a timesheet line records who booked it.
             # Offered anyway so the picker reads the same in both sections, and
             # so an orphaned line would be visible rather than quietly lost.
             domain.append(('employee_id', '=', False))
-        elif dev_id == DEV_FILTER_PM:
-            pm = self._pm_employee(filters)
-            # No PM chosen means this cannot narrow anything; match nothing
-            # rather than silently reporting the whole team as if it were hers.
-            domain.append(('employee_id', '=', pm.id) if pm else ('id', '=', 0))
         elif dev_id:
             domain.append(('employee_id', '=', int(dev_id)))
         return domain
@@ -498,21 +522,27 @@ class FtProjectDashboard(models.TransientModel):
         # employee with no user matches nothing rather than being ignored —
         # silently dropping the filter would show totals that look unfiltered.
         Employee = self.env['hr.employee'].sudo()
-        # Developer, including the two sentinels. Handled before the int() branch
-        # because they are strings and would raise in it.
+        pm_id = filters.get('pm_id')
         dev_id = filters.get('dev_id')
-        if dev_id == DEV_FILTER_UNASSIGNED:
+
+        # Same rule as the hours side: Developer = None means the PM's OWN tasks.
+        # The PM leaf below still applies, so this reads as "her projects, and
+        # assigned to her" rather than widening to her tasks everywhere.
+        pm_only = dev_id == FILTER_NONE
+
+        if pm_only:
+            user = self._pm_employee(filters).user_id
+            domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
+        elif dev_id == FILTER_UNASSIGNED:
             # Tasks nobody is on. Unlike the hours side this is a real subset —
             # 2,947 active tasks in the production data carry no assignee.
             domain.append(('user_ids', '=', False))
-        elif dev_id == DEV_FILTER_PM:
-            user = self._pm_employee(filters).user_id
-            domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
         elif dev_id:
             user = Employee.browse(int(dev_id)).user_id
             domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
-        if filters.get('pm_id'):
-            user = Employee.browse(int(filters['pm_id'])).user_id
+
+        if pm_id and pm_id != FILTER_NONE:
+            user = Employee.browse(int(pm_id)).user_id
             domain.append(('project_id.user_id', '=', user.id) if user else ('id', '=', 0))
         return domain
 
@@ -774,8 +804,16 @@ class FtProjectDashboard(models.TransientModel):
             ts_domain + [('project_id.allow_billable', '=', True)],
             ['unit_amount:sum'], []) if g.get('unit_amount'))
 
+        # Anchored on create_date like every other task figure on the board.
+        # Without the date leaves this summed EVERY task ever, so the card read
+        # the same 23,128 h whether the header said "Today" or covered thirty
+        # years — and Remaining Hours below, being this minus a period-scoped
+        # Hours Spent, came out at -44,085 h: an all-time budget less one
+        # month's burn, which is not a quantity at all.
         estimated = sum(g['estimated'] for g in Task.read_group(
-            [('project_id', '!=', False)] + task_scope, ['estimated:sum'], [])
+            [('project_id', '!=', False)] + task_scope
+            + self._date_leaves('create_date', date_from, date_to),
+            ['estimated:sum'], [])
             if g.get('estimated'))
 
         # Narrowed to whoever booked time on the scoped project(s) in the period
@@ -1003,11 +1041,28 @@ class FtProjectDashboard(models.TransientModel):
             for stage_id in self._stage_ids_named((stage_name,)):
                 group_by_stage_id[stage_id] = group
 
+        # Two projects can carry the same name — "Johns Umbrella" and
+        # "Product: Real estate Pre sales" each exist twice in production — and
+        # two identical rows in a performance table are indistinguishable. Only
+        # the repeats get a qualifier, so the common case stays clean.
+        name_counts = {}
+        for p in shown:
+            name_counts[p.name or ''] = name_counts.get(p.name or '', 0) + 1
+
+        def row_label(project):
+            name = project.name or ''
+            if name_counts.get(name, 0) < 2:
+                return name
+            # Customer first, since that is what actually tells them apart;
+            # the id is the fallback when both share a customer or have none.
+            partner = project.partner_id.name if project.partner_id else ''
+            return '%s (%s)' % (name, partner or '#%s' % project.id)
+
         rows = []
         for p in shown:
             stats = stats_by_project.get(p.id) or no_delivery
             rows.append({
-                'project': p.name or '',
+                'project': row_label(p),
                 # Which toggle governs this row, or False for always-visible.
                 # A project with no stage set is never hidden: a falsy stage_id
                 # is not in the map, so unstaged work stays visible rather than
@@ -1397,6 +1452,30 @@ class FtProjectDashboard(models.TransientModel):
             return day.replace(day=1)
         return day
 
+    def _trend_bucket_span(self, start, end, bucket):
+        """Every bucket key from ``start`` to ``end`` inclusive, in order.
+
+        The trend used to plot only the buckets that happened to hold data, so a
+        quiet day simply vanished and the bars either side sat next to each
+        other. On a chart whose whole point is the shape over time that reads as
+        continuous activity: July 2026 drew 28 bars for 31 days, hiding two idle
+        Sundays and a dead Friday. Generating the full span instead means an idle
+        bucket is drawn as the zero it is.
+        """
+        keys = []
+        cur = self._trend_bucket_key(start, bucket)
+        last = self._trend_bucket_key(end, bucket)
+        while cur <= last:
+            keys.append(cur)
+            if bucket == 'day':
+                cur = cur + timedelta(days=1)
+            elif bucket == 'week':
+                cur = cur + timedelta(days=7)
+            else:
+                # First of the next month, without dateutil.
+                cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return keys
+
     def _trend_bucket_label(self, key, bucket):
         if bucket == 'week':
             return 'Wk of %s' % key.strftime('%d %b')
@@ -1452,7 +1531,20 @@ class FtProjectDashboard(models.TransientModel):
             _logger.warning('Progress-trend task series unavailable: %s', e)
 
         days = sorted(set(hours_by_day) | set(tasks_by_day))
-        bucket = self._trend_bucket(days)
+
+        # The axis spans the range that was ASKED for, not the days that happen
+        # to hold data, so idle buckets are plotted as zero instead of being
+        # dropped and making the bars either side look adjacent. With no range
+        # given there is nothing to span but the data itself.
+        start = fields.Date.to_date(date_from) if date_from else (days[0] if days else None)
+        end = fields.Date.to_date(date_to) if date_to else (days[-1] if days else None)
+        if not start or not end or end < start:
+            return {'labels': [], 'datasets': []}
+
+        # Granularity from the requested span rather than the observed one, so
+        # the bucket size does not change just because a quiet week happens to
+        # sit at one end of the range.
+        bucket = self._trend_bucket([start, end])
 
         hours_by_bucket = {}
         tasks_by_bucket = {}
@@ -1461,7 +1553,7 @@ class FtProjectDashboard(models.TransientModel):
             hours_by_bucket[key] = hours_by_bucket.get(key, 0.0) + hours_by_day.get(day, 0.0)
             tasks_by_bucket[key] = tasks_by_bucket.get(key, 0) + tasks_by_day.get(day, 0)
 
-        keys = sorted(hours_by_bucket)
+        keys = self._trend_bucket_span(start, end, bucket)
         return {
             'labels': [self._trend_bucket_label(k, bucket) for k in keys],
             'datasets': [

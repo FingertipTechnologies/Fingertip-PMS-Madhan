@@ -249,9 +249,13 @@
                                 <field name="ft_actual_hours" widget="float_time"/>
                             </group>
                             <group string="Rework">
-                                <!-- Target 10% or below. -->
+                                <!-- Two measures on purpose: how OFTEN work
+                                     comes back, and how much it COSTS. Target
+                                     10% or below on the count rate. -->
                                 <field name="ft_rework_rate" digits="[5, 1]"/>
                                 <field name="ft_reworked_tasks"/>
+                                <field name="ft_rework_hours" widget="float_time"/>
+                                <field name="ft_rework_hours_rate" digits="[5, 1]"/>
                             </group>
                         </group>
                     </page>

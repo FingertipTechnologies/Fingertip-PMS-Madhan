@@ -276,9 +276,11 @@
                              onClick="() => this.openKpi('trainees')"
                              tooltip="'Active employees whose Job Position starts with &quot;Trainee&quot;. Counted separately, not included in Developers or Testers. With a project or status selected, only those who booked time on it during the selected period.'"/>
                     <KpiCard title="'Estimated Hours'" value="kpis.hours_estimated" suffix="'h'"
-                             icon="'fa-hourglass-half'" color="'#3B82F6'"/>
+                             icon="'fa-hourglass-half'" color="'#3B82F6'"
+                             tooltip="'Estimated time on tasks created in the selected period. Rolled up from the tasks, which is also what the Estimated field on a project shows.'"/>
                     <KpiCard title="'Remaining Hours'" value="kpis.hours_remaining" suffix="'h'"
-                             icon="'fa-hourglass-end'" color="'#F97316'"/>
+                             icon="'fa-hourglass-end'" color="'#F97316'"
+                             tooltip="'Estimated Hours minus Hours Spent, both for the selected period. Negative means the period burned more time than the work created in it was estimated at.'"/>
                     <KpiCard title="'Resource Need'" value="kpis.resource_need"
                              icon="'fa-users'" color="'#EF4444'"
                              tooltip="'No capacity/planning model installed yet.'"/>
@@ -316,10 +318,17 @@
                     <div class="ftpd_section_head">
                         <h2 class="ftpd_section_title">Hours Utilisation</h2>
                         <div class="ftpd_section_tools">
-                            <div class="ftpd_filter" title="Hours booked on projects this person manages">
+                            <!-- The pair reads symmetrically: None on either side
+                                 means "nobody from this side", leaving only the
+                                 other one's records. -->
+                            <div class="ftpd_filter" title="Hours booked on projects this person manages. None = no PM scoping, leaving only the selected developer.">
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onHoursFilter('hoursPmId', ev)">
                                     <option value="">All PMs</option>
+                                    <option value="none"
+                                            t-att-selected="isFilterSelected('none', state.hoursPmId)">
+                                        None — developer only
+                                    </option>
                                     <t t-foreach="state.filterOptions.project_managers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
                                                 t-att-selected="isFilterSelected(e.id, state.hoursPmId)"
@@ -327,25 +336,24 @@
                                     </t>
                                 </select>
                             </div>
-                            <div class="ftpd_filter" title="Hours booked by this developer">
+                            <div class="ftpd_filter" title="Hours booked by this developer. None = the selected PM's own hours only, excluding her team.">
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onHoursFilter('hoursDevId', ev)">
                                     <option value="">All Developers</option>
-                                    <!-- Unassigned reads 0 h here by design: a
-                                         timesheet line always records who booked
-                                         it. Offered so the picker is identical in
-                                         both sections, and so an orphaned line
-                                         would show up rather than stay hidden. -->
-                                    <option value="none"
+                                    <!-- Only offered with a real PM chosen: it
+                                         resolves to that PM's own hours, so it has
+                                         nothing to narrow on its own. -->
+                                    <option value="none" t-if="hasRealPm('hours')"
                                             t-att-selected="isFilterSelected('none', state.hoursDevId)">
-                                        None (unassigned)
+                                        None — this PM only
                                     </option>
-                                    <!-- Only offered with a PM chosen; the PM
-                                         picker alone means "projects she manages",
-                                         so this strips her team back out. -->
-                                    <option value="pm" t-if="hasPmSelected('hours')"
-                                            t-att-selected="isFilterSelected('pm', state.hoursDevId)">
-                                        Only this PM
+                                    <!-- Reads 0 h here by design: a timesheet line
+                                         always records who booked it. Offered so
+                                         the picker matches Tasks Summary, and so an
+                                         orphaned line would show rather than hide. -->
+                                    <option value="unassigned"
+                                            t-att-selected="isFilterSelected('unassigned', state.hoursDevId)">
+                                        Unassigned
                                     </option>
                                     <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
@@ -455,10 +463,14 @@
                     <div class="ftpd_section_head">
                         <h2 class="ftpd_section_title">Tasks Summary</h2>
                         <div class="ftpd_section_tools">
-                            <div class="ftpd_filter" title="Tasks in projects this person manages">
+                            <div class="ftpd_filter" title="Tasks in projects this person manages. None = no PM scoping, leaving only the selected developer.">
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onTasksFilter('tasksPmId', ev)">
                                     <option value="">All PMs</option>
+                                    <option value="none"
+                                            t-att-selected="isFilterSelected('none', state.tasksPmId)">
+                                        None — developer only
+                                    </option>
                                     <t t-foreach="state.filterOptions.project_managers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
                                                 t-att-selected="isFilterSelected(e.id, state.tasksPmId)"
@@ -466,20 +478,20 @@
                                     </t>
                                 </select>
                             </div>
-                            <div class="ftpd_filter" title="Tasks this person is assigned to">
+                            <div class="ftpd_filter" title="Tasks this person is assigned to. None = tasks assigned to the selected PM only, excluding her team.">
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onTasksFilter('tasksDevId', ev)">
                                     <option value="">All Developers</option>
+                                    <option value="none" t-if="hasRealPm('tasks')"
+                                            t-att-selected="isFilterSelected('none', state.tasksDevId)">
+                                        None — this PM only
+                                    </option>
                                     <!-- A real subset here, unlike the hours
                                          section: plenty of tasks carry no
                                          assignee at all. -->
-                                    <option value="none"
-                                            t-att-selected="isFilterSelected('none', state.tasksDevId)">
-                                        None (unassigned)
-                                    </option>
-                                    <option value="pm" t-if="hasPmSelected('tasks')"
-                                            t-att-selected="isFilterSelected('pm', state.tasksDevId)">
-                                        Only this PM
+                                    <option value="unassigned"
+                                            t-att-selected="isFilterSelected('unassigned', state.tasksDevId)">
+                                        Unassigned
                                     </option>
                                     <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
                                         <option t-att-value="e.id"
