@@ -197,6 +197,26 @@ class InheritProjectProject(models.Model):
         help="Delivered tasks that were moved back out of a Completed stage at "
              "least once.",
     )
+    ft_rework_hours = fields.Float(
+        string='Rework Hours',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        help="Time logged on delivered tasks after they were moved back out of "
+             "a completed stage — the cost of redoing work that had already "
+             "been called finished.",
+    )
+    ft_rework_hours_rate = fields.Float(
+        string='Rework Hours (%)',
+        compute='_compute_ft_delivery_stats',
+        store=False,
+        readonly=True,
+        aggregator=False,
+        help="Share of the effort on delivered tasks that went into rework. "
+             "Answers a different question from Rework Rate beside it: that one "
+             "counts how OFTEN work comes back, this one how much it COSTS. One "
+             "task reopened once can be 2% of the count and half the hours.",
+    )
 
     @api.depends('tasks.estimated')
     def _compute_estimated(self):
@@ -210,7 +230,7 @@ class InheritProjectProject(models.Model):
                  'task_ids.stage_id.fold', 'task_ids.stage_id.name',
                  'task_ids.state',
                  'task_ids.estimated', 'task_ids.effective_hours',
-                 'task_ids.ft_reopen_count')
+                 'task_ids.ft_reopen_count', 'task_ids.ft_rework_hours')
     def _compute_ft_delivery_stats(self):
         Task = self.env['project.task']
         # Two queries for the whole set rather than two per project — this
@@ -236,6 +256,8 @@ class InheritProjectProject(models.Model):
             project.ft_unestimated_tasks = stats.get('unestimated', 0)
             project.ft_rework_rate = stats.get('rework_rate') or 0.0
             project.ft_reworked_tasks = stats.get('reworked', 0)
+            project.ft_rework_hours = stats.get('rework_hours', 0.0)
+            project.ft_rework_hours_rate = stats.get('rework_hours_rate') or 0.0
 
     @api.model_create_multi
     def create(self, vals_list):

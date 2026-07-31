@@ -14,16 +14,22 @@ class AccountAnalyticLine(models.Model):
         the person move the task back to Working first is what turns that
         second round of work into a counted reopen.
 
-        Keyed off ``stage_id.fold`` rather than ``state``, for the same reason
-        the delivery metrics are: stages in this database do not set state, so
-        checking state would let almost everything through.
+        Uses ``_ft_final_stage_ids`` — the one definition of "delivered" for the
+        whole PMS — rather than testing ``stage_id.fold`` directly. That
+        distinction is the entire reason this guard had never once fired: the
+        production stage set has "Completed" UNFOLDED, so fold was False on every
+        completed task, time went straight onto delivered work, nobody was ever
+        made to reopen anything, and ft_reopen_count sat at 0 across all 7,028
+        active tasks — leaving Rework Rate a permanent 0%.
 
         Superuser is exempt so imports, migrations and scheduled jobs are not
         blocked; a plain administrator is NOT, because admins log time too and
         exempting them would leave the rule unenforced for the people most
         likely to bypass it.
         """
-        if self.env.su or not task or not task.stage_id.fold:
+        if self.env.su or not task:
+            return
+        if task.stage_id.id not in self.env['project.task']._ft_final_stage_ids():
             return
         raise UserError(_(
             'This task is completed — timesheets cannot be logged on it.\n\n'

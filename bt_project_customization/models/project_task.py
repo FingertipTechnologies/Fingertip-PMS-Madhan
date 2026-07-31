@@ -49,6 +49,16 @@ class ProjectTask(models.Model):
              "Counted from the day this feature was installed onwards, so tasks "
              "reopened before then read 0.",
     )
+    ft_rework_hours = fields.Float(
+        string='Rework Hours',
+        compute='_compute_ft_rework_hours',
+        store=True,
+        readonly=True,
+        help="Time logged on this task after it was moved back out of a "
+             "completed stage — the second round of effort on work that had "
+             "already been delivered. Zero until the task is reopened at least "
+             "once; earlier hours stay first-round work.",
+    )
     ft_completion_date = fields.Datetime(
         string='Completion Date',
         compute='_compute_ft_completion_date',
@@ -120,6 +130,26 @@ class ProjectTask(models.Model):
                 raise ValidationError(_(
                     "Task title must be at least %s characters long."
                 ) % TASK_TITLE_MIN_LEN)
+
+    @api.depends('timesheet_ids.ft_is_rework', 'timesheet_ids.unit_amount')
+    def _compute_ft_rework_hours(self):
+        for task in self:
+            task.ft_rework_hours = round(sum(
+                line.unit_amount for line in task.timesheet_ids
+                if line.ft_is_rework
+            ), 2)
+
+    @api.model
+    def ft_get_final_stage_ids(self):
+        """Public wrapper so the web client can ask which stages are final.
+
+        The status-bar confirmation needs this: it used to decide "is this a
+        completion?" from the item's own ``isFolded`` flag, which is False on
+        every stage in this database, so the dialog never once appeared. Odoo
+        refuses RPC to names beginning with an underscore, hence the wrapper
+        rather than exposing _ft_final_stage_ids directly.
+        """
+        return self._ft_final_stage_ids()
 
     @api.model
     def _ft_final_stage_ids(self):
@@ -334,19 +364,38 @@ class ProjectTask(models.Model):
 
     @api.model
     def _ft_rework_aggregate(self, tasks):
-        """Rework Rate for a recordset of DELIVERED tasks.
+        """Rework figures for a recordset of DELIVERED tasks.
 
-        (Tasks reopened / Total delivered) x 100. Target: 10% or below.
+        Two complementary measures, because "how often" and "how expensive" are
+        different questions and a team can score well on one while failing the
+        other:
 
-        Counts TASKS that were reopened at least once, not total reopen events,
-        so one task bounced five times cannot push the rate above 100%.
+          rate       (Tasks reopened / Total delivered) x 100. Target 10% or
+                     below. Counts TASKS reopened at least once, not reopen
+                     events, so one task bounced five times cannot push it past
+                     100%.
+          hours_rate (Rework hours / Total hours) x 100 — the share of effort
+                     that went into redoing delivered work. A single task
+                     reopened once but costing eighty hours barely moves the
+                     count rate while dominating this one.
+
+        Rework hours come from the per-line ft_is_rework flag, stamped when the
+        time was entered, so they measure the effort that followed a reopen
+        rather than everything ever logged on a task that was reopened later.
         """
         completed = len(tasks)
         reworked = len(tasks.filtered(lambda t: t.ft_reopen_count > 0))
+        rework_hours = sum(tasks.mapped('ft_rework_hours'))
+        total_hours = sum(tasks.mapped('effective_hours'))
         return {
             'completed': completed,
             'reworked': reworked,
             'rate': round(reworked / completed * 100, 2) if completed else None,
+            'rework_hours': round(rework_hours, 2),
+            # None rather than 0 when nothing was logged: 0% would read as "no
+            # rework" when the truth is that there is nothing to measure.
+            'hours_rate': (round(rework_hours / total_hours * 100, 2)
+                           if total_hours else None),
         }
 
     @api.model
@@ -410,6 +459,8 @@ class ProjectTask(models.Model):
             'unestimated': efficiency['unestimated'],
             'rework_rate': rework['rate'],
             'reworked': rework['reworked'],
+            'rework_hours': rework['rework_hours'],
+            'rework_hours_rate': rework['hours_rate'],
         })
         return stats
 
