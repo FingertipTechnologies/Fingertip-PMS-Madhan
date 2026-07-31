@@ -321,7 +321,13 @@
                             <!-- The pair reads symmetrically: None on either side
                                  means "nobody from this side", leaving only the
                                  other one's records. -->
+                            <!-- Each picker is labelled. Once a name is chosen the
+                                 two boxes look identical, and which one you are
+                                 reading changes what the number means — PM is
+                                 "projects this person manages", Developer is
+                                 "the person who booked it". -->
                             <div class="ftpd_filter" title="Hours booked on projects this person manages. None = no PM scoping, leaving only the selected developer.">
+                                <span class="ftpd_filter_name">PM</span>
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onHoursFilter('hoursPmId', ev)">
                                     <option value="">All PMs</option>
@@ -337,6 +343,7 @@
                                 </select>
                             </div>
                             <div class="ftpd_filter" title="Hours booked by this developer. None = the selected PM's own hours only, excluding her team.">
+                                <span class="ftpd_filter_name">Developer</span>
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onHoursFilter('hoursDevId', ev)">
                                     <option value="">All Developers</option>
@@ -464,6 +471,7 @@
                         <h2 class="ftpd_section_title">Tasks Summary</h2>
                         <div class="ftpd_section_tools">
                             <div class="ftpd_filter" title="Tasks in projects this person manages. None = no PM scoping, leaving only the selected developer.">
+                                <span class="ftpd_filter_name">PM</span>
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onTasksFilter('tasksPmId', ev)">
                                     <option value="">All PMs</option>
@@ -479,6 +487,7 @@
                                 </select>
                             </div>
                             <div class="ftpd_filter" title="Tasks this person is assigned to. None = tasks assigned to the selected PM only, excluding her team.">
+                                <span class="ftpd_filter_name">Developer</span>
                                 <select class="ftpd_filter_select"
                                         t-on-change="(ev) => this.onTasksFilter('tasksDevId', ev)">
                                     <option value="">All Developers</option>
@@ -513,7 +522,7 @@
                         <KpiCard title="'Tasks Due'" value="tasks.tasks_due"
                                  onClick="() => this.openTaskKpi('tasks_due')"
                                  icon="'fa-calendar-check-o'" color="'#F59E0B'"
-                                 tooltip="'Tasks with a Deadline falling in the selected range.'"/>
+                                 tooltip="'Tasks whose Deadline has arrived or passed and that are not yet Completed — work that should already have been delivered. A snapshot of today, deliberately not filtered by the selected period. Counts tasks due later today too, which is the only difference from Open &amp; Overdue.'"/>
                         <KpiCard title="'Completed Tasks'" value="tasks.tasks_completed"
                                  onClick="() => this.openTaskKpi('tasks_completed')"
                                  icon="'fa-check-circle'" color="'#10B981'"

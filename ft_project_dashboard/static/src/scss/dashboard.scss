@@ -490,6 +490,21 @@
             font-size: 12px;
             font-weight: 600;
         }
+        // Says which picker this is. Without it the two boxes are
+        // indistinguishable once a name is selected, and they do not mean the
+        // same thing: PM is "projects this person manages", Developer is "the
+        // person who booked it". Separated by a hairline so the label reads as a
+        // caption rather than as part of the value.
+        .ftpd_filter_name {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--ftpd-muted);
+            white-space: nowrap;
+            padding-right: 6px;
+            border-right: 1px solid var(--ftpd-border);
+        }
         .ftpd_filter_select {
             border: 0;
             outline: 0;
