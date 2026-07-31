@@ -62,28 +62,17 @@ STANDUP_PROJECT_NAME = 'Fingertip Standup'
 INTERNAL_MEETING_TYPE = 'internal_call'
 EXTERNAL_MEETING_TYPE = 'external_call'
 
-# Sentinel values either people picker can carry instead of an hr.employee id.
-# Strings, so they can never collide with a real id.
+# Sentinel the person picker can carry instead of an hr.employee id. A string,
+# so it can never collide with a real id.
 #
-# NONE means "nobody from this side of the pair", which reads the same way in
-# both dropdowns and gives the section a symmetric pair of controls:
+# UNASSIGNED means records with nobody on them. Real for tasks (2,947 active ones
+# carry no assignee); in Hours Utilisation it correctly reports 0, a timesheet
+# line always recording who booked it.
 #
-#   PM = Asha, Developer = None   -> only Asha's own records. The PM picker alone
-#       means "projects this person MANAGES", so it otherwise sweeps in every
-#       developer who booked time on them — 2,541 h across 24 people on one
-#       project where her own share was 560 h. None strips her team back out.
-#
-#   PM = None, Developer = Ravi   -> only Ravi's records, with no project-manager
-#       scoping applied on top.
-#
-#   Both None is contradictory — nobody on either side — and matches nothing
-#       rather than quietly falling back to everything.
-#
-# UNASSIGNED is a different question and keeps its own entry: records with no
-# assignee at all. Real for tasks (2,947 active ones carry none); in Hours
-# Utilisation it correctly reports 0, a timesheet line always recording who
-# booked it.
-FILTER_NONE = 'none'
+# There used to be a second sentinel, NONE, needed only because the sections
+# carried TWO pickers whose different meanings had to be reconciled. Collapsing
+# them into one made it redundant: "that PM's own records" is now simply picking
+# the PM.
 FILTER_UNASSIGNED = 'unassigned'
 
 # A consistent, professional palette reused across charts.
@@ -252,18 +241,6 @@ class FtProjectDashboard(models.TransientModel):
              self._stage_ids_named(INACTIVE_STAGE_NAMES + (AMC_STAGE_NAME,))),
         ] + self._scope_leaves_on_project(filters)
 
-    def _pm_employee(self, filters=None):
-        """The hr.employee behind the PM picker, or an empty recordset.
-
-        sudo because hr.employee is not readable by every project user, and the
-        digit check keeps a sentinel or a stray value from reaching browse().
-        """
-        pm_id = (filters or {}).get('pm_id')
-        Employee = self.env['hr.employee'].sudo()
-        if not pm_id or not str(pm_id).isdigit():
-            return Employee.browse()
-        return Employee.browse(int(pm_id))
-
     def _hours_base_domain(self, filters=None):
         """Everything the Hours Utilisation filters imply EXCEPT the task leaf.
 
@@ -280,51 +257,27 @@ class FtProjectDashboard(models.TransientModel):
             domain.append(('date', '<=', filters['date_to']))
         domain += self._scope_leaves_via_project(filters)
 
-        # PM means "manager of the project the time was booked on"; Developer
-        # means "the person who booked it". Those are the same two meanings the
-        # task sections use, so the identical-looking dropdown pair now answers
-        # the same question everywhere on the board.
+        # One picker, one meaning: the hours this person booked.
         #
-        # Both used to match ``employee_id`` and therefore had to be OR-ed:
-        # picking a PM and a Developer together returned each other's lines
-        # instead of narrowing, and picking a PM alone reported the hours that
-        # person booked personally rather than the hours booked on the projects
-        # they run — which is what the label says and what every other section
-        # already meant by it.
-        Employee = self.env['hr.employee'].sudo()
-        pm_id = filters.get('pm_id')
-        dev_id = filters.get('dev_id')
-
-        # Developer = None means "no developer's time, only the PM's own".
-        pm_only = dev_id == FILTER_NONE
-
-        # The PM leaf applies whenever a real PM is picked, None or not. It keeps
-        # meaning "projects this person manages"; None simply ANDs "and booked by
-        # her" on top, which is what strips the team out. Dropping the project
-        # leaf here would instead widen the answer to her hours on everyone
-        # else's projects too.
-        if pm_id and pm_id != FILTER_NONE:
-            user = Employee.browse(int(pm_id)).user_id
-            # An employee with no linked user matches nothing rather than being
-            # ignored: dropping the leaf would show totals that look unfiltered.
-            domain.append(('project_id.user_id', '=', user.id) if user
-                          else ('id', '=', 0))
-
-        # Sentinels are checked before the int() branch: they are strings and
-        # would raise in it.
-        if pm_only:
-            pm = self._pm_employee(filters)
-            # No real PM chosen means there is nobody on either side of the pair,
-            # which is contradictory input — match nothing rather than quietly
-            # reporting everything.
-            domain.append(('employee_id', '=', pm.id) if pm else ('id', '=', 0))
-        elif dev_id == FILTER_UNASSIGNED:
+        # There used to be two — PM and Developer — and they meant different
+        # things. PM was "projects this person MANAGES", so it swept in her whole
+        # team (2,541 h across 24 people on one project where her own share was
+        # 560 h), while Developer was "the person who booked it". Two look-alike
+        # dropdowns answering different questions, plus None and Unassigned
+        # sentinels to reconcile them, was not something anyone could read off
+        # the screen. Picking a name now simply means that person's own work,
+        # which is what a person filter means everywhere else.
+        #
+        # The old "everything happening on a PM's projects" view is not lost —
+        # that is the header's Project picker, which scopes the whole board.
+        person_id = filters.get('person_id')
+        if person_id == FILTER_UNASSIGNED:
             # Always 0 here in practice: a timesheet line records who booked it.
             # Offered anyway so the picker reads the same in both sections, and
             # so an orphaned line would be visible rather than quietly lost.
             domain.append(('employee_id', '=', False))
-        elif dev_id:
-            domain.append(('employee_id', '=', int(dev_id)))
+        elif person_id:
+            domain.append(('employee_id', '=', int(person_id)))
         return domain
 
     def _hours_filter_domain(self, filters=None):
@@ -424,16 +377,15 @@ class FtProjectDashboard(models.TransientModel):
         """The Hours Utilisation figures for a set of filters.
 
         The role cards are a PARTITION of the hours booked in the period, which is
-        why `other_hours` exists: _role_hours has always bucketed trainees and
-        anyone whose job position is not in ROLE_BUCKETS, but nothing displayed
-        those two buckets, so the four visible cards silently fell short of the
-        period's real total (by 216 h on one project — 194 of it booked by
-        employees with no job position set at all).
+        why `trainee_hours` and `unclassified_hours` exist: _role_hours has always
+        bucketed trainees and anyone whose job position is not in ROLE_BUCKETS,
+        but nothing displayed those two buckets, so the four visible cards
+        silently fell short of the period's real total.
 
         The invariant this establishes, and the one the Project Performance table
         is reconciled against:
 
-            dev + pm + qa + ba + other + non_task
+            dev + pm + qa + ba + trainee + unclassified + non_task
                 == Actual Hrs in Project Performance
 
         both sides being "hours booked in the selected period", under the same
@@ -459,10 +411,19 @@ class FtProjectDashboard(models.TransientModel):
             'pm_hours': round(role['pm'], 2),
             'qa_hours': round(role['qa'], 2),
             'ba_hours': round(role['ba'], 2),
-            # Trainees plus every unclassified job position, so
-            # dev + pm + qa + ba + other == all task-attached hours.
-            'other_hours': round(role['trainee'] + role['other'], 2),
             'trainee_hours': round(role['trainee'], 2),
+            # Whoever is left: a job position that is not one of the recognised
+            # delivery roles, or none at all. Reported separately from trainees
+            # rather than lumped in with them, because they are not the same
+            # thing and the numbers are not close — 4,451 h of trainee time
+            # against 9,471 h unclassified, nearly all of it booked by people
+            # with no Job Position set.
+            #
+            # The card is hidden when this is zero, so it disappears of its own
+            # accord once HR fills those positions in. It exists at all so
+            # dev + pm + qa + ba + trainee + unclassified accounts for every
+            # booked hour; without it the row silently fell short.
+            'unclassified_hours': round(role['other'], 2),
             'standup_hours': round(activity['standup'], 2),
             'meeting_hours': round(activity['meeting'], 2),
             'internal_meeting_hours': round(activity['internal_meeting'], 2),
@@ -517,33 +478,21 @@ class FtProjectDashboard(models.TransientModel):
         filters = filters or {}
         domain = self._scope_leaves_via_project(filters)
 
-        # The dropdowns carry hr.employee ids but tasks reference res.users, so
-        # each pick has to be resolved through the employee's linked user. An
-        # employee with no user matches nothing rather than being ignored —
-        # silently dropping the filter would show totals that look unfiltered.
-        Employee = self.env['hr.employee'].sudo()
-        pm_id = filters.get('pm_id')
-        dev_id = filters.get('dev_id')
-
-        # Same rule as the hours side: Developer = None means the PM's OWN tasks.
-        # The PM leaf below still applies, so this reads as "her projects, and
-        # assigned to her" rather than widening to her tasks everywhere.
-        pm_only = dev_id == FILTER_NONE
-
-        if pm_only:
-            user = self._pm_employee(filters).user_id
-            domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
-        elif dev_id == FILTER_UNASSIGNED:
+        # One picker, matching Hours Utilisation: tasks this person is assigned
+        # to. See _hours_base_domain for why the PM / Developer pair went away.
+        #
+        # The picker carries hr.employee ids but tasks reference res.users, so
+        # the pick is resolved through the employee's linked user. An employee
+        # with no user matches nothing rather than being ignored — silently
+        # dropping the leaf would show totals that look unfiltered.
+        person_id = filters.get('person_id')
+        if person_id == FILTER_UNASSIGNED:
             # Tasks nobody is on. Unlike the hours side this is a real subset —
             # 2,947 active tasks in the production data carry no assignee.
             domain.append(('user_ids', '=', False))
-        elif dev_id:
-            user = Employee.browse(int(dev_id)).user_id
+        elif person_id:
+            user = self.env['hr.employee'].sudo().browse(int(person_id)).user_id
             domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
-
-        if pm_id and pm_id != FILTER_NONE:
-            user = Employee.browse(int(pm_id)).user_id
-            domain.append(('project_id.user_id', '=', user.id) if user else ('id', '=', 0))
         return domain
 
     def _tasks_summary_values(self, filters=None):
@@ -718,21 +667,27 @@ class FtProjectDashboard(models.TransientModel):
                 active_test=False).search([], order='sequence, name')
         ]
 
-        role_ids = self._role_employee_ids()
+        # One list for the one person picker each section carries, replacing the
+        # separate Project Managers and Developers lists. Every active employee
+        # is offered, not just the delivery roles: 194 h in 2026 were booked by
+        # people whose Job Position is unset, and narrowing by role would have
+        # made them unfilterable. The picker is a search box, so a long list
+        # costs nothing.
+        #
+        # The job title rides along in the label, which is what tells two people
+        # with similar names apart now that the role is no longer implied by
+        # which of two dropdowns you reached for.
         Employee = self.env['hr.employee'].sudo()
-
-        def people(bucket):
-            return [
-                {'id': e.id, 'name': e.name}
-                for e in Employee.browse(role_ids[bucket]).sorted(
-                    lambda e: (e.name or '').lower())
-            ]
+        resources = [
+            {'id': e.id,
+             'name': '%s — %s' % (e.name, e.job_id.name) if e.job_id else e.name}
+            for e in Employee.search([('active', '=', True)], order='name')
+        ]
 
         return {
             'projects': projects,
             'stages': stages,
-            'project_managers': people('pm'),
-            'developers': people('dev'),
+            'resources': resources,
         }
 
     @staticmethod
@@ -770,8 +725,8 @@ class FtProjectDashboard(models.TransientModel):
         and tables used to carry date pickers of their own, which meant a range
         typed into a table was silently intersected with the header's — two
         answers to the same question on a single screen, and no way to tell
-        which one a number came from. The per-section dropdowns that remain
-        (PM / Developer) only ever narrow this scope further.
+        which one a number came from. The one per-section picker that remains
+        (Resource) only ever narrows this scope further.
 
         Open & Overdue is the one deliberate exception, here and in the tables:
         it stays a snapshot of now, because a task that is late today is late

@@ -20,7 +20,10 @@
     <!-- ========================== SEARCH SELECT ========================== -->
     <t t-name="ft_project_dashboard.SearchSelect">
         <div class="ftpd_ss" t-ref="root" t-att-title="props.title">
-            <i class="fa fa-search ftpd_ss_ico"/>
+            <!-- Caption, when one is given. Two pickers side by side are
+                 indistinguishable once both hold a name. -->
+            <span class="ftpd_ss_name" t-if="props.label"><t t-esc="props.label"/></span>
+            <i class="fa fa-search ftpd_ss_ico" t-else=""/>
             <!-- While closed the input shows the current pick; while open it is
                  empty and holds the query, so typing never has to clear the old
                  value first. -->
@@ -318,57 +321,20 @@
                     <div class="ftpd_section_head">
                         <h2 class="ftpd_section_title">Hours Utilisation</h2>
                         <div class="ftpd_section_tools">
-                            <!-- The pair reads symmetrically: None on either side
-                                 means "nobody from this side", leaving only the
-                                 other one's records. -->
-                            <!-- Each picker is labelled. Once a name is chosen the
-                                 two boxes look identical, and which one you are
-                                 reading changes what the number means — PM is
-                                 "projects this person manages", Developer is
-                                 "the person who booked it". -->
-                            <div class="ftpd_filter" title="Hours booked on projects this person manages. None = no PM scoping, leaving only the selected developer.">
-                                <span class="ftpd_filter_name">PM</span>
-                                <select class="ftpd_filter_select"
-                                        t-on-change="(ev) => this.onHoursFilter('hoursPmId', ev)">
-                                    <option value="">All PMs</option>
-                                    <option value="none"
-                                            t-att-selected="isFilterSelected('none', state.hoursPmId)">
-                                        None — developer only
-                                    </option>
-                                    <t t-foreach="state.filterOptions.project_managers" t-as="e" t-key="e.id">
-                                        <option t-att-value="e.id"
-                                                t-att-selected="isFilterSelected(e.id, state.hoursPmId)"
-                                                t-esc="e.name"/>
-                                    </t>
-                                </select>
-                            </div>
-                            <div class="ftpd_filter" title="Hours booked by this developer. None = the selected PM's own hours only, excluding her team.">
-                                <span class="ftpd_filter_name">Developer</span>
-                                <select class="ftpd_filter_select"
-                                        t-on-change="(ev) => this.onHoursFilter('hoursDevId', ev)">
-                                    <option value="">All Developers</option>
-                                    <!-- Only offered with a real PM chosen: it
-                                         resolves to that PM's own hours, so it has
-                                         nothing to narrow on its own. -->
-                                    <option value="none" t-if="hasRealPm('hours')"
-                                            t-att-selected="isFilterSelected('none', state.hoursDevId)">
-                                        None — this PM only
-                                    </option>
-                                    <!-- Reads 0 h here by design: a timesheet line
-                                         always records who booked it. Offered so
-                                         the picker matches Tasks Summary, and so an
-                                         orphaned line would show rather than hide. -->
-                                    <option value="unassigned"
-                                            t-att-selected="isFilterSelected('unassigned', state.hoursDevId)">
-                                        Unassigned
-                                    </option>
-                                    <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
-                                        <option t-att-value="e.id"
-                                                t-att-selected="isFilterSelected(e.id, state.hoursDevId)"
-                                                t-esc="e.name"/>
-                                    </t>
-                                </select>
-                            </div>
+                            <!-- One picker, one meaning: this person's own hours.
+                                 It replaces a PM box and a Developer box that
+                                 looked alike but answered different questions —
+                                 PM meant "projects she manages" and so included
+                                 her whole team. To see everything happening on a
+                                 manager's projects, scope the board with the
+                                 header's Project picker instead. -->
+                            <SearchSelect options="resourceOptions"
+                                          value="state.hoursPersonId"
+                                          label="'Resource'"
+                                          allLabel="'All Resources'"
+                                          placeholder="'All Resources'"
+                                          title="'Hours booked by this person — type to search'"
+                                          onSelect="(id) => this.onHoursFilter(id)"/>
                             <button class="ftpd_filter_clear" t-if="hasHoursFilter"
                                     t-on-click="clearHoursFilters">Clear</button>
                             <span class="ftpd_filter_label" t-if="state.hoursLoading">…</span>
@@ -381,7 +347,11 @@
                          were always bucketed but never shown, leaving the row 216 h
                          short on one project with nothing on screen to say why. -->
                     <h3 class="ftpd_kpi_subhead">By Role<small> — every hour booked in the selected period, split by job position</small></h3>
-                    <div class="ftpd_kpi_grid ftpd_kpi_grid--five">
+                    <!-- Six columns only while there are unclassified hours to
+                         show; five once every employee has a Job Position and
+                         that card drops away. -->
+                    <div class="ftpd_kpi_grid"
+                         t-att-class="hours.unclassified_hours ? 'ftpd_kpi_grid--six' : 'ftpd_kpi_grid--five'">
                         <KpiCard title="'Developer Hours'" value="hours.dev_hours" suffix="'h'"
                                  icon="'fa-code'" color="'#06B6D4'"
                                  tooltip="'Task time booked in the selected period by people in a developer role.'"/>
@@ -394,9 +364,15 @@
                         <KpiCard title="'BA Hours'" value="hours.ba_hours" suffix="'h'"
                                  icon="'fa-clipboard'" color="'#0EA5E9'"
                                  tooltip="'Task time booked in the selected period by people in a business-analyst role.'"/>
-                        <KpiCard title="'Other Hours'" value="hours.other_hours" suffix="'h'"
+                        <KpiCard title="'Trainee Hours'" value="hours.trainee_hours" suffix="'h'"
+                                 icon="'fa-graduation-cap'" color="'#0EA5E9'"
+                                 tooltip="'Task time booked in the selected period by people whose Job Position starts with &quot;Trainee&quot;. Counted on its own, never inside Developer or QA Hours, matching how the Trainees headcount card works.'"/>
+                        <!-- Hidden once it reaches zero, which is what will
+                             happen when every employee has a Job Position set. -->
+                        <KpiCard t-if="hours.unclassified_hours"
+                                 title="'Unclassified Hours'" value="hours.unclassified_hours" suffix="'h'"
                                  icon="'fa-user-o'" color="'#94A3B8'"
-                                 tooltip="'Everyone the four cards beside this one do not cover: trainees, plus anyone whose Job Position is unset or not one of the recognised delivery roles. Present so this row accounts for every booked hour — without it these hours were counted but never shown, leaving the row silently short.'"/>
+                                 tooltip="'Time booked by people whose Job Position is unset, or is not one of the recognised delivery roles. Almost all of it belongs to employees with no Job Position at all. Shown so this row accounts for every booked hour rather than silently falling short — set their Job Positions and this card disappears.'"/>
                     </div>
                     <!-- Activity split, same timesheet lines as the role row so
                          both answer the same question. These three meeting cards
@@ -465,50 +441,22 @@
                      instead of hours. Each card anchors on its own date —
                      created on create date, due on deadline, completed on
                      completion date — so one range answers each question
-                     correctly. PM / Developer narrow it further. -->
+                     correctly. The Resource picker narrows it further. -->
                 <section class="ftpd_section">
                     <div class="ftpd_section_head">
                         <h2 class="ftpd_section_title">Tasks Summary</h2>
                         <div class="ftpd_section_tools">
-                            <div class="ftpd_filter" title="Tasks in projects this person manages. None = no PM scoping, leaving only the selected developer.">
-                                <span class="ftpd_filter_name">PM</span>
-                                <select class="ftpd_filter_select"
-                                        t-on-change="(ev) => this.onTasksFilter('tasksPmId', ev)">
-                                    <option value="">All PMs</option>
-                                    <option value="none"
-                                            t-att-selected="isFilterSelected('none', state.tasksPmId)">
-                                        None — developer only
-                                    </option>
-                                    <t t-foreach="state.filterOptions.project_managers" t-as="e" t-key="e.id">
-                                        <option t-att-value="e.id"
-                                                t-att-selected="isFilterSelected(e.id, state.tasksPmId)"
-                                                t-esc="e.name"/>
-                                    </t>
-                                </select>
-                            </div>
-                            <div class="ftpd_filter" title="Tasks this person is assigned to. None = tasks assigned to the selected PM only, excluding her team.">
-                                <span class="ftpd_filter_name">Developer</span>
-                                <select class="ftpd_filter_select"
-                                        t-on-change="(ev) => this.onTasksFilter('tasksDevId', ev)">
-                                    <option value="">All Developers</option>
-                                    <option value="none" t-if="hasRealPm('tasks')"
-                                            t-att-selected="isFilterSelected('none', state.tasksDevId)">
-                                        None — this PM only
-                                    </option>
-                                    <!-- A real subset here, unlike the hours
-                                         section: plenty of tasks carry no
-                                         assignee at all. -->
-                                    <option value="unassigned"
-                                            t-att-selected="isFilterSelected('unassigned', state.tasksDevId)">
-                                        Unassigned
-                                    </option>
-                                    <t t-foreach="state.filterOptions.developers" t-as="e" t-key="e.id">
-                                        <option t-att-value="e.id"
-                                                t-att-selected="isFilterSelected(e.id, state.tasksDevId)"
-                                                t-esc="e.name"/>
-                                    </t>
-                                </select>
-                            </div>
+                            <!-- Same single picker as Hours Utilisation, so the
+                                 two sections narrow the same way. Unassigned is
+                                 a real subset here, unlike on the hours side:
+                                 plenty of tasks carry no assignee at all. -->
+                            <SearchSelect options="resourceOptions"
+                                          value="state.tasksPersonId"
+                                          label="'Resource'"
+                                          allLabel="'All Resources'"
+                                          placeholder="'All Resources'"
+                                          title="'Tasks assigned to this person — type to search'"
+                                          onSelect="(id) => this.onTasksFilter(id)"/>
                             <button class="ftpd_filter_clear" t-if="hasTasksFilter"
                                     t-on-click="clearTasksFilters">Clear</button>
                             <span class="ftpd_filter_label" t-if="state.tasksLoading">…</span>
