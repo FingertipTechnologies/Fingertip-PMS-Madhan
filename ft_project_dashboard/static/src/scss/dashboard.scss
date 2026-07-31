@@ -342,6 +342,15 @@
             min-width: 180px;
         }
     }
+    // An abbreviated column header carrying a hover explanation. The dotted
+    // underline is the only thing telling a reader the tooltip exists — DE, OTD,
+    // RWR and DWD mean nothing without it.
+    .ftpd_th_help {
+        cursor: help;
+        text-decoration: underline dotted currentColor;
+        text-underline-offset: 3px;
+    }
+
     // Lead-in for the group of row-filter toggles ("Show  [ ] Closed ...").
     // Sits outside the boxes so it does not read as one of the options.
     .ftpd_toggle_lead {
@@ -397,6 +406,73 @@
             font-weight: 700;
             line-height: 18px;
         }
+    }
+
+    // Type-to-search picker replacing a long <select>. Sized and bordered like
+    // .ftpd_filter so the header still reads as one row of controls.
+    .ftpd_ss {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff;
+        border: 1px solid var(--ftpd-border);
+        border-radius: 8px;
+        padding: 4px 8px;
+        color: var(--ftpd-muted);
+
+        .ftpd_ss_ico { font-size: 12px; }
+        .ftpd_ss_caret { font-size: 12px; pointer-events: none; }
+
+        .ftpd_ss_input {
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font-size: 13px;
+            color: var(--ftpd-text);
+            min-width: 190px;
+            padding: 2px 0;
+        }
+
+        // Floats over the cards below, so it needs to sit above them. The header
+        // is sticky, hence a z-index high enough to clear it too.
+        .ftpd_ss_menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            min-width: 240px;
+            max-height: 320px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid var(--ftpd-border);
+            border-radius: 8px;
+            box-shadow: var(--ftpd-shadow);
+            z-index: 60;
+            padding: 4px;
+        }
+        .ftpd_ss_opt {
+            padding: 7px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--ftpd-text);
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+
+            // Keyboard and mouse share one highlight, so arrowing down and
+            // hovering cannot disagree about what Enter would pick.
+            &--active { background: var(--ftpd-bg); }
+            &--chosen { font-weight: 700; color: #4F46E5; }
+        }
+        .ftpd_ss_empty,
+        .ftpd_ss_more {
+            padding: 7px 10px;
+            font-size: 12px;
+            color: var(--ftpd-muted);
+        }
+        .ftpd_ss_more { border-top: 1px solid var(--ftpd-border); }
     }
 
     // Per-table filter controls (status dropdown + start-date range).

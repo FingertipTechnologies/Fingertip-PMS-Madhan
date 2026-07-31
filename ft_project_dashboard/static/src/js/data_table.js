@@ -168,6 +168,10 @@ export class DataTable extends Component {
         let c = "ftpd_sortable";
         if (col.numeric) c += " ftpd_num";
         if (this.state.sortKey === col.key) c += " ftpd_sort_active";
+        // Marks the abbreviated headers (DE, OTD, RWR, DWD) so they carry a
+        // help cursor and a dotted underline — otherwise there is nothing on
+        // screen to suggest the tooltip is there to be found.
+        if (col.help) c += " ftpd_th_help";
         return c;
     }
     cellClass(col) {
