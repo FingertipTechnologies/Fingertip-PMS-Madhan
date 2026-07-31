@@ -40,6 +40,33 @@ class AccountAnalyticLine(models.Model):
             "the project's Rework Rate."
         ) % (task.name, task.stage_id.name))
 
+    def _ft_check_task_required(self, project, task_id):
+        """Refuse project time that is not booked against a task.
+
+        Time on a project with no task is real spend that no task-level figure
+        can ever see: it cannot carry an estimate, a billing status, or a role,
+        and it is invisible to Delivery Efficiency and to every hours card that
+        reads task fields. 1,356 lines — 3.4% of all project time, 1,825 h in
+        2026 alone — had accumulated that way, which is exactly the Non-Task
+        Hours figure on the dashboard.
+
+        Applies to any line carrying a project, billable or not: the reason has
+        nothing to do with invoicing. Analytic lines with no project at all are
+        untouched, being accounting entries rather than timesheets.
+
+        Superuser is exempt so imports and automation keep working; a plain
+        administrator is not, for the same reason as the completed-task guard.
+        """
+        if self.env.su or not project or task_id:
+            return
+        raise UserError(_(
+            'A task is required on timesheet entries.\n\n'
+            'Project: %s\n\n'
+            'Pick the task this time was spent on. Time booked on a project '
+            'without a task cannot be estimated, billed, or attributed to a '
+            'role, and it will not appear in any task-based report.'
+        ) % (project.display_name,))
+
     def _get_task_time_limit(self):
         return float(
             self.env['ir.config_parameter'].sudo().get_param(
@@ -111,6 +138,9 @@ class AccountAnalyticLine(models.Model):
             if not project_id:
                 continue
             project = self.env['project.project'].browse(project_id)
+            # Before the billable check below: a task is required on every
+            # project line, whether or not the project is invoiced.
+            self._ft_check_task_required(project, vals.get('task_id'))
             if not self._is_billable_project(project):
                 continue
             if not (vals.get('name') or '').strip():
@@ -146,6 +176,13 @@ class AccountAnalyticLine(models.Model):
                 if 'project_id' in vals
                 else line.project_id
             )
+            # Only when the link itself is being changed. Checking on every
+            # write would make the 1,356 pre-existing task-less lines
+            # uneditable, including just correcting their description.
+            if 'task_id' in vals or 'project_id' in vals:
+                self._ft_check_task_required(
+                    project,
+                    vals['task_id'] if 'task_id' in vals else line.task_id.id)
             if not self._is_billable_project(project):
                 continue
             # Validate description only when it is being explicitly changed
