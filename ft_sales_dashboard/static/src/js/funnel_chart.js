@@ -40,6 +40,14 @@ export class FunnelChart extends Component {
         }
     }
 
+    // Total across every band, shown in the header. The bands are taken from
+    // the same population as the Opportunities Generated card — live records by
+    // stage plus one Lost band — so this is the figure a manager reconciles the
+    // card against, and it has to be visible to be checked.
+    get totalCount() {
+        return this.props.data?.total_count || 0;
+    }
+
     // Centered trapezoid clip-path from a top width to a bottom width (in %).
     _trapezoid(topW, botW) {
         const tl = (100 - topW) / 2, tr = (100 + topW) / 2;

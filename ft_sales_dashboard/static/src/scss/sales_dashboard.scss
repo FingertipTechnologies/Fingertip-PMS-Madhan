@@ -73,10 +73,12 @@
 
     .btsd_kpi_grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        // minmax(0, 1fr) throughout — see the note on .btsd_board_grid. A long
+        // formatted amount would otherwise widen its card and overflow the row.
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 16px;
-        @media (max-width: 1100px) { grid-template-columns: repeat(2, 1fr); }
-        @media (max-width: 560px)  { grid-template-columns: 1fr; }
+        @media (max-width: 1100px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        @media (max-width: 560px)  { grid-template-columns: minmax(0, 1fr); }
     }
 
     .btsd_kpi {
@@ -106,9 +108,9 @@
 
     .btsd_chart_row {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 20px;
-        @media (max-width: 992px) { grid-template-columns: 1fr; }
+        @media (max-width: 992px) { grid-template-columns: minmax(0, 1fr); }
     }
 
     .btsd_chart_card {
@@ -159,16 +161,24 @@
         .btsd_board_total { font-size: 20px; font-weight: 800; line-height: 1.1; }
         .btsd_board_sub { color: var(--btsd-muted); font-size: 11.5px; }
 
+        // minmax(0, 1fr), never plain 1fr: a grid track defaults to a min size
+        // of auto, so a single long opportunity name would widen its column
+        // past its share, overflow the grid and push the WHOLE dashboard into
+        // horizontal scroll (which also drags the sticky header out of view).
+        // Allowing the track to shrink below its content is what lets the
+        // ellipsis rules further down actually take effect.
         .btsd_board_grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 10px;
             align-items: start;
-            @media (max-width: 1200px) { grid-template-columns: repeat(3, 1fr); }
-            @media (max-width: 700px)  { grid-template-columns: repeat(2, 1fr); }
+            @media (max-width: 1200px) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            @media (max-width: 700px)  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         .btsd_month {
+            // Same reason as the track sizing above, for the card's own children.
+            min-width: 0;
             border: 1px solid var(--btsd-border);
             border-radius: 12px;
             padding: 10px 10px 12px;
@@ -229,7 +239,10 @@
             gap: 6px;
             font-size: 10.5px;
             color: var(--btsd-muted);
-            span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            // min-width: 0 for the same reason as the grid tracks — a flex item
+            // will not shrink below its content without it, so the customer
+            // name would push the amount out of the card instead of truncating.
+            span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             &--faint { opacity: .75; }
         }
         .btsd_lead_amt { font-weight: 700; color: inherit; white-space: nowrap; }
@@ -296,6 +309,22 @@
         .btsd_tr--clickable {
             cursor: pointer;
             &:hover { background: rgba(79, 70, 229, 0.06); }
+        }
+
+        // Totals row. Pinned to the bottom of the scroll area so the figure a
+        // manager reconciles against the KPI cards stays on screen however long
+        // the executive list is.
+        tfoot {
+            position: sticky;
+            bottom: 0;
+            z-index: 1;
+
+            td {
+                background: var(--btsd-card);
+                border-top: 2px solid var(--btsd-border);
+                border-bottom: 0;
+                font-weight: 700;
+            }
         }
     }
 
