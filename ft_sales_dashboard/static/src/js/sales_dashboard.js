@@ -458,24 +458,6 @@ export class SalesDashboard extends Component {
         this._openLeads(domain, stage.label || "Opportunities");
     }
 
-    // Click an executive row -> their opportunities for the same period, over
-    // the same population the Opportunities column was counted on.
-    openExecutive(row) {
-        if (row.isTotal) {
-            // The totals row equals the Opportunities card, so it opens the
-            // same list the card does.
-            return this.openOpportunities();
-        }
-        this._openLeads(
-            [
-                ["type", "=", "opportunity"],
-                ["user_id", "=", row.user_id || false],
-                ...this._generatedPopulation(),
-            ],
-            row.name || "Opportunities"
-        );
-    }
-
     // Click a month card -> that month's opportunities for that board. The
     // board's own date field is used (Expected Closing for pipeline, Closed
     // Date for won/lost), so the list matches the number on the card.
@@ -530,11 +512,9 @@ export class SalesDashboard extends Component {
     }
     // Totals row for the executive table. Rendered as a pinned footer rather
     // than an extra row so sorting or scrolling can never separate a total
-    // from the rows it totals. `isTotal` routes its click to the same list the
-    // Opportunities Generated card opens.
+    // from the rows it totals.
     get executiveTotal() {
-        const total = this.state.data?.executives?.total;
-        return total ? { ...total, isTotal: true } : null;
+        return this.state.data?.executives?.total || null;
     }
 }
 

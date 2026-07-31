@@ -257,12 +257,14 @@
                                  onStageClick="(stage) => this.openStage(stage)"/>
                 </div>
                 <div class="btsd_chart_row" t-else="">
+                    <!-- Read-only by design: no onRowClick, which is what
+                         TableCard.clickable keys off, so the rows carry no
+                         pointer styling and a click does nothing. -->
                     <TableCard title="'Executive-wise — Opportunities, Value and Conversion'"
                                columns="execColumns" rows="executives" total="executiveTotal"
                                fullWidth="true"
-                               note="'Opportunities and Expected Revenue by Expected Closing, excluding archived; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly. Click a row to open those opportunities.'"
-                               emptyText="'No opportunities in this period.'"
-                               onRowClick="(row) => this.openExecutive(row)"/>
+                               note="'Opportunities and Expected Revenue by Expected Closing, excluding archived; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly.'"
+                               emptyText="'No opportunities in this period.'"/>
                 </div>
                 <div class="btsd_switchbar">
                     <span class="btsd_switch_label">Month view</span>
