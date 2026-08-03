@@ -12,6 +12,8 @@
                 <field name="require_qualified_fields" invisible="1"/>
                 <field name="is_won_stage" invisible="1"/>
 
+                <field name="lead_source" invisible="type != 'opportunity'"/>
+                <field name="cus_campaign_id" invisible="type != 'opportunity'"/>
                 <field name="source_amount" invisible="type != 'opportunity'"/>
                 <field name="date_closed" invisible="type != 'opportunity'"/>
                 <field name="create_uid" invisible="type != 'opportunity'"/>
@@ -79,6 +81,13 @@
                 <attribute name="invisible">1</attribute>
             </xpath>
 
+            <!-- Source + Campaign on the Lead layout (the right column group
+                 above is opportunity-only, so leads need their own copy). -->
+            <xpath expr="//group[@name='lead_priority']/field[@name='tag_ids']" position="after">
+                <field name="lead_source"/>
+                <field name="cus_campaign_id"/>
+            </xpath>
+
             <!-- Website mandatory on Leads (visible in the lead_partner group) -->
             <xpath expr="//group[@name='lead_partner']//field[@name='website']" position="attributes">
                 <attribute name="required">type == 'lead'</attribute>
@@ -100,6 +109,8 @@
         <field name="arch" type="xml">
             <xpath expr="//list" position="inside">
                 <field name="bdr_id" optional="show"/>
+                <field name="lead_source" optional="hide"/>
+                <field name="cus_campaign_id" optional="hide"/>
             </xpath>
         </field>
     </record>
@@ -112,7 +123,12 @@
         <field name="arch" type="xml">
             <xpath expr="//search" position="inside">
                 <field name="bdr_id"/>
+                <field name="cus_campaign_id"/>
                 <filter name="group_bdr" string="BDR" context="{'group_by': 'bdr_id'}"/>
+                <filter name="group_lead_source" string="Source"
+                        context="{'group_by': 'lead_source'}"/>
+                <filter name="group_cus_campaign" string="Campaign"
+                        context="{'group_by': 'cus_campaign_id'}"/>
             </xpath>
         </field>
     </record>

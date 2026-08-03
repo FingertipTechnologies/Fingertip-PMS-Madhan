@@ -1,6 +1,8 @@
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError, UserError
 
+from .campaign import SOURCE_SELECTION
+
 # Stage names (case-insensitive) used to drive the mandatory-field rules.
 COLD_STAGE = 'cold'
 # Business Challenge / Expected Revenue / Expected Closing / Technology become
@@ -28,14 +30,18 @@ class InheritCrmLead(models.Model):
     account_id = fields.Many2one('res.partner', string='Account')
     features_id = fields.Many2one('cus.features', string='Features')
 
-    lead_source = fields.Selection([
-        ('web', 'Web'),
-        ('linkedin', 'Linkedin'),
-        ('call', 'Call'),
-        ('salesforce', 'Salesforce'),
-        ('bni', 'BNI'),
-        ('events', 'Events'),
-    ], string='Lead Source')
+    # The channel the lead/opportunity came from. Kept on the original
+    # `lead_source` column (it was never exposed in a view and held no data)
+    # rather than adding a second source field next to it.
+    lead_source = fields.Selection(
+        SOURCE_SELECTION, string='Source', tracking=True,
+    )
+    # Campaign the lead/opportunity came from. Distinct from the stock
+    # `campaign_id` (utm.campaign) which stays where Odoo puts it, in the
+    # Marketing group of the Extra Info tab.
+    cus_campaign_id = fields.Many2one(
+        'cus.campaign', string='Campaign', tracking=True,
+    )
 
     owner_id = fields.Many2one('res.users', string='Owner')
     # Business Development Representative. Defaults to whoever creates the

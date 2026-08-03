@@ -1,3 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_features,cus.features,model_cus_features,base.group_user,1,1,1,1
 access_cus_technology,cus.technology,model_cus_technology,base.group_user,1,1,1,1
+access_cus_campaign_user,cus.campaign.user,model_cus_campaign,base.group_user,1,0,0,0
+access_cus_campaign_manager,cus.campaign.manager,model_cus_campaign,sales_team.group_sale_manager,1,1,1,1
