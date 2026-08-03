@@ -19,6 +19,8 @@
                  score columns keep reading straight down. -->
             <list string="Reviews" class="o_ft_review_list">
                 <field name="trainee_id" width="160px"/>
+                <field name="reviewer_id" width="150px"/>
+                <field name="review_period" width="130px"/>
                 <field name="attitude" width="90px"/>
                 <field name="communication" width="125px"/>
                 <field name="understanding" width="125px"/>
@@ -43,6 +45,9 @@
                                 <group>
                                     <field name="trainee_id"
                                            options="{'no_create': True}"/>
+                                    <field name="reviewer_id"
+                                           options="{'no_create': True}"/>
+                                    <field name="review_period"/>
                                     <field name="description"/>
                                 </group>
                                 <group string="Scores (0 - 10)">
@@ -67,9 +72,22 @@
         <field name="arch" type="xml">
             <search string="Reviews">
                 <field name="trainee_id"/>
+                <field name="reviewer_id"/>
+                <field name="review_period"/>
+
+                <filter name="my_reviews" string="My Reviews"
+                        domain="[('reviewer_id', '=', uid)]"/>
+                <separator/>
+                <filter name="no_review_period" string="Review Period Not Set"
+                        domain="[('review_period', '=', False)]"/>
+
                 <group expand="0" string="Group By">
                     <filter name="group_trainee" string="Trainee"
                             context="{'group_by': 'trainee_id'}"/>
+                    <filter name="group_reviewer" string="Reviewer"
+                            context="{'group_by': 'reviewer_id'}"/>
+                    <filter name="group_review_period" string="Review Period"
+                            context="{'group_by': 'review_period'}"/>
                     <filter name="group_date" string="Date"
                             context="{'group_by': 'create_date:month'}"/>
                 </group>
