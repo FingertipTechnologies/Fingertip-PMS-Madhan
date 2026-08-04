@@ -16,6 +16,11 @@ const PERIODS = [
     { id: "month", label: "This Month" },
     { id: "quarter", label: "This Quarter" },
     { id: "year", label: "This Year" },
+    // No date bounds at all — the whole history of every project. The board
+    // otherwise always had a range applied, with no way to step back and see a
+    // project end to end. The server already accepts null dates everywhere, so
+    // this is simply the absence of the two leaves rather than a special case.
+    { id: "all", label: "All Time" },
     { id: "custom", label: "Custom" },
 ];
 
@@ -112,13 +117,17 @@ export class ProjectDashboard extends Component {
             // five different ways at once, and nothing on screen said which
             // answer a given number came from.
             projectId: "",
+            // Project Manager. A project-level scope like Project and Status —
+            // it narrows the board to the projects this person runs, whoever
+            // booked the time on them.
+            managerId: "",
             stageId: "",
             data: null,
             loading: true,
             // Dropdown contents for the header pickers and the one person
             // picker each section carries. Fetched once — they do not depend on
             // the range or the scope.
-            filterOptions: { projects: [], stages: [], resources: [] },
+            filterOptions: { projects: [], managers: [], stages: [], resources: [] },
             // Table text searches. These stay per-table: they are free text
             // over rows already on screen, not a question for the server.
             projectSearch: "",
@@ -158,6 +167,7 @@ export class ProjectDashboard extends Component {
             const restored = readStoredScope();
             if (restored) {
                 this.state.projectId = restored.projectId || "";
+                this.state.managerId = restored.managerId || "";
                 this.state.stageId = restored.stageId || "";
                 if (restored.period === "custom") {
                     // _applyPeriod's "custom" branch reads the dates back off
@@ -193,6 +203,7 @@ export class ProjectDashboard extends Component {
             dateFrom: this.state.dateFrom,
             dateTo: this.state.dateTo,
             projectId: this.state.projectId,
+            managerId: this.state.managerId,
             stageId: this.state.stageId,
         });
     }
@@ -222,6 +233,13 @@ export class ProjectDashboard extends Component {
             }
             case "year":
                 from = fmt(new Date(now.getFullYear(), 0, 1));
+                break;
+            case "all":
+                // Both ends open. `to` is reset as well as `from`, since it
+                // defaults to today above and would otherwise still cut off
+                // anything dated in the future — deadlines especially.
+                from = null;
+                to = null;
                 break;
             case "custom":
                 // Keep whatever is already in the custom inputs.
@@ -254,7 +272,7 @@ export class ProjectDashboard extends Component {
     }
 
     // ----------------------------------------------------------------
-    // Header: Project / Status scope
+    // Header: Project / Manager / Status scope
     // ----------------------------------------------------------------
     /** Compare a dropdown option id with the stored filter value.
      *
@@ -268,7 +286,7 @@ export class ProjectDashboard extends Component {
     }
 
     get hasScopeFilter() {
-        return !!(this.state.projectId || this.state.stageId);
+        return !!(this.state.projectId || this.state.managerId || this.state.stageId);
     }
 
     async onScopeChange(field, ev) {
@@ -285,6 +303,7 @@ export class ProjectDashboard extends Component {
 
     async clearScopeFilters() {
         this.state.projectId = "";
+        this.state.managerId = "";
         this.state.stageId = "";
         this._persistScope();
         await this.loadData();
@@ -294,6 +313,7 @@ export class ProjectDashboard extends Component {
     _scopePayload() {
         return {
             project_id: this.state.projectId || false,
+            manager_id: this.state.managerId || false,
             stage_id: this.state.stageId || false,
         };
     }
@@ -342,6 +362,9 @@ export class ProjectDashboard extends Component {
         // wider than the card that was clicked.
         if (this.state.projectId) {
             domain.push(["project_id", "=", parseInt(this.state.projectId, 10)]);
+        }
+        if (this.state.managerId) {
+            domain.push(["project_id.user_id", "=", parseInt(this.state.managerId, 10)]);
         }
         if (this.state.stageId) {
             domain.push(["project_id.stage_id", "=", parseInt(this.state.stageId, 10)]);
@@ -615,6 +638,7 @@ export class ProjectDashboard extends Component {
             date_from: this.state.dateFrom,
             date_to: this.state.dateTo,
             project_id: this.state.projectId || false,
+            manager_id: this.state.managerId || false,
             stage_id: this.state.stageId || false,
             person_id: this.state[`${prefix}PersonId`],
         };
