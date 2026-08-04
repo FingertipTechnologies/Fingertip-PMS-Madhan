@@ -202,6 +202,17 @@
                                   placeholder="'All Projects'"
                                   title="'Scope the whole dashboard to one project — type to search'"
                                   onSelect="(id) => this.onScopePick('projectId', id)"/>
+                    <!-- Project Manager. A project-level scope like the two
+                         beside it: it narrows the board to the projects this
+                         person runs, whoever booked the time on them. Distinct
+                         from the Resource picker inside each section, which
+                         narrows by who did the work; the two compose. -->
+                    <SearchSelect options="state.filterOptions.managers"
+                                  value="state.managerId"
+                                  allLabel="'All Managers'"
+                                  placeholder="'All PMs'"
+                                  title="'Show only the projects this person manages — type to search'"
+                                  onSelect="(id) => this.onScopePick('managerId', id)"/>
                     <div class="ftpd_filter" title="Scope the whole dashboard to one project stage">
                         <select class="ftpd_filter_select"
                                 t-on-change="(ev) => this.onScopeChange('stageId', ev)">
@@ -495,6 +506,38 @@
                                  onClick="() => this.openTaskKpi('tasks_missed_timeline')"
                                  icon="'fa-exclamation-triangle'" color="'#EF4444'"
                                  tooltip="'Completed tasks that finished after their deadline.'"/>
+                    </div>
+                    <!-- Open Tasks split by stage. "Open" on its own only says
+                         "not finished", which covers everything from untouched
+                         to blocked — this is what makes the number actionable.
+                         A partition: these add back up to Open Tasks exactly,
+                         which is why the remainder gets a card of its own. -->
+                    <h3 class="ftpd_kpi_subhead">Open Tasks by Stage<small> — a snapshot of now, like Open Tasks itself; adds up to it exactly</small></h3>
+                    <div class="ftpd_kpi_grid"
+                         t-att-class="tasks.tasks_other_open ? 'ftpd_kpi_grid--five' : ''">
+                        <KpiCard title="'Not Yet Started'" value="tasks.tasks_planned"
+                                 onClick="() => this.openTaskKpi('tasks_planned')"
+                                 icon="'fa-hourglass-start'" color="'#64748B'"
+                                 tooltip="'Open tasks sitting in a Planned stage — accepted but not begun.'"/>
+                        <KpiCard title="'In Progress'" value="tasks.tasks_working"
+                                 onClick="() => this.openTaskKpi('tasks_working')"
+                                 icon="'fa-cogs'" color="'#4F46E5'"
+                                 tooltip="'Open tasks in a Working stage — actively being delivered.'"/>
+                        <KpiCard title="'Testing'" value="tasks.tasks_testing"
+                                 onClick="() => this.openTaskKpi('tasks_testing')"
+                                 icon="'fa-bug'" color="'#8B5CF6'"
+                                 tooltip="'Open tasks in a Testing stage — built and under QA.'"/>
+                        <KpiCard title="'Dependency'" value="tasks.tasks_dependency"
+                                 onClick="() => this.openTaskKpi('tasks_dependency')"
+                                 icon="'fa-hand-paper-o'" color="'#F59E0B'"
+                                 tooltip="'Open tasks blocked on somebody else. Covers every stage whose name mentions a dependency — Client Dependencies, Dependencies from Client and Dependency from Telephony Vendor are all counted here.'"/>
+                        <!-- Hidden at zero, so the row is four cards once every
+                             open task falls into one of the named stages. -->
+                        <KpiCard t-if="tasks.tasks_other_open"
+                                 title="'Other Open'" value="tasks.tasks_other_open"
+                                 onClick="() => this.openTaskKpi('tasks_other_open')"
+                                 icon="'fa-folder-open-o'" color="'#94A3B8'"
+                                 tooltip="'Open tasks in none of the four stages beside this one — Post sales, Sandbox Review, Presales and the like, plus tasks with no stage set at all. Shown so the split adds up to Open Tasks rather than quietly falling short.'"/>
                     </div>
                 </section>
 

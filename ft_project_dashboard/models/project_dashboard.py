@@ -75,6 +75,27 @@ EXTERNAL_MEETING_TYPE = 'external_call'
 # the PM.
 FILTER_UNASSIGNED = 'unassigned'
 
+# The Open Tasks breakdown in Tasks Summary. "Open" on its own says only "not
+# finished", which covers 5,201 tasks in every state from untouched to blocked —
+# the split is what makes it actionable.
+#
+# Matched on the stage NAME, lower-cased, because stage rows are created per
+# project and the ids differ everywhere. Each entry is (key, label, matcher):
+# an exact-name tuple, or a substring for buckets whose stages are named
+# inconsistently — "Client Dependencies", "Dependencies from Client" and
+# "Dependency from Telephony Vendor" are all the same thing to a reader.
+#
+# These four do NOT cover every open stage (Post sales, Sandbox Review, Presales
+# and friends sit outside them, as do tasks with no stage at all), which is why
+# _tasks_summary_values also reports the remainder. Without it the four cards
+# would silently fall 251 short of Open Tasks.
+OPEN_STAGE_BUCKETS = (
+    ('planned', 'exact', ('planned',)),
+    ('working', 'exact', ('working',)),
+    ('testing', 'exact', ('testing',)),
+    ('dependency', 'contains', ('dependenc',)),
+)
+
 # A consistent, professional palette reused across charts.
 PALETTE = [
     '#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#EF4444',
@@ -91,26 +112,38 @@ class FtProjectDashboard(models.TransientModel):
     # Helpers
     # ------------------------------------------------------------------
     def _scope_leaves_via_project(self, filters=None):
-        """The header's Project / Status leaves, for a model holding ``project_id``.
+        """The header's Project / Manager / Status leaves, for a model holding
+        ``project_id``.
 
         Every timesheet-line and task query on the board runs through here, so
-        the one pair of pickers in the header scopes the whole dashboard
+        the one set of pickers in the header scopes the whole dashboard
         identically instead of each section deciding for itself.
+
+        ``manager_id`` is a res.users id — project.project.user_id, the Project
+        Manager on the project form — and narrows the board to the projects that
+        person runs. It is a PROJECT-level scope, not a people filter: it does
+        not care who booked the time, only whose projects it was booked on. The
+        Resource picker inside each section is what narrows by person, and the
+        two compose.
         """
         filters = filters or {}
         leaves = []
         if filters.get('project_id'):
             leaves.append(('project_id', '=', int(filters['project_id'])))
+        if filters.get('manager_id'):
+            leaves.append(('project_id.user_id', '=', int(filters['manager_id'])))
         if filters.get('stage_id'):
             leaves.append(('project_id.stage_id', '=', int(filters['stage_id'])))
         return leaves
 
     def _scope_leaves_on_project(self, filters=None):
-        """The same two leaves expressed on ``project.project`` itself."""
+        """The same leaves expressed on ``project.project`` itself."""
         filters = filters or {}
         leaves = []
         if filters.get('project_id'):
             leaves.append(('id', '=', int(filters['project_id'])))
+        if filters.get('manager_id'):
+            leaves.append(('user_id', '=', int(filters['manager_id'])))
         if filters.get('stage_id'):
             leaves.append(('stage_id', '=', int(filters['stage_id'])))
         return leaves
@@ -495,6 +528,29 @@ class FtProjectDashboard(models.TransientModel):
             domain.append(('user_ids', 'in', user.ids) if user else ('id', '=', 0))
         return domain
 
+    def _open_stage_bucket_ids(self):
+        """``{bucket: [stage ids]}`` for the Open Tasks breakdown.
+
+        Bucketed in Python off one search rather than with a domain per bucket:
+        the stage name is a translated jsonb column, so comparing it inside a
+        domain is slower and language-dependent, and a substring match is not
+        expressible there at all. Archived stages are included — a task can
+        still sit in one.
+        """
+        buckets = {key: [] for key, _mode, _pat in OPEN_STAGE_BUCKETS}
+        for stage in self.env['project.task.type'].with_context(
+                active_test=False).search([]):
+            name = (stage.name or '').strip().lower()
+            for key, mode, patterns in OPEN_STAGE_BUCKETS:
+                hit = (name in patterns if mode == 'exact'
+                       else any(p in name for p in patterns))
+                if hit:
+                    buckets[key].append(stage.id)
+                    # First matching bucket wins, so a stage can never be
+                    # counted twice and the breakdown stays a partition.
+                    break
+        return buckets
+
     def _tasks_summary_values(self, filters=None):
         """The eight Tasks Summary figures for a set of filters.
 
@@ -542,6 +598,22 @@ class FtProjectDashboard(models.TransientModel):
         estimated = created + [('estimated', '>', 0)]
         not_estimated = created + [('estimated', '<=', 0)]
 
+        # Open Tasks split by stage. A partition, so the buckets plus the
+        # remainder add back up to Open Tasks exactly — and, like Open Tasks
+        # itself, a snapshot of now rather than of the selected range.
+        stage_buckets = self._open_stage_bucket_ids()
+        bucketed_ids = [sid for ids in stage_buckets.values() for sid in ids]
+        open_by_stage = {
+            key: open_domain + [('stage_id', 'in', ids)]
+            for key, ids in stage_buckets.items()
+        }
+        # Everything open that none of the four buckets claimed, including tasks
+        # with no stage at all — 251 of them here, mostly unstaged. Reported so
+        # the split cannot quietly fall short of the total it is splitting.
+        open_by_stage['other'] = open_domain + [
+            '|', ('stage_id', '=', False), ('stage_id', 'not in', bucketed_ids),
+        ]
+
         counts = {
             'tasks_created': Task.search_count(created),
             'tasks_due': Task.search_count(due),
@@ -551,6 +623,11 @@ class FtProjectDashboard(models.TransientModel):
             'tasks_not_estimated': Task.search_count(not_estimated),
             'tasks_on_timeline': len(split['on_time']),
             'tasks_missed_timeline': len(split['late']),
+            'tasks_planned': Task.search_count(open_by_stage['planned']),
+            'tasks_working': Task.search_count(open_by_stage['working']),
+            'tasks_testing': Task.search_count(open_by_stage['testing']),
+            'tasks_dependency': Task.search_count(open_by_stage['dependency']),
+            'tasks_other_open': Task.search_count(open_by_stage['other']),
         }
 
         def action(name, domain):
@@ -570,6 +647,12 @@ class FtProjectDashboard(models.TransientModel):
                                         [('id', 'in', split['on_time'])]),
             'tasks_missed_timeline': action('Missed Timeline',
                                             [('id', 'in', split['late'])]),
+            # The stage split opens the same lists its counts came from.
+            'tasks_planned': action('Not Yet Started', open_by_stage['planned']),
+            'tasks_working': action('In Progress', open_by_stage['working']),
+            'tasks_testing': action('Testing', open_by_stage['testing']),
+            'tasks_dependency': action('Dependency', open_by_stage['dependency']),
+            'tasks_other_open': action('Other Open Tasks', open_by_stage['other']),
         }
         return counts
 
@@ -658,6 +741,29 @@ class FtProjectDashboard(models.TransientModel):
                  [('active', '=', True)], ['name'])),
             key=lambda p: p['name'].lower())
 
+        # Project Managers for the header picker: the res.users actually set as
+        # Project Manager on an active project. Built from the projects rather
+        # than from a job-position bucket, because this filter narrows by
+        # project.user_id — offering someone who manages nothing would give a
+        # dead entry that can only ever return an empty board.
+        #
+        # Sorted by name, and the project count rides along in the label so it is
+        # obvious up front how much each pick will show.
+        managers = []
+        for group in self.env['project.project'].read_group(
+                [('active', '=', True), ('user_id', '!=', False)],
+                ['id'], ['user_id'], lazy=False):
+            if group.get('user_id'):
+                managers.append({
+                    'id': group['user_id'][0],
+                    'name': '%s — %s project(s)' % (group['user_id'][1],
+                                                    group['__count']),
+                    'sort': (group['user_id'][1] or '').lower(),
+                })
+        managers.sort(key=lambda m: m['sort'])
+        for m in managers:
+            m.pop('sort')
+
         # active_test=False to match _stage_ids_named: a project can still sit in
         # an archived stage, so leaving it out of the picker would make those
         # projects unreachable through the Status filter.
@@ -686,6 +792,7 @@ class FtProjectDashboard(models.TransientModel):
 
         return {
             'projects': projects,
+            'managers': managers,
             'stages': stages,
             'resources': resources,
         }
