@@ -10,6 +10,11 @@ PERIOD_FIELD / OUTCOME_FIELD below:
   ``date_deadline`` (Expected Closing). The Opportunities card, Pipeline Value,
   the pipeline month boards, the funnel, the Conversion denominator, and the
   Opportunities / Expected Revenue columns of the executive-wise report.
+  Opportunities and Pipeline Value cover one population — every stage, live
+  records only (see ``_generated_domain``) — so one is the count and the other
+  the sum of the same set, and both equal the matching group in the Pipeline
+  list. Note this means Pipeline Value includes won and lost deals and is
+  therefore NOT a forecast of money still to come.
 * "What did we actually close in this period?" -> ``date_closed`` (Closed
   Date). Sales Closed, Sales Closed Value, Opportunities Lost, the Closed and
   Lost month boards, and the Sales Closed / Lost columns of the executive
@@ -40,24 +45,31 @@ WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 Archived is therefore what separates lost from won; a won stage alone is not
 enough, because a won lead that is later archived is no longer a live sale.
 
-ARCHIVED RECORDS ARE PART OF THE POPULATION
-===========================================
-Lost opportunities are archived. The ORM silently appends ``active = True`` to
-any domain that does not mention ``active`` itself (models._where_calc), so
-every figure whose domain named only type + date — Opportunities Generated, the
-funnel, the executive report — was quietly dropping every lost deal, while the
-Opportunities Lost card (which does name ``active``) counted them. That single
-asymmetry is why the cards, the drill-downs, the filtered lists and a CRM
-export never agreed. Everything here now reads through ``_leads()``, which
-disables active_test, and every drill-down in
-static/src/js/sales_dashboard.js passes ``active_test: False`` to match.
+WHICH FIGURES SEE ARCHIVED RECORDS
+==================================
+The ORM silently appends ``active = True`` to any domain that does not mention
+``active`` itself (models._where_calc), so a figure could include or exclude
+archived deals purely by accident. That asymmetry is why the cards, the
+drill-downs, the filtered lists and a CRM export never agreed. Every query here
+now goes through ``_leads()``, which disables active_test, and each domain then
+states its own position explicitly:
 
-A lost opportunity keeps whatever stage it was in when it was lost (Odoo does
-not move it), so grouping archived records by stage would report them under
-Discussion / Demo / Negotiation. The funnel therefore takes its bands from live
-records only and shows every archived record in one dedicated "Lost" band, so a
-lost deal is never displayed inside an active stage and the bands still add up
-to Opportunities Generated.
+* Opportunities and Pipeline Value — live records only (``_generated_domain``),
+  so both equal the matching group in the Pipeline list, which also hides
+  archived records. Archived deals are reported by Opportunities Lost instead.
+* Opportunities Lost — archived records AND live ones in a Lost stage.
+* Sales Closed / Sales Closed Value — live records in a won stage.
+
+Every drill-down in static/src/js/sales_dashboard.js passes
+``active_test: False`` and then repeats the same explicit condition, so a card
+and the list it opens can never disagree.
+
+A lost opportunity keeps whatever stage it was in when it was lost, so grouping
+by stage would report it under Discussion / Demo / Negotiation.
+ft_sales_dashboard/models/crm_lead.py therefore moves it into the Lost stage on
+archive, and the funnel pulls every Lost-stage record into one dedicated band,
+so a dead deal is never displayed inside an active stage and the bands still add
+up to the Opportunities card.
 """
 from dateutil.relativedelta import relativedelta
 
@@ -193,6 +205,21 @@ class FtSalesDashboard(models.TransientModel):
     def _opp_domain(self):
         return [('type', '=', 'opportunity')]
 
+    def _generated_domain(self):
+        """The population the Opportunities and Pipeline Value cards describe.
+
+        EVERY stage — Cold through Won and Lost — but live records only.
+        Archived opportunities are deliberately left out here: they are counted
+        by Opportunities Lost instead, and including them made the two cards
+        impossible to reconcile against the Pipeline list, which hides archived
+        records. With this, both cards equal that list's group for the period
+        exactly.
+
+        Note the two cards therefore cover the SAME set: Opportunities is its
+        count and Pipeline Value its sum, so they can never disagree.
+        """
+        return [('active', '=', True)]
+
     def _lost_stage_ids(self):
         """Stages that mean "lost", matched by name.
 
@@ -252,7 +279,8 @@ class FtSalesDashboard(models.TransientModel):
         # Three fields, three questions — see GENERATED_FIELD / PERIOD_FIELD /
         # OUTCOME_FIELD. What we opened, what is forecast to close, what did
         # close.
-        generated = opp + self._date_domain(GENERATED_FIELD, date_from, date_to)
+        generated = (opp + self._generated_domain()
+                     + self._date_domain(GENERATED_FIELD, date_from, date_to))
         period = opp + self._date_domain(PERIOD_FIELD, date_from, date_to)
         outcome = opp + self._date_domain(OUTCOME_FIELD, date_from, date_to)
 
@@ -272,7 +300,7 @@ class FtSalesDashboard(models.TransientModel):
         lost_opps = opp + self._lost_domain()
 
         return {
-            'kpis': self._kpis(generated, period, outcome),
+            'kpis': self._kpis(generated, outcome),
             # The bounds every figure was actually measured between, per date
             # field. The client filters its drill-downs on these rather than
             # rebuilding them, so a card and the list it opens cannot disagree —
@@ -323,22 +351,24 @@ class FtSalesDashboard(models.TransientModel):
     # ------------------------------------------------------------------
     # KPIs
     # ------------------------------------------------------------------
-    def _kpis(self, generated, period, outcome):
+    def _kpis(self, generated, outcome):
         Lead = self._leads()
 
-        # Opportunities Generated: EVERY status — New, Discussion, Demo,
-        # Negotiation, Won, Lost, Closed and any other configured stage —
-        # CREATED in the period. Archived (lost) records used to drop out here
-        # but not from the Lost card, which is what made the totals
-        # irreconcilable.
+        # Opportunities: EVERY stage — New, Discussion, Demo, Negotiation, Won,
+        # Lost and any other configured stage — whose Expected Closing falls in
+        # the period. Live records only; see _generated_domain().
         generated_count = Lead.search_count(generated)
 
-        # Pipeline Value: Expected Revenue of everything still open whose
-        # Expected Closing falls in the period. The one figure that stays on
-        # Expected Closing, because "what is in the pipeline for this period" is
-        # a question about the forecast — deliberately a different population
-        # from the card beside it, so the two counts are not meant to tally.
-        pipeline_value = self._sum_revenue(period + self._open_domain())
+        # Pipeline Value: Expected Revenue of the SAME records the Opportunities
+        # card counts — every stage, Won and Lost included, live records only.
+        #
+        # It previously summed open deals only (not Won, not Lost), which is the
+        # stricter reading of "pipeline" and the right basis for a forecast. It
+        # was widened deliberately so the two cards describe one population, a
+        # count and a sum, and can be checked against the Pipeline list in one
+        # step. The consequence is that this figure includes deals already won
+        # and deals already lost, so it is NOT a forecast of money still to come.
+        pipeline_value = self._sum_revenue(generated)
 
         # Sales Closed / Lost: dated by date_closed (OUTCOME_FIELD), because
         # "what did we close this period" is a question about when the deal
@@ -416,10 +446,11 @@ class FtSalesDashboard(models.TransientModel):
 
         Bands are stages — that is what makes it a funnel — but the value shown
         and the band width are Expected Revenue, and the period filter is
-        Creation Date, so the bands add up to Opportunities Generated.
+        Expected Closing, so the bands add up to the Opportunities card.
 
-        Stage bands are taken from LIVE records only, and every archived record
-        is shown in one trailing "Lost" band. A lost opportunity keeps whatever
+        Bands come from the same population as that card, which is live records
+        only, and every live record in a Lost stage is pulled into one trailing
+        "Lost" band. A lost opportunity keeps whatever
         stage it was in when it was lost, so grouping it by stage would list it
         under Discussion / Demo / Negotiation and report a dead deal as active
         pipeline. Won stages stay in the bands: a won deal is a real end state.
@@ -625,7 +656,9 @@ class FtSalesDashboard(models.TransientModel):
         salespeople exist — never one query per executive.
 
         Each column is measured on the SAME domain as the KPI card above it:
-        Opportunities on Creation Date, Sales Closed and Lost on Closed Date.
+        Opportunities and Expected Revenue on Expected Closing over live records
+        (the population both left-hand cards share), Sales Closed and Lost on
+        Closed Date.
         That is what lets the totals row reconcile exactly with the cards — the
         check the manager actually performs. Rows are built from the UNION of
         the three groupings, because an executive can have a deal closing in the

@@ -209,11 +209,11 @@
                 <div class="btsd_kpi_grid">
                     <KpiCard title="'Opportunities'" value="kpis.opportunities"
                              icon="'fa-bullseye'" color="'#4F46E5'"
-                             tooltip="'Opportunities in every stage — New, Discussion, Demo, Negotiation, Won, Lost — whose Expected Closing falls in the selected period'"
+                             tooltip="'Opportunities in every stage — New, Discussion, Demo, Negotiation, Won, Lost — whose Expected Closing falls in the selected period. Archived opportunities are excluded; they are counted by Opportunities Lost.'"
                              onClick="() => this.openOpportunities()"/>
                     <KpiCard title="'Pipeline Value'" value="kpis.pipeline_value" prefix="'₹ '"
                              icon="'fa-filter'" color="'#06B6D4'"
-                             tooltip="'Expected Revenue of open opportunities expected to close in the period'"
+                             tooltip="'Expected Revenue of the same opportunities the Opportunities card counts — every stage, Won and Lost included. Not a forecast of money still to come.'"
                              onClick="() => this.openPipeline()"/>
                     <KpiCard title="'Sales Closed'" value="kpis.sales_closed"
                              icon="'fa-trophy'" color="'#10B981'"
@@ -257,12 +257,14 @@
                                  onStageClick="(stage) => this.openStage(stage)"/>
                 </div>
                 <div class="btsd_chart_row" t-else="">
+                    <!-- Read-only by design: no onRowClick, which is what
+                         TableCard.clickable keys off, so the rows carry no
+                         pointer styling and a click does nothing. -->
                     <TableCard title="'Executive-wise — Opportunities, Value and Conversion'"
                                columns="execColumns" rows="executives" total="executiveTotal"
                                fullWidth="true"
-                               note="'Opportunities and Expected Revenue by Creation Date; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly. Click a row to open those opportunities.'"
-                               emptyText="'No opportunities in this period.'"
-                               onRowClick="(row) => this.openExecutive(row)"/>
+                               note="'Opportunities and Expected Revenue by Expected Closing, excluding archived; Sales Closed and Lost by Closed Date — the same measures as the cards above, so the Total row matches them exactly.'"
+                               emptyText="'No opportunities in this period.'"/>
                 </div>
                 <div class="btsd_switchbar">
                     <span class="btsd_switch_label">Month view</span>
