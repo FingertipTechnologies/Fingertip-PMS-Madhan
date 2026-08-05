@@ -4,7 +4,9 @@
     'category': 'Contacts',
     'summary': 'Contact Customization',
     'author': 'Broadtech',
-    'depends': ['base','crm','sale_crm'],
+    # bt_contact_customization brings the account fields (Annual Revenue,
+    # Employee Count, Legal Name) that the opportunity fetches and validates.
+    'depends': ['base','crm','sale_crm','bt_contact_customization'],
     'data': [
         'security/ir.model.access.csv',
         'views/crm_lead_views.xml',

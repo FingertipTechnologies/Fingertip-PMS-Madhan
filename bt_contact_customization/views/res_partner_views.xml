@@ -10,6 +10,11 @@
 <!--                <field name="name" string="Account Name" invisible="is_company == False"/>-->
                 <field name="account_status_id" invisible="is_company == False"/>
                 <field name="activity_count_custom" invisible="is_company == False"/>
+                <!-- Annual Revenue is one of the details that must be filled in
+                     before an Opportunity or Activity can be created for the
+                     account (see _missing_account_fields). The others - Employee
+                     Count (x_Employee), Website and Legal Name (the account
+                     name) - are already elsewhere on this form. -->
                 <field name="annual_revenue" invisible="1"/>
                 <field name="annual_revenue_currency_id" invisible="1"/>
                 <field name="annual_revenue_amount" invisible="is_company == False"/>

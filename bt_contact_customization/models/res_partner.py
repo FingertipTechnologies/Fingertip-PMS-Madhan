@@ -31,6 +31,23 @@ SHARED_DOMAIN_HOSTS = frozenset({
 SHARED_WEBSITE_RE = re.compile(
     r'^https://([a-z0-9-]+\.)+[a-z]{2,}(/[^\s?#]+)?$', re.IGNORECASE)
 
+# Employee Count is the manually-created (Studio) field 'x_Employee' that
+# already holds the head count on every account. It lives in the database, not
+# in this module, so it is referenced by name and read defensively.
+EMPLOYEE_COUNT_FIELD = 'x_Employee'
+
+# Account (company) details that must be filled in before an Opportunity or an
+# Activity may be created against that account. (field name, label shown to the
+# user), in the order they are listed back in the error message.
+# Legal Name is the account's company name (`name`) - there is no separate
+# legal-name field.
+ACCOUNT_REQUIRED_FIELDS = [
+    ('annual_revenue_amount', 'Annual Revenue'),
+    (EMPLOYEE_COUNT_FIELD, 'Employee Count'),
+    ('website', 'Website'),
+    ('name', 'Legal Name'),
+]
+
 
 class InheritResPartner(models.Model):
     _inherit = 'res.partner'
@@ -92,6 +109,55 @@ class InheritResPartner(models.Model):
         string="Annual Revenue", currency_field='annual_revenue_currency_id')
     annual_revenue_range = fields.Char(string="Annual Revenue Range")
     company_linkedin = fields.Char(string="Company LinkedIn")
+
+    # ------------------------------------------------------------------
+    # Mandatory account details
+    # ------------------------------------------------------------------
+    def _account_partner(self):
+        """The account (company record) this partner belongs to.
+
+        A child contact is validated against its parent company; a company - or
+        a standalone individual with no parent - is validated against itself.
+        `commercial_partner_id` resolves that in one step, and handles contacts
+        nested more than one level deep."""
+        self.ensure_one()
+        return self.commercial_partner_id or self
+
+    def _account_field_value(self, field_name):
+        """Read a mandatory account detail. Looked up defensively because
+        Employee Count ('x_Employee') is a manual field defined in the database
+        rather than in this module: if it were ever removed, the account simply
+        counts as incomplete instead of every save crashing."""
+        self.ensure_one()
+        return self[field_name] if field_name in self._fields else False
+
+    def _missing_account_fields(self):
+        """Labels of the mandatory account details that are still empty on this
+        partner's account. Empty list means the account is complete."""
+        account = self._account_partner()
+        return [
+            label for field_name, label in ACCOUNT_REQUIRED_FIELDS
+            if not account._account_field_value(field_name)
+        ]
+
+    def _check_account_details_complete(self, document):
+        """Block the creation of `document` (e.g. "an Opportunity") when the
+        account is missing any of the mandatory details, naming every missing
+        field so the user knows exactly what to complete."""
+        self.ensure_one()
+        missing = self._missing_account_fields()
+        if missing:
+            account = self._account_partner()
+            raise ValidationError(_(
+                "You cannot create %(document)s for '%(contact)s': the account "
+                "'%(account)s' is missing the following mandatory "
+                "information - %(missing)s.\n\n"
+                "Please complete the account details before proceeding.",
+                document=document,
+                contact=self.display_name,
+                account=account.display_name,
+                missing=', '.join(missing),
+            ))
     contact_date = fields.Date(string="Contact Date")
     # Dedicated rich-text Description, shown as its own notebook tab.
     description = fields.Html(string="Description")

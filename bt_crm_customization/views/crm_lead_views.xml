@@ -51,6 +51,28 @@
                        required="type == 'opportunity' and require_qualified_fields"/>
             </xpath>
 
+            <!-- Contact is mandatory on an opportunity -->
+            <xpath expr="//group[@name='opportunity_partner']/field[@name='partner_id']" position="attributes">
+                <attribute name="required">type == 'opportunity'</attribute>
+            </xpath>
+
+            <!-- The mandatory account details, read-only, straight under the
+                 Contact. They are what the save-time validation checks, so an
+                 empty one here is exactly what is blocking the save - the
+                 salesperson can see which detail and which account, rather than
+                 only getting an error. Edit them on the account itself.
+                 Legal Name is deliberately NOT shown: it is the account's
+                 company name, so it would just repeat the Contact above. -->
+            <xpath expr="//group[@name='opportunity_partner']/field[@name='partner_id']" position="after">
+                <field name="account_currency_id" invisible="1"/>
+                <field name="account_annual_revenue" readonly="1"
+                       invisible="type != 'opportunity'"/>
+                <field name="account_employee_count" readonly="1"
+                       invisible="type != 'opportunity'"/>
+                <field name="account_website" widget="url" readonly="1"
+                       invisible="type != 'opportunity'"/>
+            </xpath>
+
             <!-- LEFT column: optional fields lower down -->
             <xpath expr="//field[@name='lost_reason_id']" position="after">
                 <field name="number_of_users" invisible="type != 'opportunity'"/>

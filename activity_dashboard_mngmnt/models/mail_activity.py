@@ -108,6 +108,25 @@ class MailActivity(models.Model):
                     "Selected contact does not belong to the selected company."
                 )
 
+    def _activity_partner(self):
+        """The contact/company this activity is about, or an empty recordset
+        for an activity on any other model (a task, a helpdesk ticket, ...)."""
+        self.ensure_one()
+        partner = self.child_partner_id or self.parent_partner_id
+        if not partner and self.res_model == 'res.partner' and self.res_id:
+            partner = self.env['res.partner'].browse(self.res_id).exists()
+        return partner
+
+    @api.constrains('parent_partner_id', 'child_partner_id', 'res_model', 'res_id')
+    def _check_account_details(self):
+        """An activity logged against a contact/account requires the mandatory
+        account details to be filled in first. Activities on other models are
+        untouched."""
+        for rec in self:
+            partner = rec._activity_partner()
+            if partner:
+                partner._check_account_details_complete("an Activity")
+
     def _recompute_partner_activity_dates(self):
         partners = (
                 self.mapped('parent_partner_id') |
@@ -340,6 +359,12 @@ class MailActivitySchedule(models.TransientModel):
     # Inject parent/child into created activities
     # ---------------------------------------------------------
     def _action_schedule_activities(self):
+        # Check the mandatory account details up-front so the user gets the
+        # message before anything is created, rather than from the constraint
+        # that fires once the partner is written onto the activity.
+        partner = self.child_partner_id or self.parent_partner_id
+        if partner:
+            partner._check_account_details_complete("an Activity")
         activities = super()._action_schedule_activities()
 
         for activity in activities:

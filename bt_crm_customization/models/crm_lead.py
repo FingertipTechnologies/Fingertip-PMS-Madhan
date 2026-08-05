@@ -1,6 +1,10 @@
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError, UserError
 
+from odoo.addons.bt_contact_customization.models.res_partner import (
+    EMPLOYEE_COUNT_FIELD,
+)
+
 from .campaign import SOURCE_SELECTION
 
 # Stage names (case-insensitive) used to drive the mandatory-field rules.
@@ -29,6 +33,42 @@ class InheritCrmLead(models.Model):
 
     account_id = fields.Many2one('res.partner', string='Account')
     features_id = fields.Many2one('cus.features', string='Features')
+
+    # ------------------------------------------------------------------
+    # Mandatory account details, fetched read-only from the Contact
+    # ------------------------------------------------------------------
+    # Shown on the form so the salesperson can SEE which of the four details is
+    # empty, and on which account, instead of only meeting a blocking error.
+    # `commercial_partner_id` is the company at the top of the contact's
+    # hierarchy, i.e. the account: a child contact resolves to its parent
+    # company, a company (or a standalone individual) resolves to itself.
+    # Legal Name is not among them: it IS the account's company name, so it is
+    # still validated but showing it here would only repeat the Contact.
+    account_currency_id = fields.Many2one(
+        'res.currency', string="Account Currency",
+        related='partner_id.commercial_partner_id.annual_revenue_currency_id',
+        readonly=True)
+    account_annual_revenue = fields.Monetary(
+        string="Annual Revenue", currency_field='account_currency_id',
+        related='partner_id.commercial_partner_id.annual_revenue_amount',
+        readonly=True)
+    account_website = fields.Char(
+        string="Account Website",
+        related='partner_id.commercial_partner_id.website', readonly=True)
+    # Employee Count comes from the manual field 'x_Employee' on the account.
+    # Computed rather than related: a manual field is created in the database,
+    # so traversing it in a related path is not safe at registry-setup time.
+    account_employee_count = fields.Integer(
+        string="Employee Count", compute='_compute_account_employee_count')
+
+    @api.depends('partner_id')
+    def _compute_account_employee_count(self):
+        for lead in self:
+            account = lead.partner_id.commercial_partner_id
+            lead.account_employee_count = (
+                account._account_field_value(EMPLOYEE_COUNT_FIELD)
+                if account else 0
+            )
 
     # The channel the lead/opportunity came from. Kept on the original
     # `lead_source` column (it was never exposed in a view and held no data)
@@ -118,6 +158,46 @@ class InheritCrmLead(models.Model):
             lead.require_qualified_fields = name in QUALIFIED_PLUS_STAGES
             lead.is_won_stage = name == WON_STAGE
             lead.is_lost_stage = name == LOST_STAGE
+
+    @api.onchange('partner_id')
+    def _onchange_partner_id_account_details(self):
+        """Tell the user straight away which account details are missing, so
+        they don't only find out when the save is rejected."""
+        if self.type != 'opportunity' or not self.partner_id:
+            return
+        missing = self.partner_id._missing_account_fields()
+        if missing:
+            return {'warning': {
+                'title': "Incomplete Account Information",
+                'message': (
+                    "The account '%s' is missing: %s.\n\n"
+                    "Please complete these details on the account before "
+                    "saving this opportunity." % (
+                        self.partner_id.commercial_partner_id.display_name,
+                        ', '.join(missing),
+                    )
+                ),
+            }}
+
+    @api.constrains('partner_id', 'type')
+    def _check_opportunity_contact(self):
+        """An opportunity always needs a Contact, and that contact's account
+        must carry the mandatory details (Annual Revenue, Employee Count,
+        Website, Legal Name) before the opportunity may be created.
+
+        Leads are deliberately exempt: a lead is captured before the account is
+        known, and it is the conversion to an opportunity - which writes
+        `type` and `partner_id` - that runs this check.
+        """
+        for lead in self:
+            if lead.type != 'opportunity':
+                continue
+            if not lead.partner_id:
+                raise ValidationError(
+                    "Contact is required to create an opportunity. "
+                    "Please select a contact before saving."
+                )
+            lead.partner_id._check_account_details_complete("an Opportunity")
 
     @api.constrains('next_action', 'stage_id', 'type')
     def _check_next_action(self):
