@@ -143,14 +143,42 @@
         <field name="model">crm.lead</field>
         <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter"/>
         <field name="arch" type="xml">
+            <!-- Searchable fields -->
             <xpath expr="//search" position="inside">
                 <field name="bdr_id"/>
                 <field name="cus_campaign_id"/>
-                <filter name="group_bdr" string="BDR" context="{'group_by': 'bdr_id'}"/>
+                <field name="lead_source"/>
+            </xpath>
+
+            <!-- Hide the stock UTM group-bys.
+                 Core CRM offers "Campaign" (campaign_id), "Medium" (medium_id)
+                 and "Source" (source_id) - none of which this business fills
+                 in; it uses cus_campaign_id and lead_source instead. Leaving
+                 both meant the Group By menu showed two "Campaign" and two
+                 "Source" entries, and picking the stock one collapsed every
+                 opportunity into a single "None" group.
+                 ('compaign' is spelt that way in core CRM - not a typo here.) -->
+            <xpath expr="//filter[@name='compaign']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//filter[@name='medium']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+            <xpath expr="//filter[@name='source']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+
+            <!-- The working Source / Campaign / BDR group-bys, placed inside
+                 the Group By block next to Stage and Lost Reason rather than
+                 trailing at the bottom of the menu. Filter NAMES are unchanged
+                 so existing saved favourites keep working. -->
+            <xpath expr="//filter[@name='lostreason']" position="after">
                 <filter name="group_lead_source" string="Source"
                         context="{'group_by': 'lead_source'}"/>
                 <filter name="group_cus_campaign" string="Campaign"
                         context="{'group_by': 'cus_campaign_id'}"/>
+                <filter name="group_bdr" string="BDR"
+                        context="{'group_by': 'bdr_id'}"/>
             </xpath>
         </field>
     </record>

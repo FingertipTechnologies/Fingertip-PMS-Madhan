@@ -6,7 +6,10 @@
     "summary": "Marketing app with Articles, Pageviews, and Enquiries",
     "author": "Your Company",
     "license": "LGPL-3",
-    "depends": ["base","mail"],
+    # Project_Scorecards supplies group_scorecard_marketing, which gates the
+    # Marketing root menu and each of its entries. It was already referenced
+    # without being declared; declaring it fixes the load order.
+    "depends": ["base","mail","Project_Scorecards"],
     "data": [
         "security/ir.model.access.csv",
         "views/marketing_views.xml",

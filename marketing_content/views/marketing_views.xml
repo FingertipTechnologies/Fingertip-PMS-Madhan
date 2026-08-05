@@ -139,10 +139,14 @@
         <field name="view_mode">list,form</field>
     </record>
 
+    <!-- Restricted to the Marketing team. The root menu is also open to CRM
+         salespeople (they reach Campaigns there), so each Marketing-only menu
+         states its own group to keep them out of the rest of the app. -->
     <menuitem id="menu_marketing_articles"
               name="Articles"
               parent="menu_marketing_root"
               action="action_marketing_articles"
+              groups="Project_Scorecards.group_scorecard_marketing"
               sequence="10"/>
 
     <!-- =========================
@@ -213,6 +217,7 @@
               name="Pageviews"
               parent="menu_marketing_root"
               action="action_marketing_pageviews"
+              groups="Project_Scorecards.group_scorecard_marketing"
               sequence="20"/>
 
     <!-- =========================
@@ -287,6 +292,7 @@
               name="Enquiries"
               parent="menu_marketing_root"
               action="action_marketing_enquiries"
+              groups="Project_Scorecards.group_scorecard_marketing"
               sequence="30"/>
 
 </odoo>
