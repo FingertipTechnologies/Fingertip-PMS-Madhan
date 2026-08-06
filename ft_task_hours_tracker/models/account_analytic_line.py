@@ -1,9 +1,127 @@
-from odoo import models, api, _
+import logging
+
+from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+
+_logger = logging.getLogger(__name__)
 
 
 class AccountAnalyticLine(models.Model):
     _inherit = 'account.analytic.line'
+
+    ft_trainee_id = fields.Many2one(
+        'hr.employee',
+        string='Trainee',
+        readonly=True,
+        copy=False,
+        index=True,
+        help="The employee who logged this time, recorded only when they held "
+             "a Trainee job position AT THE TIME of entry. Empty for everybody "
+             "else, so grouping on it lists each trainee by name and leaves "
+             "all other time under None.",
+    )
+
+    def _ft_vals_trainee_employee(self, vals):
+        """The employee behind ``vals``, but only if they are a trainee now.
+
+        Returns an empty recordset for everyone else, which is what leaves
+        non-trainee time out of the named groups.
+
+        Employee resolution mirrors what Odoo does when the field is left out
+        of the values: an explicit employee_id wins, otherwise the line belongs
+        to user_id, otherwise to whoever is creating it.
+
+        Delegates the classification to _ft_job_bucket so "what counts as a
+        trainee" has exactly one definition across the PMS instead of a second
+        copy here that could drift. That helper also reads the job name with
+        sudo, which is what keeps this from raising an AccessError for users
+        without HR rights — hr.job is readable only by HR officers.
+        """
+        employee_id = vals.get('employee_id')
+        if employee_id:
+            employee = self.env['hr.employee'].browse(employee_id)
+        elif vals.get('user_id'):
+            # sudo: booking time for somebody else must not depend on being
+            # able to read their user record.
+            employee = self.env['res.users'].sudo().browse(
+                vals['user_id']).employee_id
+        else:
+            employee = self.env.user.employee_id
+        if self._ft_line_bucket(employee) == 'trainee':
+            return employee
+        return self.env['hr.employee']
+
+    @api.model
+    def _ft_backfill_trainee_id(self, employees=None):
+        """Stamp existing lines whose employee currently holds a Trainee job.
+
+        Pass ``employees`` to scope the work to a specific hr.employee
+        recordset — that is what makes it cheap enough to run from
+        hr.employee.write every time somebody's job position changes. Left out,
+        it sweeps every employee.
+
+        Lives here rather than inside a single migration because the flag can
+        only ever be backfilled from CURRENT job positions, and those get
+        filled in gradually: the first upgrade ran against a database where
+        nobody was mapped to a Trainee position yet and so had nothing to do.
+        Every time HR maps another batch of employees, that batch's history
+        needs picking up, and re-running an upgrade should not be the only way.
+
+        Additive on purpose — it fills the field, never clears it. A line
+        already stamped as trainee time keeps it even if that person has since
+        been promoted, which is the whole point of freezing the value on entry.
+        That also makes it safe to run as many times as you like.
+
+        Raw SQL, mirroring the bt_project_customization migrations: this must
+        not fire this model's write() guards, retrigger stored computes across
+        28,500 rows, or write a mail.tracking row per line. The trainee job
+        list still comes from _ft_job_bucket rather than being restated in SQL,
+        so there is only one definition of "trainee" in the codebase.
+        """
+        if employees is not None and not employees:
+            return 0
+
+        Task = self.env['project.task']
+        # sudo: hr.job is readable only by HR officers, and this runs from
+        # hr.employee.write as whoever made the edit.
+        # active_test=False: an archived job position still explains the hours
+        # logged by whoever held it.
+        trainee_job_ids = [
+            job.id
+            for job in self.env['hr.job'].sudo().with_context(
+                active_test=False).search([])
+            if Task._ft_job_bucket(job) == 'trainee'
+        ]
+        if not trainee_job_ids:
+            _logger.info(
+                "ft_trainee_id backfill: no Trainee job positions exist yet, "
+                "nothing to stamp"
+            )
+            return 0
+
+        query = """
+            UPDATE account_analytic_line l
+               SET ft_trainee_id = l.employee_id
+              FROM hr_employee e
+             WHERE l.employee_id = e.id
+               AND e.job_id IN %s
+               AND l.ft_trainee_id IS NULL
+        """
+        params = [tuple(trainee_job_ids)]
+        if employees is not None:
+            query += " AND l.employee_id IN %s"
+            params.append(tuple(employees.ids))
+
+        self.env.cr.execute(query, params)
+        count = self.env.cr.rowcount
+        # The rows were changed behind the ORM's back.
+        self.invalidate_model(['ft_trainee_id'])
+        _logger.info(
+            "ft_trainee_id backfill: stamped %s timesheet lines as trainee "
+            "time across %s Trainee job positions",
+            count, len(trainee_job_ids),
+        )
+        return count
 
     def _ft_check_task_not_completed(self, task):
         """Refuse time entry on a task sitting in a Completed (folded) stage.
@@ -129,6 +247,18 @@ class AccountAnalyticLine(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            # Stamp the trainee from the employee's job position AT THE TIME OF
+            # ENTRY, then leave it alone for good. Decided on creation rather
+            # than computed from the employee later because it is a fact about
+            # when the work happened: promoting a trainee next month must not
+            # retroactively turn this month's training hours into ordinary
+            # hours. Only the time they log after the promotion counts as
+            # non-trainee. Same reasoning as ft_is_rework on this model.
+            #
+            # Set before the guards below, all of which `continue` past the
+            # rest of the loop for non-project lines.
+            if 'ft_trainee_id' not in vals:
+                vals['ft_trainee_id'] = self._ft_vals_trainee_employee(vals).id
             # Runs before the billable-project guard below: a completed task
             # takes no more time whether or not its project is billable.
             if vals.get('task_id'):

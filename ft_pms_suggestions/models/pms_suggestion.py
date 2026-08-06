@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
+from markupsafe import Markup
+
 from odoo import api, fields, models
 from odoo.exceptions import AccessError
+
+# Bus notification type. The JS listener in
+# static/src/js/suggestion_notification.js subscribes to this exact string, so
+# the two have to be changed together.
+BUS_NOTIFICATION_TYPE = "ft_pms_suggestions.new_suggestion"
+
+# Comma-separated logins notified on top of the administrators. Held in a
+# system parameter so the recipient list can be edited from Settings without a
+# code change or a module upgrade.
+NOTIFY_LOGINS_PARAM = "ft_pms_suggestions.notify_logins"
 
 
 class PmsSuggestion(models.Model):
@@ -81,7 +93,8 @@ class PmsSuggestion(models.Model):
                     "pms.suggestion"
                 ) or "New"
         records = super().create(vals_list)
-        records._notify_admins_new_suggestion()
+        records._log_creation_note()
+        records._notify_new_suggestion()
         return records
 
     def write(self, vals):
@@ -124,32 +137,84 @@ class PmsSuggestion(models.Model):
         self._check_is_admin()
         self.admin_unlocked = False
 
-    def _notify_admins_new_suggestion(self):
-        """Email/notify Admin-access users and Ashitha specifically when a
-        new suggestion comes in, as requested on the call."""
-        admins = self.env["res.users"].sudo().search(
+    # ------------------------------------------------------------------
+    # Notification
+    #
+    # Delivery is over the Odoo bus, never by email. Nothing here touches
+    # mail.mail or an outgoing mail server: the popup is pushed straight to
+    # the recipients' open browser tabs. Someone who is not logged in simply
+    # misses it and picks the suggestion up from the Suggestions menu
+    # filtered on state = 'new'.
+    # ------------------------------------------------------------------
+
+    def _notification_recipient_users(self):
+        """Users who should receive the new-suggestion popup.
+
+        Administrators, plus whoever is named in the notify-logins system
+        parameter. Recipients are resolved by login rather than by a name
+        search: a login is unique and stable, so renaming somebody — or a
+        second person sharing their first name — cannot silently redirect the
+        notification or send it twice.
+        """
+        Users = self.env["res.users"].sudo()
+        recipients = Users.search(
             [("groups_id", "=", self.env.ref("base.group_system").id)]
         )
-        ashitha = self.env["res.users"].sudo().search(
-            [("name", "ilike", "Ashitha")], limit=1
+        raw = self.env["ir.config_parameter"].sudo().get_param(
+            NOTIFY_LOGINS_PARAM, default=""
         )
-        recipients = admins | ashitha
-        partner_ids = recipients.mapped("partner_id").ids
-        if not partner_ids:
+        logins = [login.strip() for login in raw.split(",") if login.strip()]
+        if logins:
+            # `|` on recordsets de-duplicates, so somebody who is both an
+            # administrator and named in the parameter still gets one popup.
+            recipients |= Users.search([("login", "in", logins)])
+        return recipients
+
+    def _bus_notification_payload(self):
+        """The JSON payload the JS listener renders in the popup."""
+        self.ensure_one()
+        return {
+            "id": self.id,
+            "name": self.name,
+            "title": self.title or "",
+            "category": self.category_id.name or "",
+            "author": self.suggested_by_id.name or "",
+        }
+
+    def _notify_new_suggestion(self):
+        """Push the popup to each recipient over the bus.
+
+        Sent per user rather than to the ``base.group_system`` group channel:
+        the group channel would reach every administrator but could not carry
+        the extra logins, and mixing the two would double-notify anyone who is
+        both. One send per user keeps "exactly one popup per recipient" true
+        by construction.
+        """
+        recipients = self._notification_recipient_users()
+        if not recipients:
             return
         for rec in self:
-            rec.message_subscribe(partner_ids=partner_ids)
+            # res.users inherits bus.listener.mixin and resolves to the user's
+            # own partner channel, which every logged-in session subscribes to.
+            recipients._bus_send(
+                BUS_NOTIFICATION_TYPE, rec._bus_notification_payload()
+            )
+
+    def _log_creation_note(self):
+        """Record the submission in the chatter, notifying nobody.
+
+        Preserves the audit trail the old email notification left behind. It
+        cannot produce an email: an internal note only reaches followers, the
+        only follower at this point is the submitter, and Odoo never notifies
+        the author of their own message.
+        """
+        for rec in self:
             rec.message_post(
-                body=(
-                    "<p>New PMS suggestion submitted: <b>%s</b></p>"
-                    "<p>Module/Area: %s<br/>Suggested by: %s</p>"
-                    % (
-                        rec.title or rec.name,
-                        rec.category_id.name or "-",
-                        rec.suggested_by_id.name or "-",
-                    )
+                body=Markup(
+                    "<p>Suggestion submitted by <b>%s</b> under <b>%s</b>.</p>"
+                ) % (
+                    rec.suggested_by_id.name or "-",
+                    rec.category_id.name or "-",
                 ),
-                subject="New PMS Suggestion: %s" % (rec.title or rec.name),
-                partner_ids=partner_ids,
-                subtype_xmlid="mail.mt_comment",
+                subtype_xmlid="mail.mt_note",
             )

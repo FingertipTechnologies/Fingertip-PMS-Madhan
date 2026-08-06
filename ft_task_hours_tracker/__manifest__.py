@@ -7,7 +7,17 @@
     # ft_project_stage_id (added in d7a9431 and referenced by the task list view)
     # has no column on any database that was not manually updated, and selecting
     # it raises UndefinedColumn. Bump this whenever a stored field is added here.
-    'version': '18.0.0.0.1',
+    # 18.0.0.0.2 adds the stored ft_is_trainee flag on account.analytic.line,
+    # which powers the "Trainees" option in the Timesheets Group By menu.
+    # 18.0.0.0.3 re-runs that flag's backfill: 18.0.0.0.2 shipped before any
+    # employee had been mapped to a Trainee job position, so it had nothing to
+    # flag and the grouping read zero.
+    # 18.0.0.0.4 replaces that boolean with ft_trainee_id, so grouping lists
+    # each trainee by name instead of Yes/No.
+    # 18.0.0.0.5 claims an employee's past time for the Trainee group the
+    # moment HR gives them a Trainee job position, instead of it needing a
+    # manual backfill each time.
+    'version': '18.0.0.0.5',
     'summary': 'project hours tracking',
     'category': 'Project',
     'author': 'Fingertip',
@@ -22,6 +32,7 @@
     'data': [
         'views/project_task_views.xml',
         'views/project_project_views.xml',
+        'views/account_analytic_line_views.xml',
         'views/res_config_settings_views.xml',
     ],
 'installable': True,
