@@ -2,7 +2,24 @@
 <odoo>
 <data noupdate="0">
 
-   
+    <!-- The Homepage app-icon access matrix.
+         =====================================
+         Only apps ft_homepage DEPENDS ON may be configured here. A
+         <record id="other_module.xyz"> is checked by convert.py's
+         _test_xml_id, which asserts the referenced module is in state
+         'installed' at parse time and aborts the entire upgrade with
+
+             AssertionError: The ID "..." refers to an uninstalled module
+
+         if it is not. That is not a hypothetical: upgrading ft_homepage on
+         staging died on the AI Insights line because that app is not deployed
+         there, taking an unrelated deployment down with it.
+
+         The optional apps — Training, both Helpdesks, Scorecard, Dashboard,
+         AI Insights, Target and the QA test app — are therefore configured
+         from models/ir_ui_menu.py instead, which skips whatever a given
+         database does not have. See the <function> call at the end of this
+         file; the matrix is documented entry by entry there. -->
 
     <!-- General PMS — All users -->
     <record id="general.menu_general_root" model="ir.ui.menu">
@@ -17,31 +34,8 @@
         <field name="groups_id" eval="[(6, 0, [])]"/>
     </record>
 
-    <!-- Training — All users (root menu already has no group restriction,
-         so every internal user, including Trainees, already sees it; kept
-         explicit here for clarity/auditability). -->
-    <record id="ft_training.menu_training_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [])]"/>
-    </record>
-
-    <!-- Old Helpdesk app (round icon, helpdesk_mgmt) — removed from the
-         Homepage for ALL accounts. -->
-    <record id="helpdesk_mgmt.helpdesk_ticket_main_menu" model="ir.ui.menu">
-        <field name="active" eval="False"/>
-    </record>
-    <!-- FT Helpdesk — helpdesk roles + PMs. NOT for sales/marketing
-         (they only see it if they're also given a helpdesk role).
-         active=True re-shows it in case a previous run of
-         ft_app_menu_cleanup (which used to list "Helpdesk") had hidden it. -->
-    <record id="ft_helpdesk_core.menu_ft_helpdesk_root" model="ir.ui.menu">
-        <field name="active" eval="True"/>
-        <field name="groups_id" eval="[
-            (6, 0, [
-                ref('ft_helpdesk_core.group_ft_helpdesk_agent'),
-                ref('project.group_project_manager'),
-            ])
-        ]"/>
-    </record>
+    <!-- Training, and both Helpdesk apps, are set from models/ir_ui_menu.py —
+         none of the three is a dependency of ft_homepage. -->
 
     <!-- Employees — common / all. active=True re-shows it in case a previous
          run of ft_app_menu_cleanup (which used to list "Employees") hid it. -->
@@ -58,32 +52,9 @@
     <!-- Sales and Email Marketing are fully removed for everyone —
          see the deactivation block at the end of this file. -->
 
-    <!-- Scorecard — PMs + Project Coordinators only -->
-    <record id="Project_Scorecards.menu_project_scorecard_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[
-            (6, 0, [
-                ref('project.group_project_manager'),
-                ref('ft_homepage.group_project_coordinator'),
-            ])
-        ]"/>
-    </record>
-
-    <!-- Dashboard — Admin only.
-         VERIFY: confirm the spreadsheet_dashboard root menu external id
-         (module not present in this codebase / installed separately). -->
-    <record id="spreadsheet_dashboard.spreadsheet_dashboard_menu_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
-    </record>
-
-    <!-- AI Insights — Admin only -->
-    <record id="ft_ai_sales_insights.menu_ai_insights_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
-    </record>
-
-    <!-- Target — Admin only -->
-    <record id="ft_target_management.menu_ft_target_root" model="ir.ui.menu">
-        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
-    </record>
+    <!-- Scorecard, Dashboard, AI Insights and Target are set from
+         models/ir_ui_menu.py — none of the four is a dependency of
+         ft_homepage, and AI Insights in particular is absent from staging. -->
 
     <!-- Invoicing — Admin + Sales only -->
     <record id="account.menu_finance" model="ir.ui.menu">
@@ -102,12 +73,8 @@
         <field name="active" eval="False"/>
     </record>
 
-    <!-- QA Techstar Test App — hide for everyone (already covered inside
-         PMS/Project, kept installed but removed from the Homepage/menu
-         entirely). -->
-    <record id="qa_testapp.qa_testapp_menu_root" model="ir.ui.menu">
-        <field name="active" eval="False"/>
-    </record>
+    <!-- The QA Techstar test app is hidden from models/ir_ui_menu.py — it is
+         not a dependency of ft_homepage either. -->
 
     <!-- Link Tracker — Sales + Admin. The stock root menu is hidden
          behind the developer-mode group (base.group_no_one), so we
@@ -165,6 +132,15 @@
     <record id="mass_mailing.mass_mailing_menu_root" model="ir.ui.menu">
         <field name="active" eval="False"/>
     </record>
+
+    <!-- ================================================================
+         The optional half of the matrix: apps ft_homepage does not depend
+         on, which may be absent from any given database. Applied last so it
+         cannot hold up the records above, and from Python so a missing app is
+         skipped with a log line instead of aborting the upgrade. The list
+         itself is in models/ir_ui_menu.py.
+         ================================================================ -->
+    <function model="ir.ui.menu" name="_ft_apply_optional_menu_access"/>
 
 </data>
 </odoo>

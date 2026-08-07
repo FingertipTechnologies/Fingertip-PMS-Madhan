@@ -6,7 +6,10 @@
     # never truncates.
     # 18.0.1.2.1 enforces that text length in the form as it is typed, with a
     # character counter, instead of only on save.
-    "version": "18.0.1.2.1",
+    # 18.0.1.2.2 stops the upgrade aborting on a database that does not have
+    # every optional app: the menu access matrix now skips what is not
+    # installed instead of asserting on it.
+    "version": "18.0.1.2.2",
     "category": "Productivity",
     "summary": "Role-based app icon visibility, default Homepage landing page, "
                 "and Quote of the Day / Announcement widget on the Homepage.",
