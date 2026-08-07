@@ -5,20 +5,25 @@ import { useService } from "@web/core/utils/hooks";
 import { patch } from "@web/core/utils/patch";
 import { AppsMenu } from "@web_responsive/components/apps_menu/apps_menu.esm";
 
-// The footer shows at most this many quotes/posts; the rest are dropped
-// (entries are already ordered by sequence, then date, server-side).
+// The footer shows at most this many media posts. The server refuses to
+// activate a fifth (ft.quote.announcement.MAX_ACTIVE_MEDIA), so this is a
+// backstop for data that predates that rule rather than the rule itself —
+// keep the two numbers in step.
 const MAX_FOOTER_POSTS = 4;
 
-// Only true announcements go in the panel beside the app icons. Everything
-// else — "Quote of the Day" and "Org-wide Update" (which is how the LinkedIn
-// and YouTube entries are recorded) — is a post and belongs in the footer.
-const ANNOUNCEMENT_KINDS = ["announcement"];
-
 /**
- * Shared data and helpers for the two Homepage widgets. The announcements
- * panel sits beside the app icons and the posts row sits in the footer below
- * them, so they are two components rendered in two places over the same set
- * of records rather than one component owning both.
+ * Shared data and helpers for the two Homepage widgets.
+ *
+ * The split is by CONTENT TYPE, not by `kind`: every text entry goes to the
+ * panel beside the app icons whether it was recorded as a Quote, an
+ * Announcement or an Org-wide Update, and every media entry goes to the
+ * footer. Routing on `kind` used to send a text Quote to the footer marquee
+ * and a text Announcement to the panel, so where a quote appeared depended on
+ * a dropdown the author had no reason to connect with placement.
+ *
+ * They are two components rendered in two places over the same set of records
+ * rather than one component owning both, because the panel and the footer sit
+ * at different points in web_responsive's template.
  */
 class FtHomepageContent extends Component {
     static props = ["*"];
@@ -44,28 +49,17 @@ class FtHomepageContent extends Component {
         });
     }
 
-    /** Entries for the announcements panel beside the app icons. */
-    get announcements() {
-        return this.state.items.filter((item) =>
-            ANNOUNCEMENT_KINDS.includes(item.kind)
-        );
+    /**
+     * Every text entry, for the panel beside the app icons — regardless of
+     * whether it is a Quote, an Announcement or an Org-wide Update.
+     */
+    get panelItems() {
+        return this.state.items.filter((item) => item.content_type === "text");
     }
 
-    /** Everything destined for the footer: not an announcement. */
-    get footerItems() {
-        return this.state.items.filter(
-            (item) => !ANNOUNCEMENT_KINDS.includes(item.kind)
-        );
-    }
-
-    /** Text entries — they scroll as a marquee across the top of the footer. */
-    get quotes() {
-        return this.footerItems.filter((item) => item.content_type === "text");
-    }
-
-    /** Image/video/social entries — the cards below the marquee, max 4. */
+    /** Image/video/social entries — the cards in the footer, max 4. */
     get posts() {
-        return this.footerItems
+        return this.state.items
             .filter((item) => item.content_type !== "text")
             .slice(0, MAX_FOOTER_POSTS);
     }

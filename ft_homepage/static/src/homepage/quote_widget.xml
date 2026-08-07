@@ -81,12 +81,14 @@
 
     </t>
 
-    <!-- Announcements panel — sits to the RIGHT of the app icons grid. -->
+    <!-- Text panel — sits to the RIGHT of the app icons grid, and carries
+         EVERY activated text entry whatever its kind (quote / announcement /
+         update). Media never lands here; it goes to the footer below. -->
     <t t-name="ft_homepage.AnnouncementsPanel">
-        <aside class="ft_announcements" t-if="state.loaded and announcements.length">
+        <aside class="ft_announcements" t-if="state.loaded and panelItems.length">
             <div class="ft_announcements__title">Announcements</div>
             <div class="ft_announcements__body">
-                <t t-foreach="announcements" t-as="item" t-key="item.id">
+                <t t-foreach="panelItems" t-as="item" t-key="item.id">
                     <!-- No title: `title` is documented as an internal label
                          ("Org Announcement - Holiday List"), not something to
                          show to every user. -->
@@ -98,31 +100,16 @@
         </aside>
     </t>
 
-    <!-- Homepage footer, full width below the icons:
-         quotes scroll as a marquee across the top, the posts sit below it. -->
+    <!-- Homepage footer, full width below the icons: media cards only.
+         The quotes marquee that used to run above them is gone — all text now
+         lives in the panel top-right, so the track had nothing left to carry
+         and a scrolling strip meant only a sliver of a quote was readable at
+         any moment anyway. -->
     <t t-name="ft_homepage.QuoteWidget">
-        <div class="ft_quote_widget" t-if="state.loaded and (quotes.length or posts.length)">
-
-            <!-- QUOTES: one marquee track carrying every quote, scrolling
-                 right to left. -->
-            <div class="ft_quote_widget__marquee_track" t-if="quotes.length">
-                <div class="ft_quote_widget__inner">
-                    <t t-foreach="quotes" t-as="item" t-key="item.id">
-                        <span class="ft_quote_widget__quote">
-                            <span class="ft_quote_widget__mark">&#8220;</span>
-                            <span class="ft_quote_widget__quote_text" t-esc="item.text_content"/>
-                            <span class="ft_quote_widget__mark">&#8221;</span>
-                            <span t-if="item.contributor" class="ft_quote_widget__contributor">
-                                — <t t-esc="item.contributor"/>
-                            </span>
-                        </span>
-                    </t>
-                </div>
-            </div>
+        <div class="ft_quote_widget" t-if="state.loaded and posts.length">
 
             <!-- POSTS: images / videos / social embeds, laid out by count. -->
-            <div class="ft_quote_widget__posts" t-if="posts.length"
-                 t-att-data-count="posts.length">
+            <div class="ft_quote_widget__posts" t-att-data-count="posts.length">
                 <t t-foreach="posts" t-as="item" t-key="item.id">
                     <!-- The content-type modifier lets the stylesheet size a
                          social embed differently from an image. -->

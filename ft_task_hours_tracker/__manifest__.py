@@ -17,7 +17,10 @@
     # 18.0.0.0.5 claims an employee's past time for the Trainee group the
     # moment HR gives them a Trainee job position, instead of it needing a
     # manual backfill each time.
-    'version': '18.0.0.0.5',
+    # 18.0.0.0.6 drops the "None" bucket when grouping by Trainee — it held
+    # everybody who is not a trainee, so it dominated both the group list and
+    # the total hours.
+    'version': '18.0.0.0.6',
     'summary': 'project hours tracking',
     'category': 'Project',
     'author': 'Fingertip',

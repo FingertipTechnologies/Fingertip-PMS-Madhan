@@ -35,8 +35,21 @@
                         <group>
                             <field name="kind"/>
                             <field name="content_type" widget="radio"/>
+                            <!-- The box grows with the text as it is typed
+                                 (Odoo's text widget auto-sizes). ft_limited_text
+                                 adds the character counter and stops the
+                                 textarea at max_length, so the author meets the
+                                 cap while writing rather than as an error on
+                                 save; _check_text_length on the model is still
+                                 what actually enforces it.
+
+                                 max_length, the placeholder below and
+                                 TEXT_MAX_LENGTH in ft_quote_announcement.py are
+                                 the same number — change them together. -->
                             <field name="text_content" invisible="content_type != 'text'"
-                                   placeholder="The quote or announcement text..."/>
+                                   widget="ft_limited_text"
+                                   options="{'max_length': 300}"
+                                   placeholder="The quote or announcement text (max 300 characters, so it fits the Homepage panel without being cut off)..."/>
                             <field name="image" widget="image" invisible="content_type != 'image'"/>
                             <field name="video_file" widget="binary"
                                    filename="video_filename"

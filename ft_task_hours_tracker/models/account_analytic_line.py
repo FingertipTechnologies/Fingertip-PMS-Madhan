@@ -2,6 +2,7 @@ import logging
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+from odoo.osv import expression
 
 _logger = logging.getLogger(__name__)
 
@@ -20,6 +21,31 @@ class AccountAnalyticLine(models.Model):
              "else, so grouping on it lists each trainee by name and leaves "
              "all other time under None.",
     )
+
+    @api.model
+    def _read_group(self, domain, groupby=(), aggregates=(), having=(),
+                    offset=0, limit=None, order=None):
+        """Leave everybody else's time out when grouping by Trainee.
+
+        ft_trainee_id is empty on every non-trainee line, so grouping on it
+        produced a "None" bucket holding all 38,014 of them — a group that is
+        not a trainee, dwarfs the real ones, and dragged the list's total to
+        67,226 h when the question being asked was how much time the trainees
+        spent. Filtering the domain rather than dropping the group afterwards
+        keeps the group counts, the aggregates and the footer total consistent
+        with each other, and it makes expanding a group show the same records
+        it was counted from.
+
+        Scoped to the groupby actually asking for trainees; nothing else in the
+        PMS groups on this field, and reading or searching it is untouched.
+        """
+        if 'ft_trainee_id' in groupby:
+            domain = expression.AND([
+                domain or [],
+                [('ft_trainee_id', '!=', False)],
+            ])
+        return super()._read_group(
+            domain, groupby, aggregates, having, offset, limit, order)
 
     def _ft_vals_trainee_employee(self, vals):
         """The employee behind ``vals``, but only if they are a trainee now.

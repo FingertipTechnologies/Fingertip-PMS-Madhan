@@ -17,6 +17,37 @@ _SOCIAL_EMBED_HOSTS = {
     "facebook": {"www.facebook.com", "facebook.com"},
 }
 
+# Everything that is not text. These are the entries laid out as cards in the
+# Homepage footer; text is handled separately and goes to the panel instead.
+MEDIA_CONTENT_TYPES = ("image", "video", "social")
+
+# At most four media entries may be active at once. The footer lays the cards
+# out on a grid with a track per card (see quote_widget.scss) and stops having
+# a sensible arrangement past four — a fifth would either shrink every card
+# below a readable width or silently never be shown.
+MAX_ACTIVE_MEDIA = 4
+
+# At most one text entry may be active at once. All text is displayed in the
+# upper-right panel whatever its kind, and that panel is sized for a single
+# block of text beside the app icons.
+MAX_ACTIVE_TEXT = 1
+
+# Longest text that fits the upper-right panel without being clipped or
+# pushing the panel past the app-icon grid.
+#
+# Derived from the panel's own geometry rather than picked at random: the panel
+# caps at 360px wide with 16px of padding each side, leaving 328px of content.
+# At its 0.95rem font that is roughly 43 characters a line, and 300 characters
+# is therefore about seven lines — near 165px of text, comfortably inside the
+# panel's 420px body even once the contributor line is added.
+#
+# Change this and the CSS together: the whole point of the limit is that no
+# text long enough to overflow can be saved in the first place, which is what
+# lets the panel drop the line-clamp that used to truncate quotes mid-sentence.
+# The form view repeats the number as the ft_limited_text widget's max_length
+# (and in its placeholder) to stop the typing at the cap — keep the two in step.
+TEXT_MAX_LENGTH = 300
+
 
 class FtQuoteAnnouncement(models.Model):
     _name = "ft.quote.announcement"
@@ -47,8 +78,13 @@ class FtQuoteAnnouncement(models.Model):
         default="text",
     )
 
-    # Text content — rendered with decorative quotation-mark styling.
-    text_content = fields.Text(string="Quote / Announcement Text")
+    # Text content — rendered with decorative quotation-mark styling in the
+    # upper-right panel, whatever `kind` the entry carries.
+    text_content = fields.Text(
+        string="Quote / Announcement Text",
+        help="Shown in the panel beside the app icons. Limited to %d "
+        "characters so it always fits without being cut off." % TEXT_MAX_LENGTH,
+    )
 
     # Image content
     image = fields.Image(string="Image", max_width=1920, max_height=1080)
@@ -199,6 +235,79 @@ class FtQuoteAnnouncement(models.Model):
                         "code, or a plain https://linkedin.com or "
                         "https://facebook.com post link."
                     )
+
+    @api.constrains("content_type", "text_content")
+    def _check_text_length(self):
+        """Keep text short enough that the panel never has to truncate it.
+
+        Enforced on save rather than trimmed at display time on purpose: a
+        limit the author is told about while writing is the only version of
+        this that prevents a half-sentence appearing on everybody's Homepage.
+        """
+        for rec in self:
+            if rec.content_type != "text":
+                continue
+            length = len(rec.text_content or "")
+            if length > TEXT_MAX_LENGTH:
+                raise ValidationError(
+                    _(
+                        "The text is %(length)s characters long, which is more "
+                        "than the %(limit)s that fit the Homepage panel. Please "
+                        "shorten it by %(excess)s characters.",
+                        length=length,
+                        limit=TEXT_MAX_LENGTH,
+                        excess=length - TEXT_MAX_LENGTH,
+                    )
+                )
+
+    def _ft_count_active(self, content_types):
+        """How many entries of these content types are live right now.
+
+        active_test=False so the search is not silently narrowed to active
+        records before the domain is applied — the domain says which state we
+        are counting, and being explicit is what keeps this readable.
+        """
+        return self.with_context(active_test=False).search_count(
+            [("active", "=", True), ("content_type", "in", list(content_types))]
+        )
+
+    @api.constrains("active", "content_type")
+    def _check_active_limits(self):
+        """Cap what may be live at once: 4 media entries, 1 text entry.
+
+        Checked against the whole table rather than just `self`, because the
+        limit is a property of the Homepage as a whole. Runs after the write,
+        so the counts already include whatever is being activated.
+
+        Only worth checking when something is actually being switched on —
+        deactivating can never breach a maximum.
+        """
+        if not any(rec.active for rec in self):
+            return
+
+        media_count = self._ft_count_active(MEDIA_CONTENT_TYPES)
+        if media_count > MAX_ACTIVE_MEDIA:
+            raise ValidationError(
+                _(
+                    "Only %(limit)s media entries (Image / Video / HTML) can be "
+                    "active at a time, and there are now %(count)s. Please "
+                    "deactivate one before activating another.",
+                    limit=MAX_ACTIVE_MEDIA,
+                    count=media_count,
+                )
+            )
+
+        text_count = self._ft_count_active(["text"])
+        if text_count > MAX_ACTIVE_TEXT:
+            raise ValidationError(
+                _(
+                    "Only %(limit)s text entry can be active at a time, and "
+                    "there are now %(count)s. Please deactivate the current one "
+                    "before activating another.",
+                    limit=MAX_ACTIVE_TEXT,
+                    count=text_count,
+                )
+            )
 
     def _ft_user_can_activate(self):
         """Only HR users, Admins (and system/sudo calls) may publish

@@ -36,9 +36,18 @@ class TraineeReview(models.Model):
         default=lambda self: self.env.user,
         help='User who created the review, or who last updated it.',
     )
+    # A review covers a PERIOD, not a single day. `review_period` keeps its
+    # name and becomes the start of that period, so every review recorded
+    # before this existed stays valid and reads as a period beginning on the
+    # day it already carried — no migration, no reinterpretation of old data.
     review_period = fields.Selection(
-        REVIEW_PERIOD, string='Review Period', index=True,
-        help='Review timeline for this record, from Day 1 to Day 150.',
+        REVIEW_PERIOD, string='Review Period From', index=True,
+        help='First day of the period this review covers (Day 1 to Day 150).',
+    )
+    review_period_to = fields.Selection(
+        REVIEW_PERIOD, string='Review Period To', index=True,
+        help='Last day of the period this review covers. Leave it empty for a '
+             'review that covers a single day.',
     )
     description = fields.Text(
         string='Description',
@@ -62,6 +71,33 @@ class TraineeReview(models.Model):
         if 'reviewer_id' not in vals:
             vals = dict(vals, reviewer_id=self.env.user.id)
         return super().write(vals)
+
+    @api.constrains('review_period', 'review_period_to')
+    def _check_review_period_range(self):
+        """The period has to run forwards, and cannot end without starting.
+
+        Comparing the selection keys as strings is correct here rather than
+        lazy: REVIEW_PERIOD zero-pads them ('001' … '150') precisely so that
+        string order and day order are the same thing.
+        """
+        for rec in self:
+            if rec.review_period_to and not rec.review_period:
+                raise ValidationError(
+                    "Please set the start of the review period as well — "
+                    "an end day on its own does not describe a period."
+                )
+            if (
+                rec.review_period
+                and rec.review_period_to
+                and rec.review_period_to < rec.review_period
+            ):
+                labels = dict(REVIEW_PERIOD)
+                raise ValidationError(
+                    "The review period ends before it starts: "
+                    f"{labels[rec.review_period]} to "
+                    f"{labels[rec.review_period_to]}. "
+                    "Please pick an end day on or after the start day."
+                )
 
     @api.constrains(*SCORE_FIELDS)
     def _check_scores(self):

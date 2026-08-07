@@ -1,6 +1,10 @@
 {
     'name': 'Training',
-    'version': '18.0.1.1.0',
+    # 18.0.1.2.0 adds the review period end day, so a review covers a range
+    # of days rather than a single one.
+    # 18.0.1.2.1 rebalances the Review list's column widths, which that extra
+    # column had pushed past the table width — taking Description off screen.
+    'version': '18.0.1.2.1',
     'category': 'Human Resources',
     'summary': 'Track daily trainee learning and a central training curriculum',
     'description': """

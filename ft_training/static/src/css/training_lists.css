@@ -49,3 +49,38 @@
 .o_ft_review_list tbody td[name="self_dependency"] {
     text-align: left !important;
 }
+
+/* --- Review: let multi-word headers use two lines ----------------------
+   Odoo truncates every list header to one line (`text-truncate` on the label
+   span), so a column is only as narrow as its label is long — "Review Period
+   From" reserved 130px to caption a value reading "Day 2". With twelve columns
+   that arithmetic is what pushed Description off the screen entirely.
+
+   Wrapping applies to the four labels made of separate words, which then need
+   only their longest word rather than the whole label; the widths in
+   trainee_review_views.xml are set to match and the two go together. Single
+   words ("Communication", "Understanding") are left alone — there is nothing to
+   wrap and breaking mid-word would be worse than the width it saves.
+
+   Scoped to this list's own class, so no other list in the database wraps. */
+/* The label is the only <span> inside the header's flex row (the resize handle
+   is a sibling of that row, not a child), so `> div > span` reaches it without
+   depending on the Bootstrap utility classes it happens to carry. */
+.o_ft_review_list thead th[data-name="review_period"] > div > span,
+.o_ft_review_list thead th[data-name="review_period_to"] > div > span,
+.o_ft_review_list thead th[data-name="problem_solving"] > div > span,
+.o_ft_review_list thead th[data-name="self_dependency"] > div > span {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+/* The sort caret sits beside the label in a flex row; without this it centres
+   itself against a two-line label and stops lining up with the carets in the
+   single-line headers next to it. */
+.o_ft_review_list thead th[data-name="review_period"] > div,
+.o_ft_review_list thead th[data-name="review_period_to"] > div,
+.o_ft_review_list thead th[data-name="problem_solving"] > div,
+.o_ft_review_list thead th[data-name="self_dependency"] > div {
+    align-items: flex-start;
+}

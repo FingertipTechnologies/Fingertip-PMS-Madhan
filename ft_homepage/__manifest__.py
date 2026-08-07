@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 {
     "name": "FT Homepage – App Access, Landing Page & Announcements",
-    "version": "18.0.1.1.0",
+    # 18.0.1.2.0 routes all text to the upper-right panel, caps what may be
+    # active at once (4 media, 1 text), and limits text length so the panel
+    # never truncates.
+    # 18.0.1.2.1 enforces that text length in the form as it is typed, with a
+    # character counter, instead of only on save.
+    "version": "18.0.1.2.1",
     "category": "Productivity",
     "summary": "Role-based app icon visibility, default Homepage landing page, "
                 "and Quote of the Day / Announcement widget on the Homepage.",
@@ -59,6 +64,9 @@ Implements 3 requirements on top of the Homepage (web_responsive Apps Menu grid)
             "ft_homepage/static/src/homepage/quote_widget.scss",
             "ft_homepage/static/src/homepage/quote_widget.js",
             "ft_homepage/static/src/homepage/quote_widget.xml",
+            # Field widget for the announcement form, not the Homepage itself.
+            "ft_homepage/static/src/homepage/limited_text_field.js",
+            "ft_homepage/static/src/homepage/limited_text_field.xml",
         ],
     },
     "post_init_hook": "post_init_hook",

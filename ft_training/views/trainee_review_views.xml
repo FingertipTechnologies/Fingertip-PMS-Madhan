@@ -5,29 +5,46 @@
         <field name="name">ft.trainee.review.list</field>
         <field name="model">ft.trainee.review</field>
         <field name="arch" type="xml">
-            <!-- Each score column is sized to its own header and nothing more.
-                 The scores are left-aligned (see training_lists.css), so a
-                 column wider than its label leaves the digit stranded far from
-                 the next header and the eye stops pairing the two. Widths here
-                 are the header text plus cell padding: enough that no label
-                 wraps, tight enough that the value stays under it.
+            <!-- Column widths are a fixed budget, not a per-column preference.
+                 A `width` in the arch becomes BOTH the min and the max width
+                 (see getWidthSpecs in web/.../list/column_width_hook.js), so a
+                 column that carries one can never give space back. Description
+                 is the only column with no width, which makes it the only one
+                 that absorbs the slack — and equally the only one that pays for
+                 the others. Once the fixed widths outgrew the table, Description
+                 collapsed to the 80px minimum every text column has and left the
+                 viewport behind the horizontal scrollbar. Adding the review
+                 period's second day, and lengthening the first one's label to
+                 "Review Period From", is what tipped it over.
 
-                 Description carries no width on purpose — it is the only
-                 free-text column, so it absorbs whatever the fixed columns
-                 leave instead of being boxed to a guess. Text renders truncated
-                 to one line in a list, so row heights stay uniform and the
-                 score columns keep reading straight down. -->
+                 So each width below is the narrowest that keeps its header
+                 readable, not a round number:
+                  - the four multi-word headers wrap onto two lines rather than
+                    reserving one line's worth of width for a label sitting over
+                    a single digit (see training_lists.css). They need their
+                    longest WORD, not their whole label.
+                  - "Communication" and "Understanding" are single words that
+                    cannot wrap, so they keep the width they already had.
+                  - Date carries no width at all: Odoo sizes a datetime column to
+                    exactly one formatted value, which is better than any number
+                    guessed here.
+
+                 The scores are left-aligned (see training_lists.css) so the
+                 digit stays under its header instead of drifting to the far edge
+                 of the column. Description renders truncated to one line, so row
+                 heights stay uniform and the score columns read straight down. -->
             <list string="Reviews" class="o_ft_review_list">
-                <field name="trainee_id" width="160px"/>
-                <field name="reviewer_id" width="150px"/>
-                <field name="review_period" width="130px"/>
+                <field name="trainee_id" width="150px"/>
+                <field name="reviewer_id" width="130px"/>
+                <field name="review_period" width="105px"/>
+                <field name="review_period_to" width="100px"/>
                 <field name="attitude" width="90px"/>
                 <field name="communication" width="125px"/>
                 <field name="understanding" width="125px"/>
                 <field name="technical" width="95px"/>
-                <field name="problem_solving" width="130px"/>
-                <field name="self_dependency" width="140px"/>
-                <field name="create_date" string="Date" width="160px"/>
+                <field name="problem_solving" width="95px"/>
+                <field name="self_dependency" width="105px"/>
+                <field name="create_date" string="Date"/>
                 <field name="description" optional="show"/>
             </list>
         </field>
@@ -48,6 +65,7 @@
                                     <field name="reviewer_id"
                                            options="{'no_create': True}"/>
                                     <field name="review_period"/>
+                                    <field name="review_period_to"/>
                                     <field name="description"/>
                                 </group>
                                 <group string="Scores (0 - 10)">
@@ -74,6 +92,7 @@
                 <field name="trainee_id"/>
                 <field name="reviewer_id"/>
                 <field name="review_period"/>
+                <field name="review_period_to"/>
 
                 <filter name="my_reviews" string="My Reviews"
                         domain="[('reviewer_id', '=', uid)]"/>
