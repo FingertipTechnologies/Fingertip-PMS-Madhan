@@ -245,6 +245,23 @@ class FtSalesDashboard(models.TransientModel):
     def _won_domain(self):
         return [('active', '=', True), ('stage_id.is_won', '=', True)]
 
+    def _not_won_domain(self):
+        """Everything NOT sitting in a Won stage — the inverse of _won_domain.
+
+        Written as an explicit OR rather than the shorter
+        ``('stage_id.is_won', '=', False)`` because that form resolves to
+        "stage_id IN (the not-won stages)", which silently DROPS an opportunity
+        carrying no stage at all rather than keeping it. There are none in the
+        current database, but a stageless deal is still in play and must not
+        disappear from the pipeline figure while the Opportunities card next to
+        it goes on counting it.
+
+        Stages with ``is_won`` unset count as not-won: Odoo reads ``= False`` on
+        a boolean as "false or null", which is what the three such stages here
+        need.
+        """
+        return ['|', ('stage_id', '=', False), ('stage_id.is_won', '=', False)]
+
     def _lost_domain(self):
         """Lost = archived, OR sitting in a Lost stage while still active.
 
@@ -359,16 +376,24 @@ class FtSalesDashboard(models.TransientModel):
         # the period. Live records only; see _generated_domain().
         generated_count = Lead.search_count(generated)
 
-        # Pipeline Value: Expected Revenue of the SAME records the Opportunities
-        # card counts — every stage, Won and Lost included, live records only.
+        # Pipeline Value: Expected Revenue of the records the Opportunities card
+        # counts, MINUS the ones already in a Won stage.
         #
-        # It previously summed open deals only (not Won, not Lost), which is the
-        # stricter reading of "pipeline" and the right basis for a forecast. It
-        # was widened deliberately so the two cards describe one population, a
-        # count and a sum, and can be checked against the Pipeline list in one
-        # step. The consequence is that this figure includes deals already won
-        # and deals already lost, so it is NOT a forecast of money still to come.
-        pipeline_value = self._sum_revenue(generated)
+        # Won money is not pipeline. Including it produced weeks like 2-8 Aug
+        # 2026 — one deal won, one lost, nothing else — reading as ₹110,000 of
+        # "pipeline" when there was nothing left in play at all.
+        #
+        # The cost of excluding it is that this card and the Opportunities card
+        # no longer describe one population, so the two can no longer be checked
+        # against a single Pipeline list group in one step. That reconciliation
+        # is what the Won-inclusive version bought, and it is deliberately given
+        # up here: a figure called Pipeline Value has to mean money still to
+        # come, and the count beside it still answers "how many deals came up".
+        #
+        # NOTE deals parked in a Lost stage while still un-archived ARE still
+        # counted here. Only Won is excluded. _open_domain() is the stricter
+        # both-excluded version, used by the month boards.
+        pipeline_value = self._sum_revenue(generated + self._not_won_domain())
 
         # Sales Closed / Lost: dated by date_closed (OUTCOME_FIELD), because
         # "what did we close this period" is a question about when the deal
