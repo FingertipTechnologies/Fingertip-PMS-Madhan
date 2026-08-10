@@ -37,13 +37,18 @@ client in the payload so a drill-down filters on the identical window.
 
 WON / LOST SEMANTICS (from odoo/addons/crm/models/crm_lead.py)
 =============================================================
-* Won  = ``probability = 100``, active untouched. Detected here as a won stage
-  on a live record: ``stage_id.is_won = True AND active = True``.
+* Won  = ``probability = 100`` on a live record, OR a live record in a stage
+  flagged ``is_won``. Both, because Odoo offers both: ``action_set_won`` moves
+  the record into the Won stage, but typing 100 into Probability wins the deal
+  without touching the stage at all — and that is precisely what the WON ribbon
+  on the form tests (``invisible="probability < 100"``, crm_lead_views.xml).
+  Detecting the stage alone left deals the CRM form labels WON sitting inside
+  Pipeline Value, which is what this pair of clauses exists to prevent.
 * Lost = ``action_set_lost`` archives the record, so ``active = False``.
-* Open = live and not in a won stage.
+* Open = live, not won by either test, and not parked in a Lost stage.
 
-Archived is therefore what separates lost from won; a won stage alone is not
-enough, because a won lead that is later archived is no longer a live sale.
+Archived is therefore what separates lost from won; being won is not enough,
+because a won lead that is later archived is no longer a live sale.
 
 WHICH FIGURES SEE ARCHIVED RECORDS
 ==================================
@@ -79,7 +84,7 @@ import pytz
 
 from odoo import api, fields, models
 
-from .crm_lead import LOST_STAGE_NAME
+from .crm_lead import LOST_STAGE_NAME, WON_PROBABILITY
 
 # Consistent palette shared across the dashboard charts.
 PALETTE = [
@@ -239,14 +244,28 @@ class FtSalesDashboard(models.TransientModel):
         — and every one was being reported as open Pipeline Value while sitting
         in a stage called Lost.
         """
-        return [('active', '=', True), ('stage_id.is_won', '=', False),
+        return [('active', '=', True), ('probability', '<', WON_PROBABILITY),
+                ('stage_id.is_won', '=', False),
                 ('stage_id', 'not in', self._lost_stage_ids())]
 
     def _won_domain(self):
-        return [('active', '=', True), ('stage_id.is_won', '=', True)]
+        """Live and won, by either of Odoo's two definitions.
+
+        The probability clause is not redundant with the stage one: a deal moved
+        straight to won — Probability set to 100 without the stage changing —
+        wears the WON ribbon on its form while its stage still reads Discussion.
+        Matching only ``stage_id.is_won`` reported such a deal as open pipeline,
+        contradicting the record's own form.
+        """
+        return ['&', ('active', '=', True),
+                '|', ('probability', '>=', WON_PROBABILITY),
+                ('stage_id.is_won', '=', True)]
 
     def _not_won_domain(self):
-        """Everything NOT sitting in a Won stage — the inverse of _won_domain.
+        """Everything not won — the inverse of _won_domain, minus its ``active``.
+
+        Callers AND this onto a population that already restricts to live
+        records, so repeating ``active`` here would be noise.
 
         Written as an explicit OR rather than the shorter
         ``('stage_id.is_won', '=', False)`` because that form resolves to
@@ -260,7 +279,8 @@ class FtSalesDashboard(models.TransientModel):
         a boolean as "false or null", which is what the three such stages here
         need.
         """
-        return ['|', ('stage_id', '=', False), ('stage_id.is_won', '=', False)]
+        return ['&', ('probability', '<', WON_PROBABILITY),
+                '|', ('stage_id', '=', False), ('stage_id.is_won', '=', False)]
 
     def _lost_domain(self):
         """Lost = archived, OR sitting in a Lost stage while still active.

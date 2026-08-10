@@ -12,6 +12,11 @@ import { FunnelChart } from "./funnel_chart";
 import { TableCard } from "./table_card";
 import { MonthBoard } from "./month_board";
 
+// The probability at which crm.lead is won and the form paints its WON ribbon.
+// Mirrors WON_PROBABILITY in models/sales_dashboard.py — the drill-downs below
+// have to select the same records their cards counted.
+const WON_PROBABILITY = 100;
+
 // Each month board and the status domain a click on one of its months opens.
 // Keeps the drill-down in step with what the server counted for that board.
 // One entry per board KIND; every window (last / next / selected period) of the
@@ -383,10 +388,21 @@ export class SalesDashboard extends Component {
             return ["|", ["active", "=", false], ["stage_id", "in", lost]];
         }
         if (kind === "won") {
-            return [["active", "=", true], ["stage_id.is_won", "=", true]];
+            // Won by either of Odoo's two routes: the Won stage, or Probability
+            // at 100 with the stage left where it was. The form's WON ribbon
+            // tests only the second, so a stage-only test here would open a
+            // drill-down that contradicts the records inside it.
+            return [
+                "&",
+                ["active", "=", true],
+                "|",
+                ["probability", ">=", WON_PROBABILITY],
+                ["stage_id.is_won", "=", true],
+            ];
         }
         return [
             ["active", "=", true],
+            ["probability", "<", WON_PROBABILITY],
             ["stage_id.is_won", "=", false],
             ["stage_id", "not in", lost],
         ];
@@ -409,11 +425,31 @@ export class SalesDashboard extends Component {
         );
     }
 
-    // Pipeline Value sums the same records the Opportunities card counts, so its
-    // drill-down opens the same list — only the title differs.
+    // Everything not won. Mirrors _not_won_domain() on the server, the OR
+    // included: ("stage_id.is_won", "=", false) on its own resolves to
+    // "stage_id IN (the not-won stages)", which silently drops an opportunity
+    // that has no stage at all.
+    _notWonDomain() {
+        return [
+            "&",
+            ["probability", "<", WON_PROBABILITY],
+            "|",
+            ["stage_id", "=", false],
+            ["stage_id.is_won", "=", false],
+        ];
+    }
+
+    // Pipeline Value counts the Opportunities population MINUS the won deals —
+    // money still to come, not money already banked — so the drill-down carries
+    // the same exclusion. Without it the list disagrees with the card it was
+    // opened from, and by exactly the value of the won deals in the period.
     openPipeline() {
         this._openLeads(
-            [["type", "=", "opportunity"], ...this._generatedPopulation()],
+            [
+                ["type", "=", "opportunity"],
+                ...this._generatedPopulation(),
+                ...this._notWonDomain(),
+            ],
             "Pipeline Value"
         );
     }

@@ -1,4 +1,23 @@
-"""Two data repairs the Sales dashboard depends on: Closed Date, and Lost stage.
+"""Three data repairs the Sales dashboard depends on: Closed Date, Lost stage
+and Won stage.
+
+WON STAGE
+=========
+Odoo has two ways to win a deal and they do not agree with each other.
+``action_set_won`` sets ``probability = 100`` AND moves the record into a stage
+flagged ``is_won``; typing 100 into Probability on the form sets the probability
+alone. The form then paints its WON ribbon — it tests nothing but
+``probability < 100`` — while the stage bar above it still highlights Demo, and
+the list, the kanban and every export go on showing Demo.
+
+``write()`` below closes that gap: an opportunity reaching 100% is moved into
+the Won stage in the same write, so the stage a record displays is the outcome
+it actually has, everywhere. ``_ft_sync_won_stage()`` repairs the records won
+before this existed.
+
+Note the Won button cannot fix these by hand: it is hidden by
+``invisible="not active or probability == 100 or type == 'lead'"``, so a deal
+already at 100% has no button left to press.
 
 LOST STAGE
 ==========
@@ -49,6 +68,19 @@ _logger = logging.getLogger(__name__)
 # Name of the stage lost opportunities are moved to, matched case-insensitively.
 LOST_STAGE_NAME = 'lost'
 
+# The probability at which crm.lead considers a deal won and the form paints its
+# WON ribbon (crm/views/crm_lead_views.xml: invisible="probability < 100").
+# Named because the same threshold has to hold in three places: the stage sync
+# below, the dashboard's domains (sales_dashboard.py) and the client's mirror of
+# those domains (static/src/js/sales_dashboard.js).
+WON_PROBABILITY = 100
+
+# Set on the automatic stage syncs below. bt_crm_customization reads it to let
+# them through: they reconcile the stage with an outcome the record ALREADY has,
+# so a rule demanding data the user has not typed yet would only leave the stage
+# permanently wrong. Manual stage changes are unaffected and still validated.
+STAGE_SYNC_CONTEXT = 'ft_stage_sync'
+
 
 class CrmLead(models.Model):
     _inherit = 'crm.lead'
@@ -95,21 +127,34 @@ class CrmLead(models.Model):
         return self.env['crm.stage'].with_context(active_test=False).search(
             [('name', '=ilike', LOST_STAGE_NAME)], order='sequence, id', limit=1)
 
-    def write(self, vals):
-        """Archiving an opportunity also moves it into the Lost stage.
+    @api.model
+    def _ft_won_stage(self):
+        """The stage won opportunities are moved to, empty if none exists.
 
-        Odoo records a loss by archiving (``action_set_lost`` -> ``active =
-        False``) and deliberately leaves ``stage_id`` alone, so a lost deal keeps
-        whichever stage it died in. The dashboard already compensates by reading
-        every archived record as Lost, but a list view, an export or a pivot
-        shows the raw stage — which is how a dead deal ends up displayed under
-        Discussion, Demo or Negotiation and why those reports could not be
-        verified against the dashboard.
+        ``crm.stage.is_won`` is a real flag, so unlike the Lost stage this needs
+        no name matching. The first one in sequence order is taken; Odoo's own
+        ``action_set_won`` prefers a won stage sitting after the lead's current
+        one, which only differs on a pipeline with several won stages
+        interleaved between standard ones. There is one here.
+        """
+        return self.env['crm.stage'].with_context(active_test=False).search(
+            [('is_won', '=', True)], order='sequence, id', limit=1)
+
+    def write(self, vals):
+        """Keep ``stage_id`` in step with the outcome the write records.
+
+        Odoo leaves the stage alone in both directions: ``action_set_lost``
+        archives the record, and setting Probability to 100 wins it, neither
+        touching ``stage_id``. The dashboard compensates by reading archived as
+        lost and 100% as won, but a list view, an export or a pivot shows the
+        raw stage — which is how a dead deal ends up displayed under Discussion
+        and a won one under Demo, and why those reports could not be verified
+        against the dashboard by eye.
 
         Only opportunities are moved, and only when the caller has not set a
         stage itself, so an explicit stage change always wins. The recordset is
-        split rather than mutating ``vals`` for everyone, so archiving a mixed
-        selection cannot drag leads or already-Lost records along with it.
+        split rather than mutating ``vals`` for everyone, so writing to a mixed
+        selection cannot drag leads or already-correct records along with it.
         """
         if vals.get('active') is False and 'stage_id' not in vals:
             stage = self._ft_lost_stage()
@@ -123,7 +168,41 @@ class CrmLead(models.Model):
                     if rest:
                         res = super(CrmLead, rest).write(vals) and res
                     return res
-        return super().write(vals)
+            return super().write(vals)
+
+        res = super().write(vals)
+        # A win, unless the same write archives the record — an archived deal is
+        # lost however high its probability was, and the branch above owns it.
+        if (vals.get('probability', 0) >= WON_PROBABILITY
+                and 'stage_id' not in vals and vals.get('active', True)):
+            self._ft_move_to_won_stage()
+        return res
+
+    def _ft_move_to_won_stage(self):
+        """Move the live opportunities in ``self`` into the Won stage.
+
+        A SECOND write rather than folding ``stage_id`` into the first, which is
+        how the Lost branch above does it. The mandatory-field rules in
+        bt_crm_customization run at the END of its own ``write()``, against the
+        recordset that write was called with — so a context applied part-way
+        down the ``super()`` chain never reaches them, and the move is rejected
+        for want of a Closed Amount nobody has typed. Starting a fresh write
+        from the top, with the flag already on the recordset, does reach them.
+
+        Not recursive: this write names ``stage_id``, which is what the branch
+        above tests for before calling here.
+        """
+        stage = self._ft_won_stage()
+        if not stage:
+            _logger.warning(
+                'ft_sales_dashboard: no stage flagged is_won; opportunities won '
+                'by probability keep their original stage')
+            return
+        movable = self.filtered(
+            lambda l: l.type == 'opportunity' and l.active and l.stage_id != stage)
+        if movable:
+            movable.with_context(**{STAGE_SYNC_CONTEXT: True}).write(
+                {'stage_id': stage.id})
 
     @api.model
     def _ft_sync_lost_stage(self):
@@ -163,7 +242,53 @@ class CrmLead(models.Model):
         return len(leads)
 
 
+    @api.model
+    def _ft_sync_won_stage(self):
+        """Move already-won opportunities into the Won stage.
+
+        The write() hook above only catches wins from here on; the deals won by
+        probability before it existed still sit in the stage they were in when
+        somebody typed 100. Idempotent — it only ever selects records that are
+        NOT already in the Won stage.
+
+        Archived records are left alone: they are lost, whatever probability
+        they carry, and _ft_sync_lost_stage owns them.
+        """
+        stage = self._ft_won_stage()
+        if not stage:
+            _logger.warning(
+                'ft_sales_dashboard: no stage flagged is_won; opportunities won '
+                'by probability keep their original stage')
+            return 0
+        leads = self.search([
+            ('type', '=', 'opportunity'),
+            ('probability', '>=', WON_PROBABILITY),
+            ('stage_id', '!=', stage.id),
+        ])
+        if not leads:
+            return 0
+        # crm.lead.write() re-stamps date_closed with "now" on any write
+        # carrying probability >= 100:
+        #     if vals.get('probability', 0) >= 100 or not vals.get('active', True):
+        #         vals['date_closed'] = fields.Datetime.now()
+        # and a move into a won stage sets that probability itself, so the real
+        # closing dates are read first and written back after. Sales Closed is
+        # measured on date_closed — without this every repaired deal would
+        # abandon the month it was won in and pile into today's figures.
+        closed = {lead.id: lead.date_closed for lead in leads}
+        synced = leads.with_context(**{STAGE_SYNC_CONTEXT: True})
+        synced.write({'stage_id': stage.id, 'probability': WON_PROBABILITY})
+        for lead in synced:
+            if closed[lead.id] and lead.date_closed != closed[lead.id]:
+                lead.date_closed = closed[lead.id]
+        _logger.info(
+            'ft_sales_dashboard: moved %s won opportunities into the "%s" stage',
+            len(leads), stage.name)
+        return len(leads)
+
+
 def post_init_hook(env):
-    """Repair Closed Dates and Lost stages on install and on every upgrade."""
+    """Repair Closed Dates and Lost/Won stages on install and on every upgrade."""
     env['crm.lead']._ft_backfill_date_closed()
     env['crm.lead']._ft_sync_lost_stage()
+    env['crm.lead']._ft_sync_won_stage()

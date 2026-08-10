@@ -27,6 +27,16 @@ WON_STAGE = 'won'
 LOST_STAGE = 'lost'
 NEXT_ACTION_MIN_LEN = 20
 
+# Context key set by the automatic stage syncs in ft_sales_dashboard, which move
+# an opportunity into the Won or Lost stage to match an outcome it already has
+# (100% probability, or archived). The mandatory-field rules below step aside for
+# it: they cannot conjure the missing data, and refusing the move would only keep
+# the stage wrong in every list, export and pivot — the precise problem the sync
+# was written to solve. A human moving a deal to Won still faces all of them.
+# Spelled out rather than imported, so this module keeps depending on nothing but
+# crm; ft_sales_dashboard defines the same value as STAGE_SYNC_CONTEXT.
+STAGE_SYNC_CONTEXT = 'ft_stage_sync'
+
 
 class InheritCrmLead(models.Model):
     _inherit = 'crm.lead'
@@ -205,8 +215,13 @@ class InheritCrmLead(models.Model):
 
         Lost is exempt for the same reason it left QUALIFIED_PLUS_STAGES: there
         is no next action on a deal that has ended, and requiring one would stop
-        the automatic move into the Lost stage on archive.
+        the automatic move into the Lost stage on archive. The Won sync in
+        ft_sales_dashboard is exempt for the same reason — a deal that has been
+        won has no next action either, and the record is already won whether or
+        not its stage is allowed to say so.
         """
+        if self.env.context.get(STAGE_SYNC_CONTEXT):
+            return
         for lead in self:
             if lead.type != 'opportunity' or lead.is_cold_stage or lead.is_lost_stage:
                 continue
@@ -225,7 +240,14 @@ class InheritCrmLead(models.Model):
     def _check_qualified_fields(self):
         """Business Challenge, Expected Revenue, Expected Closing and Technology
         are mandatory from the Qualified stage onward (Expected Revenue must be
-        non-zero, as 0 counts as 'filled' for a monetary field)."""
+        non-zero, as 0 counts as 'filled' for a monetary field).
+
+        Exempt for the automatic Won-stage sync, which lands records in 'won' —
+        a member of QUALIFIED_PLUS_STAGES — without anyone having filled these
+        in on the way past.
+        """
+        if self.env.context.get(STAGE_SYNC_CONTEXT):
+            return
         for lead in self:
             if lead.type != 'opportunity' or not lead.require_qualified_fields:
                 continue
@@ -246,7 +268,18 @@ class InheritCrmLead(models.Model):
 
     @api.constrains('revenue', 'stage_id', 'type')
     def _check_closed_amount(self):
-        """Closed Amount is mandatory (non-zero) on the Won stage."""
+        """Closed Amount is mandatory (non-zero) on the Won stage.
+
+        Skipped for the automatic Won-stage sync. That move does not win the
+        deal — the deal was already won, at 100% probability, when this rule
+        never got a chance to run — it only makes the stage say so. Blocking it
+        would not produce a Closed Amount; it would leave the record won with
+        its stage still reading Demo, which is the bug the sync exists to fix.
+        The rule still applies in full to anyone moving a deal to Won by hand,
+        and to the next manual save of a synced record.
+        """
+        if self.env.context.get(STAGE_SYNC_CONTEXT):
+            return
         for lead in self:
             if lead.type == 'opportunity' and lead.is_won_stage and not lead.revenue:
                 raise ValidationError(
@@ -270,7 +303,10 @@ class InheritCrmLead(models.Model):
         target_is_lost = bool(vals.get('stage_id')) and (
             self.env['crm.stage'].browse(vals['stage_id']).name or ''
         ).strip().lower() == LOST_STAGE
-        if 'stage_id' in vals and not target_is_lost:
+        # Same exemption for the automatic Won-stage sync, which reconciles the
+        # stage with a win the record already carries rather than making one.
+        automatic = target_is_lost or self.env.context.get(STAGE_SYNC_CONTEXT)
+        if 'stage_id' in vals and not automatic:
             new_stage = vals.get('stage_id')
             for lead in self:
                 if lead.type != 'opportunity' or lead.stage_id.id == new_stage:
@@ -290,7 +326,17 @@ class InheritCrmLead(models.Model):
             super(InheritCrmLead, lead).write(
                 {'last_stage_next_action': lead.next_action or ''}
             )
-        # Closed Amount must be filled (non-zero) whenever an opportunity is
-        # saved on the Won stage, even if Closed Amount itself wasn't edited.
-        self._check_closed_amount()
+        # No blanket re-check of Closed Amount here. It used to run on every
+        # save of a Won record, to catch one that reached the stage without an
+        # amount — which, while the @api.constrains above was the only way in,
+        # could not happen: a record could only arrive on Won by passing it.
+        #
+        # The automatic Won-stage sync in ft_sales_dashboard is now a second way
+        # in, and it is deliberately exempt (a deal won at 100% probability is
+        # already won; refusing to label its stage would not produce an amount).
+        # This line therefore had exactly one population left to fire on — the
+        # records the sync had just placed — and it fired on every subsequent
+        # edit of them, from the sync's own follow-up write onward, making them
+        # unsaveable. Clearing the amount by hand is still caught, because that
+        # write names ``revenue`` and so triggers the constraint directly.
         return res
