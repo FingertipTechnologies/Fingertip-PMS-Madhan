@@ -283,7 +283,7 @@ class InheritCrmLead(models.Model):
         for lead in self:
             if lead.type == 'opportunity' and lead.is_won_stage and not lead.revenue:
                 raise ValidationError(
-                    "Closed Amount is required (and must be greater than 0) on the Won stage."
+                    "Closed Amount/Revenue is required (and must be greater than 0) on the Won stage."
                 )
 
     def write(self, vals):
