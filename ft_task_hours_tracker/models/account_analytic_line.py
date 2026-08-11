@@ -138,6 +138,24 @@ class AccountAnalyticLine(models.Model):
             query += " AND l.employee_id IN %s"
             params.append(tuple(employees.ids))
 
+        # Flush before the UPDATE. It reads hr_employee.job_id straight from
+        # the table, but the caller that matters most — hr.employee.write —
+        # has only just assigned it, and the ORM still holds that value in
+        # cache with nothing written to the table yet. Unflushed, the
+        # `e.job_id IN %s` test matched no rows at all: the hook stamped zero
+        # lines and said so in the log, so a trainee's history stayed missing
+        # from the Trainee group until the next module upgrade happened to run
+        # the sweep below from a migration — a fresh transaction, where the
+        # job position was already in the table, and so the only path that
+        # ever actually worked.
+        #
+        # account.analytic.line is flushed for the mirror-image reason: lines
+        # written earlier in this same transaction are not in the table yet
+        # either, so the UPDATE would skip them, and a pending ft_trainee_id
+        # would afterwards be flushed straight over the top of what it set.
+        self.env['hr.employee'].flush_model(['job_id'])
+        self.flush_model(['employee_id', 'ft_trainee_id'])
+
         self.env.cr.execute(query, params)
         count = self.env.cr.rowcount
         # The rows were changed behind the ORM's back.

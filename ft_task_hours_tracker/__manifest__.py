@@ -20,7 +20,12 @@
     # 18.0.0.0.6 drops the "None" bucket when grouping by Trainee — it held
     # everybody who is not a trainee, so it dominated both the group list and
     # the total hours.
-    'version': '18.0.0.0.6',
+    # 18.0.0.0.7 makes the 18.0.0.0.5 hook actually fire. Its backfill reads
+    # hr_employee.job_id in raw SQL, which the ORM had not yet flushed when
+    # hr.employee.write called it, so every catch-up stamped zero lines and a
+    # trainee's history only appeared if an upgrade happened to sweep it. The
+    # sweep is re-run here for anyone mapped while that was broken.
+    'version': '18.0.0.0.7',
     'summary': 'project hours tracking',
     'category': 'Project',
     'author': 'Fingertip',
