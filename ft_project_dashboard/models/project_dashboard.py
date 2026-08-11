@@ -1239,7 +1239,17 @@ class FtProjectDashboard(models.TransientModel):
                 delivered_by_emp.get(emp_id, Task.browse()))
             rows.append({
                 'employee': emp.name or '',
-                'role': emp.job_id.name if emp.job_id else '',
+                # sudo: hr.job is readable only by HR officers, but the Role
+                # column is part of a board every project user opens, so
+                # reading it as the user made the whole dashboard raise an
+                # AccessError for anyone outside that group. The failure looked
+                # intermittent because _compute_kpis runs first and its
+                # search_read over every active employee's job_id pulls the job
+                # names into cache, which silently satisfies this read — until a
+                # Project or Status pick in the header narrows that pre-read via
+                # _worked_employee_ids and leaves the rest of the table to hit
+                # the database. Same reasoning as _role_hours below.
+                'role': emp.job_id.sudo().name if emp.job_id else '',
                 'delivered': stats['completed'],
                 'on_time': stats['on_time'],
                 'late': stats['late'],
@@ -1351,7 +1361,11 @@ class FtProjectDashboard(models.TransientModel):
             days_left = (proj.date - today).days if proj.date else None
             rows.append({
                 'employee': emp.name or '',
-                'role': emp.job_id.name if emp.job_id else '',
+                # sudo: hr.job is HR-officer-only, same as the Role column in
+                # _table_delivery. Both need it — this one is the site that
+                # fails first in practice, because a header scope shrinks the
+                # cache-warming read the other one happens to survive on.
+                'role': emp.job_id.sudo().name if emp.job_id else '',
                 'project': proj.name or '',
                 'status': proj.stage_id.name or '',
                 # Project start date, exposed so the client can date-filter the
